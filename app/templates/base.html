@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RN Colors Stock Management System{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    {% if current_user.is_authenticated %}
+    <nav class="sidebar">
+        <div class="brand">
+            <span class="brand-icon">🖨</span>
+            <div>
+                <strong>RN Colors</strong>
+                <small>Stock Management System</small>
+            </div>
+        </div>
+        <ul class="nav-links">
+            <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
+            <li class="nav-section">Inventory</li>
+            <li><a href="{{ url_for('inventory.opening_stock') }}">Opening Stock</a></li>
+            <li><a href="{{ url_for('inventory.receive_stock') }}">Stock Received</a></li>
+            <li><a href="{{ url_for('inventory.use_stock') }}">Stock Used</a></li>
+            <li><a href="{{ url_for('inventory.live_inventory') }}">Live Inventory</a></li>
+            <li class="nav-section">Reports</li>
+            <li><a href="{{ url_for('reports.transactions') }}">Transactions</a></li>
+            <li><a href="{{ url_for('reports.company_report') }}">By Company</a></li>
+            <li><a href="{{ url_for('reports.ink_report') }}">By Ink</a></li>
+            <li><a href="{{ url_for('reports.monthly_report') }}">Monthly</a></li>
+            <li><a href="{{ url_for('reports.yearly_report') }}">Yearly</a></li>
+            <li><a href="{{ url_for('reports.audit_trail') }}">Audit Trail</a></li>
+            {% if current_user.is_admin() %}
+            <li class="nav-section">Admin</li>
+            <li><a href="{{ url_for('admin.settings') }}">Settings</a></li>
+            <li><a href="{{ url_for('admin.users') }}">Users</a></li>
+            {% endif %}
+        </ul>
+        <div class="sidebar-footer">
+            <div class="user-badge">
+                <strong>{{ current_user.username }}</strong>
+                <span class="role-tag">{{ current_user.role }}</span>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
+        </div>
+    </nav>
+    {% endif %}
+
+    <main class="{% if current_user.is_authenticated %}with-sidebar{% endif %}">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

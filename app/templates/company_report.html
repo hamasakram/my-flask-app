@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Company Report - RN Colors{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Company-wise Stock Report</h1>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('reports.export_inventory', fmt='excel', company_id=selected_company) }}" class="btn btn-secondary">Export Excel</a>
+        <a href="{{ url_for('reports.export_inventory', fmt='pdf', company_id=selected_company) }}" class="btn btn-secondary">Export PDF</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="GET" class="filter-bar">
+        <select name="company_id">
+            <option value="">All Companies</option>
+            {% for company in companies %}
+            <option value="{{ company.id }}" {% if selected_company == company.id %}selected{% endif %}>{{ company.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Filter</button>
+    </form>
+
+    <table class="data-table">
+        <thead>
+            <tr><th>Company</th><th>Ink</th><th>Opening</th><th>Received</th><th>Used</th><th>Current</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+            {% for item in rows %}
+            <tr class="{% if item.is_low %}row-low{% endif %}">
+                <td>{{ item.company.name }}</td>
+                <td>{{ item.ink_type.name }}</td>
+                <td>{{ "%.1f"|format(item.opening) }}</td>
+                <td>{{ "%.1f"|format(item.received) }}</td>
+                <td>{{ "%.1f"|format(item.used) }}</td>
+                <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
+                <td>{% if item.is_low %}<span class="badge badge-red">LOW</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No data</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

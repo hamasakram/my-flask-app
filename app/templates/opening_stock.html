@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Opening Stock - RN Colors{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Opening Stock</h1>
+    <p class="page-subtitle">Set initial stock balances per company and ink type</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card">
+    <h2>Add / Update Opening Stock</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="ink_name">Ink Name</label>
+            <input type="text" id="ink_name" name="ink_name" placeholder="Type ink name" required list="ink-suggestions">
+            <datalist id="ink-suggestions"></datalist>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantity</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0" required>
+        </div>
+        <div class="form-group">
+            <label for="as_of_date">As of Date</label>
+            <input type="date" id="as_of_date" name="as_of_date" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes" placeholder="Optional notes">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Opening Stock</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Opening Stock Records</h2>
+    <table class="data-table">
+        <thead>
+            <tr><th>Company</th><th>Ink</th><th>Quantity</th><th>As of Date</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+            {% for record in records %}
+            <tr>
+                <td>{{ record.company.name }}</td>
+                <td>{{ record.ink_type.name }}</td>
+                <td>{{ "%.1f"|format(record.quantity) }}</td>
+                <td>{{ record.as_of_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ record.notes or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">No opening stock records yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('company_id')?.addEventListener('change', async function() {
+    const list = document.getElementById('ink-suggestions');
+    list.innerHTML = '';
+    if (!this.value) return;
+    const res = await fetch(`/inventory/api/inks/${this.value}`);
+    const inks = await res.json();
+    inks.forEach(ink => {
+        const opt = document.createElement('option');
+        opt.value = ink.name;
+        list.appendChild(opt);
+    });
+});
+document.getElementById('as_of_date').valueAsDate = new Date();
+</script>
+{% endblock %}
