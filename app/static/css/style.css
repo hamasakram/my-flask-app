@@ -3,8 +3,10 @@
     --surface: #ffffff;
     --sidebar: #0f2744;
     --sidebar-text: #c8d9ef;
-    --primary: #1f6feb;
-    --primary-dark: #1558c0;
+    --brand-red: #b21e22;
+    --brand-black: #1a1a1a;
+    --primary: #b21e22;
+    --primary-dark: #8f181b;
     --text: #1a2332;
     --muted: #64748b;
     --border: #dbe4f0;
@@ -40,14 +42,31 @@ body {
 
 .brand {
     display: flex;
-    gap: 0.75rem;
+    flex-direction: column;
+    gap: 0.65rem;
     align-items: center;
-    padding: 0 1.25rem 1.5rem;
+    padding: 0 1rem 1.5rem;
     border-bottom: 1px solid rgba(255,255,255,0.08);
+    text-align: center;
 }
 
-.brand-icon { font-size: 1.75rem; }
-.brand small { display: block; color: var(--sidebar-text); font-size: 0.75rem; }
+.brand-logo {
+    width: 100%;
+    max-width: 180px;
+    height: auto;
+    display: block;
+    background: white;
+    border-radius: 10px;
+    padding: 0.5rem;
+}
+
+.brand-tagline {
+    display: block;
+    color: var(--sidebar-text);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
 
 .nav-links {
     list-style: none;
@@ -288,7 +307,7 @@ input, select, textarea {
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    background: linear-gradient(135deg, #0f2744 0%, #1f6feb 100%);
+    background: linear-gradient(135deg, var(--brand-black) 0%, var(--brand-red) 100%);
 }
 
 .login-card {
@@ -300,8 +319,36 @@ input, select, textarea {
     box-shadow: 0 20px 50px rgba(0,0,0,0.2);
 }
 
-.login-card h1 { margin: 0 0 0.25rem; }
-.subtitle { color: var(--muted); margin: 0 0 1.5rem; }
+.login-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.login-logo {
+    width: 100%;
+    max-width: 260px;
+    height: auto;
+    display: block;
+    margin-bottom: 0.75rem;
+}
+
+.subtitle {
+    color: var(--brand-black);
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.login-tagline {
+    color: var(--muted);
+    margin: 0.35rem 0 0;
+    font-size: 0.9rem;
+}
 
 .login-card form { display: flex; flex-direction: column; gap: 0.85rem; }
 

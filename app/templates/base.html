@@ -3,18 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}RN Colors Stock Management System{% endblock %}</title>
+    <title>{% block title %}RN COLOUR Stock Management System{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     {% if current_user.is_authenticated %}
     <nav class="sidebar">
         <div class="brand">
-            <span class="brand-icon">🖨</span>
-            <div>
-                <strong>RN Colors</strong>
-                <small>Stock Management System</small>
-            </div>
+            <img
+                src="{{ url_for('static', filename='images/rn-colour-logo.png') }}"
+                alt="RN COLOUR"
+                class="brand-logo"
+            >
+            <small class="brand-tagline">Stock Management System</small>
         </div>
         <ul class="nav-links">
             <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
