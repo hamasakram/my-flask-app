@@ -191,6 +191,7 @@ def use_stock():
             ink_type_id=ink_type_id,
             transaction_type=InventoryTransaction.TRANSACTION_USED,
             quantity=quantity_used,
+            quantity_left=quantity_left,
             transaction_date=parsed_date,
             notes=notes,
             created_by_id=current_user.id,

@@ -71,6 +71,7 @@ class InventoryTransaction(db.Model):
     ink_type_id = db.Column(db.Integer, db.ForeignKey("ink_types.id"), nullable=False)
     transaction_type = db.Column(db.String(50), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
+    quantity_left = db.Column(db.Float, nullable=True)
     transaction_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))

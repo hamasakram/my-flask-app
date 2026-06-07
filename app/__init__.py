@@ -37,6 +37,9 @@ def create_app(config_class=Config):
 
     with app.app_context():
         db.create_all()
+        from app.schema import ensure_schema
+
+        ensure_schema()
         from app.seed import seed_database
 
         seed_database()

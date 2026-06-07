@@ -66,6 +66,7 @@
                 <th>Date</th>
                 <th>Company</th>
                 <th>Ink</th>
+                <th>Left</th>
                 <th>Used</th>
                 <th>Where Used / Notes</th>
                 <th>Entered By</th>
@@ -77,12 +78,13 @@
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ txn.company.name }}</td>
                 <td>{{ txn.ink_type.name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
                 <td>{{ txn.notes or '—' }}</td>
                 <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="6" class="empty">No usage records yet</td></tr>
+            <tr><td colspan="7" class="empty">No usage records yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

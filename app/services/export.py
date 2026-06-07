@@ -92,7 +92,7 @@ def export_transactions_excel(transactions):
     ws = wb.active
     ws.title = "Transactions"
 
-    headers = ["Date", "Company", "Ink Type", "Type", "Quantity", "Notes", "Entered By", "Created At"]
+    headers = ["Date", "Company", "Ink Type", "Type", "Used", "Left", "Notes", "Entered By", "Created At"]
     header_row = _add_excel_logo(ws)
     next_row = _write_excel_headers(ws, headers, header_row)
 
@@ -103,7 +103,8 @@ def export_transactions_excel(transactions):
             txn.company.name,
             txn.ink_type.name,
             txn.transaction_type,
-            txn.quantity,
+            txn.quantity if txn.transaction_type == "Stock Used" else "",
+            txn.quantity_left if txn.transaction_type == "Stock Used" else txn.quantity,
             txn.notes or "",
             txn.created_by.username if txn.created_by else "",
             txn.created_at.strftime("%Y-%m-%d %H:%M"),

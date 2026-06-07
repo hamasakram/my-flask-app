@@ -38,7 +38,8 @@
                 <th>Company</th>
                 <th>Ink</th>
                 <th>Type</th>
-                <th>Quantity</th>
+                <th>Used</th>
+                <th>Left</th>
                 <th>Notes</th>
                 <th>Entered By</th>
                 <th>Created At</th>
@@ -51,13 +52,20 @@
                 <td>{{ txn.company.name }}</td>
                 <td>{{ txn.ink_type.name }}</td>
                 <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) if txn.transaction_type == 'Stock Used' else '—' }}</td>
+                <td>
+                    {% if txn.transaction_type == 'Stock Used' %}
+                        {{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}
+                    {% else %}
+                        {{ "%.1f"|format(txn.quantity) }}
+                    {% endif %}
+                </td>
                 <td>{{ txn.notes or '—' }}</td>
                 <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
                 <td>{{ txn.created_at.strftime('%d-%m-%Y %H:%M') }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="8" class="empty">No transactions found</td></tr>
+            <tr><td colspan="9" class="empty">No transactions found</td></tr>
             {% endfor %}
         </tbody>
     </table>
