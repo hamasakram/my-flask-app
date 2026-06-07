@@ -268,7 +268,12 @@ input, select, textarea {
     border-radius: 8px;
     font-size: 0.92rem;
     background: white;
+    font-family: inherit;
 }
+
+textarea { resize: vertical; min-height: 4rem; }
+
+.usage-hint { margin: 0 0 1rem; }
 
 .field-note, .hint { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
 

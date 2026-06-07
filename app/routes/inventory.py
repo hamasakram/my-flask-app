@@ -5,7 +5,12 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.models import Company, InkType, InventoryTransaction, OpeningStock
-from app.services.inventory import get_or_create_ink_type, log_audit
+from app.services.inventory import (
+    calculate_used_from_left,
+    get_or_create_ink_type,
+    get_stock_usage_records,
+    log_audit,
+)
 
 inventory_bp = Blueprint("inventory", __name__, url_prefix="/inventory")
 
@@ -148,12 +153,18 @@ def use_stock():
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
         ink_type_id = request.form.get("ink_type_id", type=int)
-        quantity = request.form.get("quantity", type=float)
+        quantity_left = request.form.get("quantity_left", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
-            flash("All fields with valid quantity are required.", "danger")
+        if (
+            not company_id
+            or not ink_type_id
+            or quantity_left is None
+            or quantity_left < 0
+            or not transaction_date
+        ):
+            flash("Company, ink, quantity left, and date are required.", "danger")
             return redirect(url_for("inventory.use_stock"))
 
         ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
@@ -161,12 +172,25 @@ def use_stock():
             flash("Invalid ink selection for this company.", "danger")
             return redirect(url_for("inventory.use_stock"))
 
+        try:
+            quantity_used = calculate_used_from_left(company_id, ink_type_id, quantity_left)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("inventory.use_stock"))
+
+        if quantity_used <= 0:
+            flash(
+                "No stock was used — quantity left matches current stock. Nothing recorded.",
+                "info",
+            )
+            return redirect(url_for("inventory.use_stock"))
+
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = InventoryTransaction(
             company_id=company_id,
             ink_type_id=ink_type_id,
             transaction_type=InventoryTransaction.TRANSACTION_USED,
-            quantity=quantity,
+            quantity=quantity_used,
             transaction_date=parsed_date,
             notes=notes,
             created_by_id=current_user.id,
@@ -179,13 +203,36 @@ def use_stock():
             "CREATE",
             "InventoryTransaction",
             txn.id,
-            f"Used {quantity} of {ink.name} for {txn.company.name}",
+            f"Used {quantity_used} of {ink.name} ({quantity_left} left) for {txn.company.name}",
         )
         db.session.commit()
-        flash(f"Stock usage recorded: {quantity} units of '{ink.name}'.", "success")
+        flash(
+            f"Daily usage recorded: {quantity_used:.1f} used, {quantity_left:.1f} left for '{ink.name}'.",
+            "success",
+        )
         return redirect(url_for("inventory.use_stock"))
 
-    return render_template("use_stock.html", companies=companies)
+    recent_usage = get_stock_usage_records()
+    return render_template(
+        "use_stock.html",
+        companies=companies,
+        recent_usage=recent_usage,
+    )
+
+
+@inventory_bp.route("/api/stock/<int:company_id>/<int:ink_type_id>")
+@login_required
+def get_ink_stock(company_id, ink_type_id):
+    from flask import jsonify
+
+    from app.services.inventory import get_current_stock
+
+    ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+    if not ink:
+        return jsonify({"error": "Ink not found"}), 404
+
+    current = get_current_stock(company_id, ink_type_id)
+    return jsonify({"current_stock": current, "ink_name": ink.name})
 
 
 @inventory_bp.route("/api/inks/<int:company_id>")

@@ -119,6 +119,36 @@ def calculate_live_stock(
     return results
 
 
+def get_current_stock(company_id: int, ink_type_id: int) -> float:
+    rows = calculate_live_stock(company_id=company_id, ink_type_id=ink_type_id)
+    if not rows:
+        return 0.0
+    return rows[0]["current"]
+
+
+def calculate_used_from_left(company_id: int, ink_type_id: int, quantity_left: float) -> float:
+    current_stock = get_current_stock(company_id, ink_type_id)
+    if quantity_left > current_stock:
+        raise ValueError(
+            f"Quantity left ({quantity_left}) cannot exceed current stock ({current_stock:.1f})."
+        )
+    return current_stock - quantity_left
+
+
+def get_stock_usage_records(limit: int = 30) -> list[InventoryTransaction]:
+    return (
+        InventoryTransaction.query.filter_by(
+            transaction_type=InventoryTransaction.TRANSACTION_USED
+        )
+        .order_by(
+            InventoryTransaction.transaction_date.desc(),
+            InventoryTransaction.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+
 def get_dashboard_stats(today: date) -> dict:
     live_stock = calculate_live_stock()
     total_inventory = sum(item["current"] for item in live_stock)
