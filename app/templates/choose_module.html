@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Choose Module - RN COLOUR{% endblock %}
+{% block content %}
+<div class="module-select-page">
+    <div class="module-select-header">
+        <h1>Welcome, {{ current_user.username }}</h1>
+        <p>Choose which stock management system to open</p>
+    </div>
+    <div class="module-cards">
+        <form method="POST" class="module-card module-card-ink">
+            <input type="hidden" name="module" value="ink">
+            <div class="module-card-icon">🖨</div>
+            <h2>Ink Stock Management</h2>
+            <p>Track printing ink inventory — opening stock, received, used, and live stock by company.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open Ink Stock</button>
+        </form>
+        <form method="POST" class="module-card module-card-materials">
+            <input type="hidden" name="module" value="materials">
+            <div class="module-card-icon">📦</div>
+            <h2>Printing Materials Stock Management</h2>
+            <p>Track printing materials in kg — which production uses what, quantity left, and auto-calculated usage.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open Materials Stock</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

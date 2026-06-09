@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ period_label }} Report - Materials{% endblock %}
+{% block content %}
+<div class="page-header"><h1>{{ period_type|capitalize }} Report — {{ period_label }}</h1></div>
+<div class="stats-grid">
+    <div class="stat-card accent-green"><span class="stat-label">Total Purchased (kg)</span><span class="stat-value">{{ "%.1f"|format(received) }}</span></div>
+    <div class="stat-card accent-orange"><span class="stat-label">Total Used (kg)</span><span class="stat-value">{{ "%.1f"|format(used) }}</span></div>
+</div>
+<div class="card">
+    <form method="GET" class="filter-bar">
+        {% if period_type == 'monthly' %}<input type="number" name="month" value="{{ month }}" min="1" max="12">{% endif %}
+        <input type="number" name="year" value="{{ year }}" min="2020" max="2099">
+        <select name="company_id">
+            <option value="">All Companies</option>
+            {% for company in companies %}
+            <option value="{{ company.id }}" {% if selected_company == company.id %}selected{% endif %}>{{ company.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary">Apply</button>
+    </form>
+</div>
+<div class="card">
+    <h2>Period Transactions</h2>
+    <table class="data-table">
+        <thead><tr><th>Date</th><th>Company</th><th>Material</th><th>Type</th><th>Qty (kg)</th><th>Production / Notes</th></tr></thead>
+        <tbody>
+            {% for txn in txns %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.company.name }}</td>
+                <td>{{ txn.material.display_name }}</td>
+                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty">No transactions in this period</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="card">
+    <h2>Current Stock Snapshot</h2>
+    <table class="data-table compact">
+        <thead><tr><th>Company</th><th>Material</th><th>Current (kg)</th></tr></thead>
+        <tbody>
+            {% for item in live_rows %}
+            <tr><td>{{ item.company.name }}</td><td>{{ item.material.display_name }}</td><td>{{ "%.1f"|format(item.current) }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

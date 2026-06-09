@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Stock Used - Materials{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Stock Used</h1>
+    <p class="page-subtitle">Enter kg left — used is calculated automatically</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card">
+    <h2>Record Daily Material Usage</h2>
+    <p class="field-note usage-hint">
+        Enter how much material is <strong>left (kg)</strong>. Used = current stock − left.
+        Note which production used the material.
+    </p>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_id">Material</label>
+            <select id="material_id" name="material_id" required disabled>
+                <option value="">Select company first</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="current_stock">Current Stock (kg)</label>
+            <input type="text" id="current_stock" readonly placeholder="Select material first">
+        </div>
+        <div class="form-group">
+            <label for="quantity_left">Quantity Left (kg)</label>
+            <input type="number" id="quantity_left" name="quantity_left" step="0.1" min="0" required disabled>
+        </div>
+        <div class="form-group">
+            <label for="quantity_used">Used (kg, calculated)</label>
+            <input type="text" id="quantity_used" readonly placeholder="Enter quantity left">
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Usage Date</label>
+            <input type="date" id="transaction_date" name="transaction_date" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Which Production / Notes</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Production line, job order, customer, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Daily Record</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Recent Daily Usage Records</h2>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th><th>Company</th><th>Material</th><th>Left (kg)</th><th>Used (kg)</th><th>Production / Notes</th><th>Entered By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for txn in recent_usage %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.company.name }}</td>
+                <td>{{ txn.material.display_name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+                <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No usage records yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="field-note">View all in <a href="{{ url_for('materials_reports.transactions') }}">Transactions</a>.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const materialSelect = document.getElementById('material_id');
+const currentStockInput = document.getElementById('current_stock');
+const quantityLeftInput = document.getElementById('quantity_left');
+const quantityUsedInput = document.getElementById('quantity_used');
+let currentStock = null;
+
+function resetStockFields() {
+    currentStock = null;
+    currentStockInput.value = '';
+    quantityLeftInput.value = '';
+    quantityLeftInput.disabled = true;
+    quantityUsedInput.value = '';
+}
+
+function updateCalculatedUsed() {
+    if (currentStock === null || quantityLeftInput.value === '') {
+        quantityUsedInput.value = '';
+        return;
+    }
+    const left = parseFloat(quantityLeftInput.value);
+    if (Number.isNaN(left)) { quantityUsedInput.value = ''; return; }
+    const used = currentStock - left;
+    quantityUsedInput.value = used >= 0 ? used.toFixed(1) : 'Invalid (left exceeds stock)';
+}
+
+async function loadMaterialStock() {
+    resetStockFields();
+    if (!companySelect.value || !materialSelect.value) return;
+    const res = await fetch(`/materials/inventory/api/stock/${companySelect.value}/${materialSelect.value}`);
+    if (!res.ok) { currentStockInput.value = 'Unavailable'; return; }
+    const data = await res.json();
+    currentStock = data.current_stock;
+    currentStockInput.value = currentStock.toFixed(1);
+    quantityLeftInput.disabled = false;
+    updateCalculatedUsed();
+}
+
+companySelect?.addEventListener('change', async function() {
+    materialSelect.innerHTML = '<option value="">Loading...</option>';
+    materialSelect.disabled = true;
+    resetStockFields();
+    if (!this.value) { materialSelect.innerHTML = '<option value="">Select company first</option>'; return; }
+    const res = await fetch(`/materials/inventory/api/materials/${this.value}`);
+    const materials = await res.json();
+    materialSelect.innerHTML = '<option value="">Select material</option>';
+    materials.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        materialSelect.appendChild(opt);
+    });
+    materialSelect.disabled = false;
+});
+materialSelect?.addEventListener('change', loadMaterialStock);
+quantityLeftInput?.addEventListener('input', updateCalculatedUsed);
+document.getElementById('transaction_date').valueAsDate = new Date();
+</script>
+{% endblock %}

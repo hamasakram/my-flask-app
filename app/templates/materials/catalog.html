@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Materials to Add - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Materials to Add</h1>
+    <p class="page-subtitle">Register printing materials and sizes for later use in stock entries</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add New Material</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" placeholder="e.g. Art Paper, Film, Plate" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size <span class="hint">(optional)</span></label>
+            <input type="text" id="size" name="size" placeholder="e.g. 70x100 cm, 250 gsm">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Material</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Materials</h2>
+    <table class="data-table">
+        <thead><tr><th>Company</th><th>Material</th><th>Size</th><th>Added</th></tr></thead>
+        <tbody>
+            {% for material in materials %}
+            <tr>
+                <td>{{ material.company.name }}</td>
+                <td>{{ material.name }}</td>
+                <td>{{ material.size or '—' }}</td>
+                <td>{{ material.created_at.strftime('%d-%m-%Y') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="empty">No materials saved yet — add your first material above</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

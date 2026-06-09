@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    {% if current_user.is_authenticated %}
+    {% if current_user.is_authenticated and active_module %}
     <nav class="sidebar">
         <div class="brand">
             <img
@@ -17,9 +17,10 @@
                 alt="RN COLOUR"
                 class="brand-logo"
             >
-            <small class="brand-tagline">Stock Management System</small>
+            <small class="brand-tagline">{{ module_label }}</small>
         </div>
         <ul class="nav-links">
+            {% if active_module == 'ink' %}
             <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
             <li class="nav-section">Inventory</li>
             <li><a href="{{ url_for('inventory.opening_stock') }}">Opening Stock</a></li>
@@ -33,6 +34,22 @@
             <li><a href="{{ url_for('reports.monthly_report') }}">Monthly</a></li>
             <li><a href="{{ url_for('reports.yearly_report') }}">Yearly</a></li>
             <li><a href="{{ url_for('reports.audit_trail') }}">Audit Trail</a></li>
+            {% else %}
+            <li><a href="{{ url_for('materials_main.dashboard') }}" class="{% if request.endpoint == 'materials_main.dashboard' %}active{% endif %}">Dashboard</a></li>
+            <li class="nav-section">Materials</li>
+            <li><a href="{{ url_for('materials.catalog') }}">Materials to Add</a></li>
+            <li><a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a></li>
+            <li><a href="{{ url_for('materials.receive_stock') }}">Stock Purchased</a></li>
+            <li><a href="{{ url_for('materials.use_stock') }}">Stock Used</a></li>
+            <li><a href="{{ url_for('materials.live_inventory') }}">Live Inventory</a></li>
+            <li class="nav-section">Reports</li>
+            <li><a href="{{ url_for('materials_reports.transactions') }}">Transactions</a></li>
+            <li><a href="{{ url_for('materials_reports.company_report') }}">By Company</a></li>
+            <li><a href="{{ url_for('materials_reports.material_report') }}">By Material</a></li>
+            <li><a href="{{ url_for('materials_reports.monthly_report') }}">Monthly</a></li>
+            <li><a href="{{ url_for('materials_reports.yearly_report') }}">Yearly</a></li>
+            <li><a href="{{ url_for('materials_reports.audit_trail') }}">Audit Trail</a></li>
+            {% endif %}
             {% if current_user.is_admin() %}
             <li class="nav-section">Admin</li>
             <li><a href="{{ url_for('admin.settings') }}">Settings</a></li>
@@ -44,12 +61,22 @@
                 <strong>{{ current_user.username }}</strong>
                 <span class="role-tag">{{ current_user.role }}</span>
             </div>
+            <a href="{{ url_for('auth.choose_module') }}" class="logout-link">Change Module</a>
             <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
         </div>
     </nav>
     {% endif %}
 
-    <main class="{% if current_user.is_authenticated %}with-sidebar{% endif %}">
+    <main class="{% if current_user.is_authenticated and active_module %}with-sidebar{% endif %}">
+        {% if current_user.is_authenticated and active_module and request.endpoint != 'auth.choose_module' %}
+        <div class="module-switcher">
+            <span class="module-switcher-label">{{ module_label }}</span>
+            <a href="{{ url_for('auth.switch_module', module=switch_target) }}" class="btn btn-sm btn-secondary module-switch-btn">
+                Switch to {{ switch_label }}
+            </a>
+        </div>
+        {% endif %}
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="flash-container">

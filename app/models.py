@@ -21,6 +21,13 @@ class Company(db.Model):
     ink_types = db.relationship("InkType", back_populates="company", lazy="dynamic")
     opening_stocks = db.relationship("OpeningStock", back_populates="company", lazy="dynamic")
     transactions = db.relationship("InventoryTransaction", back_populates="company", lazy="dynamic")
+    materials = db.relationship("Material", back_populates="company", lazy="dynamic")
+    material_opening_stocks = db.relationship(
+        "MaterialOpeningStock", back_populates="company", lazy="dynamic"
+    )
+    material_transactions = db.relationship(
+        "MaterialTransaction", back_populates="company", lazy="dynamic"
+    )
 
 
 class InkType(db.Model):
@@ -79,6 +86,80 @@ class InventoryTransaction(db.Model):
 
     company = db.relationship("Company", back_populates="transactions")
     ink_type = db.relationship("InkType", back_populates="transactions")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class Material(db.Model):
+    __tablename__ = "materials"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), nullable=False, default="")
+    low_stock_threshold = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="materials")
+    opening_stocks = db.relationship(
+        "MaterialOpeningStock", back_populates="material", lazy="dynamic"
+    )
+    transactions = db.relationship(
+        "MaterialTransaction", back_populates="material", lazy="dynamic"
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "name", "size", name="uq_company_material"),
+    )
+
+    @property
+    def display_name(self):
+        if self.size:
+            return f"{self.name} ({self.size})"
+        return self.name
+
+
+class MaterialOpeningStock(db.Model):
+    __tablename__ = "material_opening_stock"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    material_id = db.Column(db.Integer, db.ForeignKey("materials.id"), nullable=False)
+    quantity = db.Column(db.Float, nullable=False, default=0)
+    as_of_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="material_opening_stocks")
+    material = db.relationship("Material", back_populates="opening_stocks")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "material_id", name="uq_material_opening_stock"),
+    )
+
+
+class MaterialTransaction(db.Model):
+    __tablename__ = "material_transactions"
+
+    TRANSACTION_RECEIVED = "Stock Received"
+    TRANSACTION_USED = "Stock Used"
+    TRANSACTION_TYPES = (TRANSACTION_RECEIVED, TRANSACTION_USED)
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    material_id = db.Column(db.Integer, db.ForeignKey("materials.id"), nullable=False)
+    transaction_type = db.Column(db.String(50), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    quantity_left = db.Column(db.Float, nullable=True)
+    transaction_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="material_transactions")
+    material = db.relationship("Material", back_populates="transactions")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 

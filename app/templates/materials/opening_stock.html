@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Opening Stock - Materials{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Opening Stock</h1>
+    <p class="page-subtitle">Set initial material balances per company (kg)</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card">
+    <h2>Set Opening Stock</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_id">Material</label>
+            <select id="material_id" name="material_id" required disabled>
+                <option value="">Select company first</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantity (kg)</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0" required>
+        </div>
+        <div class="form-group">
+            <label for="as_of_date">As of Date</label>
+            <input type="date" id="as_of_date" name="as_of_date" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Opening Stock</button>
+        </div>
+    </form>
+    <p class="field-note">Add materials first in <a href="{{ url_for('materials.catalog') }}">Materials to Add</a>.</p>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Current Opening Stock Records</h2>
+    <table class="data-table">
+        <thead><tr><th>Company</th><th>Material</th><th>Quantity (kg)</th><th>As of Date</th><th>Notes</th></tr></thead>
+        <tbody>
+            {% for record in records %}
+            <tr>
+                <td>{{ record.company.name }}</td>
+                <td>{{ record.material.display_name }}</td>
+                <td>{{ "%.1f"|format(record.quantity) }}</td>
+                <td>{{ record.as_of_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ record.notes or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">No opening stock set</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const materialSelect = document.getElementById('material_id');
+companySelect?.addEventListener('change', async function() {
+    materialSelect.innerHTML = '<option value="">Loading...</option>';
+    materialSelect.disabled = true;
+    if (!this.value) {
+        materialSelect.innerHTML = '<option value="">Select company first</option>';
+        return;
+    }
+    const res = await fetch(`/materials/inventory/api/materials/${this.value}`);
+    const materials = await res.json();
+    materialSelect.innerHTML = '<option value="">Select material</option>';
+    materials.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        materialSelect.appendChild(opt);
+    });
+    materialSelect.disabled = false;
+});
+document.getElementById('as_of_date').valueAsDate = new Date();
+</script>
+{% endblock %}
