@@ -25,7 +25,7 @@ def seed_database():
 
     for name in COMPANY_NAMES:
         if not Company.query.filter_by(name=name).first():
-            db.session.add(Company(name=name))
+            db.session.add(Company(name=name, scope=Company.SCOPE_INK))
 
     legacy_admin = User.query.filter_by(username="admin").first()
     if legacy_admin:

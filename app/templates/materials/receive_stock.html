@@ -41,7 +41,7 @@
             <button type="submit" class="btn btn-primary">Save Purchase</button>
         </div>
     </form>
-    <p class="field-note">Add materials in <a href="{{ url_for('materials.catalog') }}">Materials to Add</a> before recording purchases.</p>
+    <p class="field-note">Add companies and materials first. <a href="{{ url_for('materials.companies') }}">Companies</a> · <a href="{{ url_for('materials.catalog') }}">Materials to Add</a></p>
 </div>
 {% endif %}
 {% endblock %}

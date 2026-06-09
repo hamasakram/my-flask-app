@@ -13,8 +13,12 @@ def utcnow():
 class Company(db.Model):
     __tablename__ = "companies"
 
+    SCOPE_INK = "ink"
+    SCOPE_MATERIALS = "materials"
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
+    scope = db.Column(db.String(20), nullable=False, default=SCOPE_INK)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 

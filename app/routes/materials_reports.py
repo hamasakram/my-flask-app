@@ -4,7 +4,8 @@ from flask import Blueprint, make_response, render_template, request, send_file
 from flask_login import login_required
 from sqlalchemy import extract
 
-from app.models import AuditLog, Company, Material, MaterialTransaction
+from app.models import AuditLog, Company, InkType, InventoryTransaction, Material, MaterialTransaction
+from app.services.companies import get_material_companies
 from app.services.materials_export import (
     export_material_inventory_excel,
     export_material_inventory_pdf,
@@ -46,7 +47,7 @@ def transactions():
         MaterialTransaction.id.desc(),
     ).all()
 
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
     materials = Material.query.order_by(Material.name).all()
 
     return render_template(
@@ -68,7 +69,7 @@ def transactions():
 def company_report():
     company_id = request.args.get("company_id", type=int)
     rows = calculate_live_stock(company_id=company_id)
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
     return render_template(
         "materials/company_report.html",
         rows=rows,
@@ -109,7 +110,7 @@ def monthly_report():
 
     txns = query.order_by(MaterialTransaction.transaction_date).all()
     live_rows = calculate_live_stock(company_id=company_id)
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
 
     received = sum(
         t.quantity for t in txns if t.transaction_type == MaterialTransaction.TRANSACTION_RECEIVED
@@ -147,7 +148,7 @@ def yearly_report():
 
     txns = query.order_by(MaterialTransaction.transaction_date).all()
     live_rows = calculate_live_stock(company_id=company_id)
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
 
     received = sum(
         t.quantity for t in txns if t.transaction_type == MaterialTransaction.TRANSACTION_RECEIVED

@@ -5,6 +5,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.models import Company, InkType, InventoryTransaction, OpeningStock
+from app.services.companies import get_ink_companies
 from app.services.inventory import (
     calculate_used_from_left,
     get_or_create_ink_type,
@@ -23,7 +24,7 @@ def require_edit_access():
 @inventory_bp.route("/opening-stock", methods=["GET", "POST"])
 @login_required
 def opening_stock():
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -96,7 +97,7 @@ def opening_stock():
 @login_required
 def receive_stock():
     """Stock Received - user types ink name manually; stored in database."""
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -147,7 +148,7 @@ def receive_stock():
 @inventory_bp.route("/use", methods=["GET", "POST"])
 @login_required
 def use_stock():
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -261,7 +262,7 @@ def live_inventory():
     if ink_search:
         rows = [r for r in rows if ink_search in r["ink_type"].name.lower()]
 
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
     return render_template(
         "live_inventory.html",
         rows=rows,

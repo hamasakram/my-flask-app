@@ -5,6 +5,7 @@ from flask_login import login_required
 from sqlalchemy import extract
 
 from app.models import AuditLog, Company, InkType, InventoryTransaction
+from app.services.companies import get_ink_companies
 from app.services.export import export_inventory_excel, export_inventory_pdf, export_transactions_excel
 from app.services.inventory import calculate_live_stock
 
@@ -42,7 +43,7 @@ def transactions():
         InventoryTransaction.id.desc(),
     ).all()
 
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
     inks = InkType.query.order_by(InkType.name).all()
 
     return render_template(
@@ -64,7 +65,7 @@ def transactions():
 def company_report():
     company_id = request.args.get("company_id", type=int)
     rows = calculate_live_stock(company_id=company_id)
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
     return render_template(
         "company_report.html",
         rows=rows,
@@ -99,7 +100,7 @@ def monthly_report():
 
     txns = query.order_by(InventoryTransaction.transaction_date).all()
     live_rows = calculate_live_stock(company_id=company_id)
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
 
     received = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_RECEIVED)
     used = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_USED)
@@ -133,7 +134,7 @@ def yearly_report():
 
     txns = query.order_by(InventoryTransaction.transaction_date).all()
     live_rows = calculate_live_stock(company_id=company_id)
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_ink_companies()
 
     received = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_RECEIVED)
     used = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_USED)

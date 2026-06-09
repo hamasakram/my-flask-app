@@ -5,6 +5,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction
+from app.services.companies import get_material_companies
 from app.services.inventory import log_audit
 from app.services.materials_inventory import (
     calculate_live_stock,
@@ -22,10 +23,50 @@ def require_edit_access():
         abort(403)
 
 
+@materials_bp.route("/companies", methods=["GET", "POST"])
+@login_required
+def companies():
+    if request.method == "POST":
+        require_edit_access()
+        company_name = request.form.get("company_name", "").strip()
+
+        if not company_name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("materials.companies"))
+
+        existing = Company.query.filter_by(name=company_name).first()
+        if existing:
+            if existing.scope == Company.SCOPE_MATERIALS:
+                flash("This company already exists in Materials.", "warning")
+            else:
+                flash(
+                    "This company name is already used in Ink Stock. Choose a different name.",
+                    "danger",
+                )
+            return redirect(url_for("materials.companies"))
+
+        company = Company(name=company_name, scope=Company.SCOPE_MATERIALS)
+        db.session.add(company)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "Company",
+            company.id,
+            f"Materials company added: {company_name}",
+        )
+        db.session.commit()
+        flash(f"Company '{company_name}' added.", "success")
+        return redirect(url_for("materials.companies"))
+
+    material_companies = get_material_companies()
+    return render_template("materials/companies.html", companies=material_companies)
+
+
 @materials_bp.route("/catalog", methods=["GET", "POST"])
 @login_required
 def catalog():
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -69,7 +110,7 @@ def catalog():
 @materials_bp.route("/opening-stock", methods=["GET", "POST"])
 @login_required
 def opening_stock():
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -141,7 +182,7 @@ def opening_stock():
 @materials_bp.route("/receive", methods=["GET", "POST"])
 @login_required
 def receive_stock():
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -195,7 +236,7 @@ def receive_stock():
 @materials_bp.route("/use", methods=["GET", "POST"])
 @login_required
 def use_stock():
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
 
     if request.method == "POST":
         require_edit_access()
@@ -309,7 +350,7 @@ def live_inventory():
             if material_search in r["material"].display_name.lower()
         ]
 
-    companies = Company.query.filter_by(is_active=True).order_by(Company.name).all()
+    companies = get_material_companies()
     return render_template(
         "materials/live_inventory.html",
         rows=rows,

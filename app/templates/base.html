@@ -37,6 +37,7 @@
             {% else %}
             <li><a href="{{ url_for('materials_main.dashboard') }}" class="{% if request.endpoint == 'materials_main.dashboard' %}active{% endif %}">Dashboard</a></li>
             <li class="nav-section">Materials</li>
+            <li><a href="{{ url_for('materials.companies') }}">Companies</a></li>
             <li><a href="{{ url_for('materials.catalog') }}">Materials to Add</a></li>
             <li><a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a></li>
             <li><a href="{{ url_for('materials.receive_stock') }}">Stock Purchased</a></li>

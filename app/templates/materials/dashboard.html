@@ -100,7 +100,8 @@
 
 {% if current_user.can_edit() %}
 <div class="quick-actions">
-    <a href="{{ url_for('materials.catalog') }}" class="btn btn-primary">+ Add Material</a>
+    <a href="{{ url_for('materials.companies') }}" class="btn btn-primary">+ Add Company</a>
+    <a href="{{ url_for('materials.catalog') }}" class="btn btn-secondary">+ Add Material</a>
     <a href="{{ url_for('materials.receive_stock') }}" class="btn btn-secondary">Stock Purchased</a>
     <a href="{{ url_for('materials.use_stock') }}" class="btn btn-secondary">Record Usage</a>
 </div>
