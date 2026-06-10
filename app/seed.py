@@ -1,5 +1,5 @@
 from app import db
-from app.models import AppSetting, Company, User
+from app.models import AppSetting, Company, MaterialOpeningStock, OpeningStock, User
 
 
 COMPANY_NAMES = [
@@ -10,6 +10,21 @@ COMPANY_NAMES = [
     "DIC HR",
     "RL SHR",
 ]
+
+
+def clear_all_opening_stock():
+    """Remove all ink and material opening stock records."""
+    OpeningStock.query.delete()
+    MaterialOpeningStock.query.delete()
+
+
+def _clear_opening_stock_once():
+    flag_key = "opening_stock_reset_june2025"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+
+    clear_all_opening_stock()
+    db.session.add(AppSetting(key=flag_key, value="done"))
 
 
 def seed_database():
@@ -49,4 +64,5 @@ def seed_database():
         viewer.set_password("viewer123")
         db.session.add(viewer)
 
+    _clear_opening_stock_once()
     db.session.commit()

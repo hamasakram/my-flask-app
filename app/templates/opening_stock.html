@@ -3,7 +3,17 @@
 {% block content %}
 <div class="page-header">
     <h1>Opening Stock</h1>
-    <p class="page-subtitle">Set initial stock balances per company and ink type</p>
+    <p class="page-subtitle">Set opening stock after purchase/usage records from 1 June are entered</p>
+</div>
+
+<div class="card workflow-card">
+    <h2>Setup Order</h2>
+    <ol class="workflow-list">
+        <li>First enter <strong>Stock Received</strong> and <strong>Stock Used</strong> dated from <strong>1 June</strong> (e.g. through 11 June).</li>
+        <li>Then add opening stock here with the correct <strong>As of Date</strong>.</li>
+        <li>Live stock updates automatically: <strong>Opening + Received − Used</strong>.</li>
+    </ol>
+    <p class="field-note">While opening stock is not set, live stock counts as <strong>0 + Received − Used</strong>.</p>
 </div>
 
 {% if current_user.can_edit() %}

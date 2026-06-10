@@ -5,6 +5,9 @@
     <div>
         <h1>Live Inventory</h1>
         <p class="page-subtitle">Current Stock = Opening Stock + Total Received − Total Used</p>
+        {% if not rows %}
+        <p class="field-note">No opening stock yet — current stock shows Received − Used until opening stock is added.</p>
+        {% endif %}
     </div>
     <div class="header-actions">
         <a href="{{ url_for('reports.export_inventory', fmt='excel', company_id=selected_company) }}" class="btn btn-secondary">Export Excel</a>

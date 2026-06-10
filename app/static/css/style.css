@@ -443,6 +443,25 @@ textarea { resize: vertical; min-height: 4rem; }
 .module-card h2 { margin: 0; font-size: 1.2rem; }
 .module-card p { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.5rem; flex: 1; }
 
+.workflow-card {
+    border-left: 4px solid var(--primary);
+}
+
+.workflow-card-pending {
+    border-left-color: var(--orange);
+    background: linear-gradient(180deg, #fffaf5 0%, #ffffff 100%);
+}
+
+.workflow-list {
+    margin: 0 0 0.75rem;
+    padding-left: 1.25rem;
+    color: var(--text);
+}
+
+.workflow-list li { margin-bottom: 0.35rem; }
+
+.workflow-note { margin: 0; }
+
 @media (max-width: 900px) {
     .sidebar {
         position: static;

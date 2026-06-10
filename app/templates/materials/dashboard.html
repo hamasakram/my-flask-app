@@ -8,6 +8,22 @@
     </div>
 </div>
 
+<div class="card workflow-card {% if not has_opening_stock %}workflow-card-pending{% endif %}">
+    <h2>Stock Setup Workflow</h2>
+    <ol class="workflow-list">
+        {% for step in workflow_steps %}
+        <li>{{ step }}</li>
+        {% endfor %}
+    </ol>
+    {% if not has_opening_stock %}
+    <p class="field-note workflow-note">
+        Opening stock is not set yet. Add purchase/usage records from <strong>1 June</strong> first, then opening stock.
+    </p>
+    {% else %}
+    <p class="field-note workflow-note">Opening stock is set. Live inventory updates with each purchase or usage entry.</p>
+    {% endif %}
+</div>
+
 <div class="stats-grid">
     <div class="stat-card">
         <span class="stat-label">Total Stock (kg)</span>
