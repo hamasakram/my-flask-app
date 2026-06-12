@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Stock Received - Glue{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Stock Received</h1>
+    <p class="page-subtitle">Record glue stock received</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Record Stock Received</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="item_id">Item</label>
+            <select id="item_id" name="item_id" required disabled>
+                <option value="">Select company first</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantity Received</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" required>
+        </div>
+        <div class="form-group">
+            <label for="weight_per_quantity">Weight per Quantity <span class="hint">(optional)</span></label>
+            <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" placeholder="e.g. kg per unit">
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Receive Date</label>
+            <input type="date" id="transaction_date" name="transaction_date" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes" placeholder="Invoice no., supplier, etc.">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Receipt</button>
+        </div>
+    </form>
+    <p class="field-note">Add companies and items first. <a href="{{ url_for('glue.companies') }}">Companies</a> · <a href="{{ url_for('glue.catalog') }}">Items to Add</a></p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const itemSelect = document.getElementById('item_id');
+companySelect?.addEventListener('change', async function() {
+    itemSelect.innerHTML = '<option value="">Loading...</option>';
+    itemSelect.disabled = true;
+    if (!this.value) {
+        itemSelect.innerHTML = '<option value="">Select company first</option>';
+        return;
+    }
+    const res = await fetch(`/glue/inventory/api/items/${this.value}`);
+    const items = await res.json();
+    itemSelect.innerHTML = '<option value="">Select item</option>';
+    items.forEach(i => {
+        const opt = document.createElement('option');
+        opt.value = i.id;
+        opt.textContent = i.name;
+        itemSelect.appendChild(opt);
+    });
+    itemSelect.disabled = false;
+});
+document.getElementById('transaction_date').valueAsDate = new Date();
+</script>
+{% endblock %}

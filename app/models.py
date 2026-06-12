@@ -15,6 +15,8 @@ class Company(db.Model):
 
     SCOPE_INK = "ink"
     SCOPE_MATERIALS = "materials"
+    SCOPE_GLUE = "glue"
+    SCOPE_CHEMICALS = "chemicals"
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
@@ -32,6 +34,20 @@ class Company(db.Model):
     material_transactions = db.relationship(
         "MaterialTransaction", back_populates="company", lazy="dynamic"
     )
+    glue_items = db.relationship("GlueItem", back_populates="company", lazy="dynamic")
+    glue_opening_stocks = db.relationship(
+        "GlueOpeningStock", back_populates="company", lazy="dynamic"
+    )
+    glue_transactions = db.relationship(
+        "GlueTransaction", back_populates="company", lazy="dynamic"
+    )
+    chemical_items = db.relationship("ChemicalItem", back_populates="company", lazy="dynamic")
+    chemical_opening_stocks = db.relationship(
+        "ChemicalOpeningStock", back_populates="company", lazy="dynamic"
+    )
+    chemical_transactions = db.relationship(
+        "ChemicalTransaction", back_populates="company", lazy="dynamic"
+    )
 
 
 class InkType(db.Model):
@@ -40,6 +56,8 @@ class InkType(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
     name = db.Column(db.String(150), nullable=False)
+    color_code = db.Column(db.String(50))
+    unit_type = db.Column(db.String(20))
     low_stock_threshold = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
@@ -98,8 +116,10 @@ class Material(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    category = db.Column(db.String(20), nullable=False, default="PET")
     name = db.Column(db.String(150), nullable=False)
     size = db.Column(db.String(100), nullable=False, default="")
+    micron = db.Column(db.String(50))
     low_stock_threshold = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
@@ -112,14 +132,19 @@ class Material(db.Model):
     )
 
     __table_args__ = (
-        db.UniqueConstraint("company_id", "name", "size", name="uq_company_material"),
+        db.UniqueConstraint(
+            "company_id", "category", "name", "size", name="uq_company_material"
+        ),
     )
 
     @property
     def display_name(self):
+        parts = [self.category, self.name]
         if self.size:
-            return f"{self.name} ({self.size})"
-        return self.name
+            parts.append(self.size)
+        if self.micron:
+            parts.append(f"{self.micron}μ")
+        return " · ".join(parts)
 
 
 class MaterialOpeningStock(db.Model):
@@ -157,6 +182,11 @@ class MaterialTransaction(db.Model):
     transaction_type = db.Column(db.String(50), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
     quantity_left = db.Column(db.Float, nullable=True)
+    weight_per_quantity = db.Column(db.Float, nullable=True)
+    gross_weight = db.Column(db.Float, nullable=True)
+    tw = db.Column(db.Float, nullable=True)
+    net_weight = db.Column(db.Float, nullable=True)
+    micron = db.Column(db.String(50))
     transaction_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -164,6 +194,134 @@ class MaterialTransaction(db.Model):
 
     company = db.relationship("Company", back_populates="material_transactions")
     material = db.relationship("Material", back_populates="transactions")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class GlueItem(db.Model):
+    __tablename__ = "glue_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    unit_type = db.Column(db.String(20), nullable=False, default="Kg")
+    low_stock_threshold = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="glue_items")
+    opening_stocks = db.relationship("GlueOpeningStock", back_populates="item", lazy="dynamic")
+    transactions = db.relationship("GlueTransaction", back_populates="item", lazy="dynamic")
+
+    __table_args__ = (db.UniqueConstraint("company_id", "name", name="uq_company_glue"),)
+
+    @property
+    def display_name(self):
+        return f"{self.name} ({self.unit_type})"
+
+
+class GlueOpeningStock(db.Model):
+    __tablename__ = "glue_opening_stock"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey("glue_items.id"), nullable=False)
+    quantity = db.Column(db.Float, nullable=False, default=0)
+    as_of_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="glue_opening_stocks")
+    item = db.relationship("GlueItem", back_populates="opening_stocks")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (db.UniqueConstraint("company_id", "item_id", name="uq_glue_opening_stock"),)
+
+
+class GlueTransaction(db.Model):
+    __tablename__ = "glue_transactions"
+
+    TRANSACTION_RECEIVED = "Stock Received"
+    TRANSACTION_USED = "Stock Used"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey("glue_items.id"), nullable=False)
+    transaction_type = db.Column(db.String(50), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    quantity_left = db.Column(db.Float, nullable=True)
+    weight_per_quantity = db.Column(db.Float, nullable=True)
+    transaction_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="glue_transactions")
+    item = db.relationship("GlueItem", back_populates="transactions")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class ChemicalItem(db.Model):
+    __tablename__ = "chemical_items"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    unit_type = db.Column(db.String(20), nullable=False, default="Kg")
+    low_stock_threshold = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="chemical_items")
+    opening_stocks = db.relationship("ChemicalOpeningStock", back_populates="item", lazy="dynamic")
+    transactions = db.relationship("ChemicalTransaction", back_populates="item", lazy="dynamic")
+
+    __table_args__ = (db.UniqueConstraint("company_id", "name", name="uq_company_chemical"),)
+
+    @property
+    def display_name(self):
+        return f"{self.name} ({self.unit_type})"
+
+
+class ChemicalOpeningStock(db.Model):
+    __tablename__ = "chemical_opening_stock"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey("chemical_items.id"), nullable=False)
+    quantity = db.Column(db.Float, nullable=False, default=0)
+    as_of_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="chemical_opening_stocks")
+    item = db.relationship("ChemicalItem", back_populates="opening_stocks")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint("company_id", "item_id", name="uq_chemical_opening_stock"),
+    )
+
+
+class ChemicalTransaction(db.Model):
+    __tablename__ = "chemical_transactions"
+
+    TRANSACTION_RECEIVED = "Stock Received"
+    TRANSACTION_USED = "Stock Used"
+
+    id = db.Column(db.Integer, primary_key=True)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey("chemical_items.id"), nullable=False)
+    transaction_type = db.Column(db.String(50), nullable=False)
+    quantity = db.Column(db.Float, nullable=False)
+    quantity_left = db.Column(db.Float, nullable=True)
+    weight_per_quantity = db.Column(db.Float, nullable=True)
+    transaction_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company", back_populates="chemical_transactions")
+    item = db.relationship("ChemicalItem", back_populates="transactions")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 

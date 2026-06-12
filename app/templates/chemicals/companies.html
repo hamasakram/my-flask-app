@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Companies - Chemicals{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Companies</h1>
+    <p class="page-subtitle">Add company names manually for the Chemicals module</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Company</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group full-width">
+            <label for="company_name">Company Name</label>
+            <input
+                type="text"
+                id="company_name"
+                name="company_name"
+                placeholder="Enter company / production unit name"
+                required
+            >
+            <small class="field-note">Companies here are separate from other modules.</small>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Company</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Companies</h2>
+    <table class="data-table">
+        <thead><tr><th>Company Name</th><th>Added On</th></tr></thead>
+        <tbody>
+            {% for company in companies %}
+            <tr>
+                <td>{{ company.name }}</td>
+                <td>{{ company.created_at.strftime('%d-%m-%Y') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="2" class="empty">No companies yet — add your first company above</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

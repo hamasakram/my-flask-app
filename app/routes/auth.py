@@ -4,8 +4,7 @@ from flask_login import login_required, login_user, logout_user
 from app import db
 from app.models import User
 from app.module_context import (
-    MODULE_INK,
-    MODULE_MATERIALS,
+    ALL_MODULES,
     clear_active_module,
     get_active_module,
     module_dashboard_url,
@@ -43,7 +42,7 @@ def login():
 def choose_module():
     if request.method == "POST":
         module = request.form.get("module")
-        if module in (MODULE_INK, MODULE_MATERIALS):
+        if module in ALL_MODULES:
             set_active_module(module)
             return redirect(module_dashboard_url(module))
         flash("Please choose a valid module.", "danger")
@@ -54,7 +53,7 @@ def choose_module():
 @auth_bp.route("/switch-module/<module>")
 @login_required
 def switch_module(module):
-    if module not in (MODULE_INK, MODULE_MATERIALS):
+    if module not in ALL_MODULES:
         abort(400)
 
     set_active_module(module)

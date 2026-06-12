@@ -6,20 +6,34 @@
         <h1>Welcome, {{ current_user.username }}</h1>
         <p>Choose which stock management system to open</p>
     </div>
-    <div class="module-cards">
+    <div class="module-cards choose-module-grid">
         <form method="POST" class="module-card module-card-ink">
             <input type="hidden" name="module" value="ink">
             <div class="module-card-icon">🖨</div>
-            <h2>Ink Stock Management</h2>
-            <p>Track printing ink inventory — opening stock, received, used, and live stock by company.</p>
-            <button type="submit" class="btn btn-primary btn-block">Open Ink Stock</button>
+            <h2>Ink Stock</h2>
+            <p>Color code, unit type (Can/Drum/Tin), received, used, live stock.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open</button>
         </form>
         <form method="POST" class="module-card module-card-materials">
             <input type="hidden" name="module" value="materials">
             <div class="module-card-icon">📦</div>
-            <h2>Printing Materials Stock Management</h2>
-            <p>Track printing materials in kg — which production uses what, quantity left, and auto-calculated usage.</p>
-            <button type="submit" class="btn btn-primary btn-block">Open Materials Stock</button>
+            <h2>Printing Materials</h2>
+            <p>PET / METALIZE / LD categories with weight & micron tracking.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open</button>
+        </form>
+        <form method="POST" class="module-card module-card-glue">
+            <input type="hidden" name="module" value="glue">
+            <div class="module-card-icon">🧴</div>
+            <h2>Glue Management</h2>
+            <p>Item, company, quantity, weight per quantity, unit type.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open</button>
+        </form>
+        <form method="POST" class="module-card module-card-chemicals">
+            <input type="hidden" name="module" value="chemicals">
+            <div class="module-card-icon">⚗</div>
+            <h2>Chemicals Management</h2>
+            <p>Item, company, quantity, weight per quantity, unit type.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open</button>
         </form>
     </div>
 </div>

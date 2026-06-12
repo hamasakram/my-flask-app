@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}PDF Builder - {{ module_label }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Custom PDF Report</h1>
+    <p class="page-subtitle">{{ module_label }} — choose columns and optional company filter</p>
+</div>
+
+<div class="card">
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="module" value="{{ module }}">
+
+        <div class="form-group full-width">
+            <label>Columns to include</label>
+            <div class="checkbox-grid">
+                {% for key, label in fields %}
+                <label class="checkbox-label">
+                    <input type="checkbox" name="fields" value="{{ key }}" checked>
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="company_id">Company Filter</label>
+            <select id="company_id" name="company_id">
+                <option value="">All Companies</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Generate PDF</button>
+            <a href="{{ dashboard_url }}" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

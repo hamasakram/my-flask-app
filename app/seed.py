@@ -38,6 +38,12 @@ def seed_database():
             AppSetting(key="default_material_low_stock_threshold", value="50")
         )
 
+    if not AppSetting.query.filter_by(key="default_glue_low_stock_threshold").first():
+        db.session.add(AppSetting(key="default_glue_low_stock_threshold", value="50"))
+
+    if not AppSetting.query.filter_by(key="default_chemical_low_stock_threshold").first():
+        db.session.add(AppSetting(key="default_chemical_low_stock_threshold", value="50"))
+
     for name in COMPANY_NAMES:
         if not Company.query.filter_by(name=name).first():
             db.session.add(Company(name=name, scope=Company.SCOPE_INK))

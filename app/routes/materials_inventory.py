@@ -71,15 +71,19 @@ def catalog():
     if request.method == "POST":
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
+        category = request.form.get("category", "PET").strip().upper()
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
+        micron = request.form.get("micron", "").strip()
 
-        if not company_id or not material_name:
-            flash("Company and material name are required.", "danger")
+        if not company_id or not material_name or category not in ("PET", "METALIZE", "LD"):
+            flash("Company, category (PET/METALIZE/LD), and item name are required.", "danger")
             return redirect(url_for("materials.catalog"))
 
         try:
-            material = get_or_create_material(company_id, material_name, size)
+            material = get_or_create_material(
+                company_id, material_name, size, category=category, micron=micron
+            )
             log_audit(
                 current_user.id,
                 "CREATE",
@@ -104,6 +108,7 @@ def catalog():
         "materials/catalog.html",
         companies=companies,
         materials=materials,
+        categories=("PET", "METALIZE", "LD"),
     )
 
 
@@ -189,6 +194,8 @@ def receive_stock():
         company_id = request.form.get("company_id", type=int)
         material_id = request.form.get("material_id", type=int)
         quantity = request.form.get("quantity", type=float)
+        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
+        tw = request.form.get("tw", type=float) or 0
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -197,9 +204,14 @@ def receive_stock():
             or not material_id
             or not quantity
             or quantity <= 0
+            or weight_per_quantity is None
+            or weight_per_quantity < 0
             or not transaction_date
         ):
-            flash("Company, material, valid quantity (kg), and date are required.", "danger")
+            flash(
+                "Company, material, quantity, weight per quantity, and date are required.",
+                "danger",
+            )
             return redirect(url_for("materials.receive_stock"))
 
         material = Material.query.filter_by(id=material_id, company_id=company_id).first()
@@ -207,12 +219,19 @@ def receive_stock():
             flash("Invalid material selection.", "danger")
             return redirect(url_for("materials.receive_stock"))
 
+        gross_weight = quantity * weight_per_quantity
+        net_weight = gross_weight - tw
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = MaterialTransaction(
             company_id=company_id,
             material_id=material_id,
             transaction_type=MaterialTransaction.TRANSACTION_RECEIVED,
             quantity=quantity,
+            weight_per_quantity=weight_per_quantity,
+            gross_weight=gross_weight,
+            tw=tw,
+            net_weight=net_weight,
+            micron=material.micron,
             transaction_date=parsed_date,
             notes=notes,
             created_by_id=current_user.id,

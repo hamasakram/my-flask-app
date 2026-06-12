@@ -26,6 +26,19 @@
             <small class="field-note">New ink names are automatically created and stored in the database.</small>
         </div>
         <div class="form-group">
+            <label for="color_code">Color Code</label>
+            <input type="text" id="color_code" name="color_code" placeholder="e.g. PMS 186 C">
+        </div>
+        <div class="form-group">
+            <label for="unit_type">Unit Type</label>
+            <select id="unit_type" name="unit_type">
+                <option value="">Select unit</option>
+                {% for unit in unit_types %}
+                <option value="{{ unit }}">{{ unit }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
             <label for="quantity">Quantity Received</label>
             <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" required>
         </div>

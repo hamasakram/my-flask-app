@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Live Inventory - Chemicals{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Live Inventory</h1>
+        <p class="page-subtitle">Current Stock = Opening + Received − Used</p>
+        {% if not rows %}
+        <p class="field-note">No opening stock yet — current stock shows Received − Used until opening stock is added.</p>
+        {% endif %}
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('pdf.builder', module='chemicals') }}" class="btn btn-secondary">Export PDF</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="GET" class="filter-bar">
+        <select name="company_id">
+            <option value="">All Companies</option>
+            {% for company in companies %}
+            <option value="{{ company.id }}" {% if selected_company == company.id %}selected{% endif %}>{{ company.name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="item" value="{{ item_search }}" placeholder="Search item">
+        <button type="submit" class="btn btn-primary">Filter</button>
+        <a href="{{ url_for('chemicals.live_inventory') }}" class="btn btn-secondary">Clear</a>
+    </form>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Company</th><th>Item</th><th>Opening</th><th>Received</th><th>Used</th><th>Current</th><th>Threshold</th><th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in rows %}
+            <tr class="{% if item.is_low %}row-low{% endif %}">
+                <td>{{ item.company.name }}</td>
+                <td>{{ item.item.display_name }}</td>
+                <td>{{ "%.1f"|format(item.opening) }}</td>
+                <td>{{ "%.1f"|format(item.received) }}</td>
+                <td>{{ "%.1f"|format(item.used) }}</td>
+                <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
+                <td>{{ item.threshold }}</td>
+                <td>{% if item.is_low %}<span class="badge badge-red">LOW</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty">No inventory data yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

@@ -424,6 +424,32 @@ textarea { resize: vertical; min-height: 4rem; }
     max-width: 820px;
 }
 
+.module-select-page .module-cards {
+    max-width: 1100px;
+}
+.module-card-chemicals { border-top: 4px solid #059669; }
+
+.category-options {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.category-option {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+
+.module-switch-select {
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    min-width: 220px;
+}
+
 .module-card {
     background: var(--surface);
     border: 1px solid var(--border);

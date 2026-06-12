@@ -30,6 +30,8 @@ def opening_stock():
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
         ink_name = request.form.get("ink_name", "").strip()
+        color_code = request.form.get("color_code", "").strip()
+        unit_type = request.form.get("unit_type", "").strip()
         quantity = request.form.get("quantity", type=float)
         as_of_date = request.form.get("as_of_date")
         notes = request.form.get("notes", "").strip()
@@ -39,7 +41,9 @@ def opening_stock():
             return redirect(url_for("inventory.opening_stock"))
 
         try:
-            ink = get_or_create_ink_type(company_id, ink_name)
+            ink = get_or_create_ink_type(
+                company_id, ink_name, color_code=color_code, unit_type=unit_type
+            )
             parsed_date = datetime.strptime(as_of_date, "%Y-%m-%d").date()
 
             existing = OpeningStock.query.filter_by(
@@ -89,7 +93,10 @@ def opening_stock():
         .all()
     )
     return render_template(
-        "opening_stock.html", companies=companies, records=records
+        "opening_stock.html",
+        companies=companies,
+        records=records,
+        unit_types=("Can", "Drum", "Tin"),
     )
 
 
@@ -103,6 +110,8 @@ def receive_stock():
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
         ink_name = request.form.get("ink_name", "").strip()
+        color_code = request.form.get("color_code", "").strip()
+        unit_type = request.form.get("unit_type", "").strip()
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
@@ -112,7 +121,9 @@ def receive_stock():
             return redirect(url_for("inventory.receive_stock"))
 
         try:
-            ink = get_or_create_ink_type(company_id, ink_name)
+            ink = get_or_create_ink_type(
+                company_id, ink_name, color_code=color_code, unit_type=unit_type
+            )
             parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
 
             txn = InventoryTransaction(
@@ -142,7 +153,11 @@ def receive_stock():
 
         return redirect(url_for("inventory.receive_stock"))
 
-    return render_template("receive_stock.html", companies=companies)
+    return render_template(
+        "receive_stock.html",
+        companies=companies,
+        unit_types=("Can", "Drum", "Tin"),
+    )
 
 
 @inventory_bp.route("/use", methods=["GET", "POST"])

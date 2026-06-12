@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Stock Used - Chemicals{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Stock Used</h1>
+    <p class="page-subtitle">Enter quantity left — used is calculated automatically</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card">
+    <h2>Record Daily Usage</h2>
+    <p class="field-note usage-hint">
+        Enter how much is <strong>left</strong>. Used = current stock − left.
+    </p>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="item_id">Item</label>
+            <select id="item_id" name="item_id" required disabled>
+                <option value="">Select company first</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="current_stock">Current Stock</label>
+            <input type="text" id="current_stock" readonly placeholder="Select item first">
+        </div>
+        <div class="form-group">
+            <label for="quantity_left">Quantity Left</label>
+            <input type="number" id="quantity_left" name="quantity_left" step="0.1" min="0" required disabled>
+        </div>
+        <div class="form-group">
+            <label for="quantity_used">Used (calculated)</label>
+            <input type="text" id="quantity_used" readonly placeholder="Enter quantity left">
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Usage Date</label>
+            <input type="date" id="transaction_date" name="transaction_date" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Production line, job order, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Daily Record</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Recent Daily Usage Records</h2>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th><th>Company</th><th>Item</th><th>Left</th><th>Used</th><th>Notes</th><th>Entered By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for txn in recent_usage %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.company.name }}</td>
+                <td>{{ txn.item.display_name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+                <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No usage records yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const itemSelect = document.getElementById('item_id');
+const currentStockInput = document.getElementById('current_stock');
+const quantityLeftInput = document.getElementById('quantity_left');
+const quantityUsedInput = document.getElementById('quantity_used');
+let currentStock = null;
+
+function resetStockFields() {
+    currentStock = null;
+    currentStockInput.value = '';
+    quantityLeftInput.value = '';
+    quantityLeftInput.disabled = true;
+    quantityUsedInput.value = '';
+}
+
+function updateCalculatedUsed() {
+    if (currentStock === null || quantityLeftInput.value === '') {
+        quantityUsedInput.value = '';
+        return;
+    }
+    const left = parseFloat(quantityLeftInput.value);
+    if (Number.isNaN(left)) { quantityUsedInput.value = ''; return; }
+    const used = currentStock - left;
+    quantityUsedInput.value = used >= 0 ? used.toFixed(1) : 'Invalid (left exceeds stock)';
+}
+
+async function loadItemStock() {
+    resetStockFields();
+    if (!companySelect.value || !itemSelect.value) return;
+    const res = await fetch(`/chemicals/inventory/api/stock/${companySelect.value}/${itemSelect.value}`);
+    if (!res.ok) { currentStockInput.value = 'Unavailable'; return; }
+    const data = await res.json();
+    currentStock = data.current_stock;
+    currentStockInput.value = currentStock.toFixed(1);
+    quantityLeftInput.disabled = false;
+    updateCalculatedUsed();
+}
+
+companySelect?.addEventListener('change', async function() {
+    itemSelect.innerHTML = '<option value="">Loading...</option>';
+    itemSelect.disabled = true;
+    resetStockFields();
+    if (!this.value) { itemSelect.innerHTML = '<option value="">Select company first</option>'; return; }
+    const res = await fetch(`/chemicals/inventory/api/items/${this.value}`);
+    const items = await res.json();
+    itemSelect.innerHTML = '<option value="">Select item</option>';
+    items.forEach(i => {
+        const opt = document.createElement('option');
+        opt.value = i.id;
+        opt.textContent = i.name;
+        itemSelect.appendChild(opt);
+    });
+    itemSelect.disabled = false;
+});
+itemSelect?.addEventListener('change', loadItemStock);
+quantityLeftInput?.addEventListener('input', updateCalculatedUsed);
+document.getElementById('transaction_date').valueAsDate = new Date();
+</script>
+{% endblock %}

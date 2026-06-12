@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Opening Stock - RN COLOUR{% endblock %}
+{% block title %}Opening Stock - Chemicals{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>Opening Stock</h1>
@@ -9,7 +9,7 @@
 <div class="card workflow-card">
     <h2>Setup Order</h2>
     <ol class="workflow-list">
-        <li>First enter <strong>Stock Received</strong> and <strong>Stock Used</strong> dated from <strong>1 June</strong> (e.g. through 11 June).</li>
+        <li>First enter <strong>Stock Received</strong> and <strong>Stock Used</strong> dated from <strong>1 June</strong>.</li>
         <li>Then add opening stock here with the correct <strong>As of Date</strong>.</li>
         <li>Live stock updates automatically: <strong>Opening + Received − Used</strong>.</li>
     </ol>
@@ -18,7 +18,7 @@
 
 {% if current_user.can_edit() %}
 <div class="card">
-    <h2>Add / Update Opening Stock</h2>
+    <h2>Set Opening Stock</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
             <label for="company_id">Company</label>
@@ -30,21 +30,9 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" placeholder="Type ink name" required list="ink-suggestions">
-            <datalist id="ink-suggestions"></datalist>
-        </div>
-        <div class="form-group">
-            <label for="color_code">Color Code</label>
-            <input type="text" id="color_code" name="color_code" placeholder="e.g. PMS 186 C">
-        </div>
-        <div class="form-group">
-            <label for="unit_type">Unit Type</label>
-            <select id="unit_type" name="unit_type">
-                <option value="">Select unit</option>
-                {% for unit in unit_types %}
-                <option value="{{ unit }}">{{ unit }}</option>
-                {% endfor %}
+            <label for="item_id">Item</label>
+            <select id="item_id" name="item_id" required disabled>
+                <option value="">Select company first</option>
             </select>
         </div>
         <div class="form-group">
@@ -57,32 +45,31 @@
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
-            <input type="text" id="notes" name="notes" placeholder="Optional notes">
+            <input type="text" id="notes" name="notes">
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Opening Stock</button>
         </div>
     </form>
+    <p class="field-note">Add companies in <a href="{{ url_for('chemicals.companies') }}">Companies</a> and items in <a href="{{ url_for('chemicals.catalog') }}">Items to Add</a>.</p>
 </div>
 {% endif %}
 
 <div class="card">
-    <h2>Opening Stock Records</h2>
+    <h2>Current Opening Stock Records</h2>
     <table class="data-table">
-        <thead>
-            <tr><th>Company</th><th>Ink</th><th>Quantity</th><th>As of Date</th><th>Notes</th></tr>
-        </thead>
+        <thead><tr><th>Company</th><th>Item</th><th>Quantity</th><th>As of Date</th><th>Notes</th></tr></thead>
         <tbody>
             {% for record in records %}
             <tr>
                 <td>{{ record.company.name }}</td>
-                <td>{{ record.ink_type.name }}</td>
+                <td>{{ record.item.display_name }}</td>
                 <td>{{ "%.1f"|format(record.quantity) }}</td>
                 <td>{{ record.as_of_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ record.notes or '—' }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="empty">No opening stock records yet</td></tr>
+            <tr><td colspan="5" class="empty">No opening stock set</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -91,17 +78,25 @@
 
 {% block scripts %}
 <script>
-document.getElementById('company_id')?.addEventListener('change', async function() {
-    const list = document.getElementById('ink-suggestions');
-    list.innerHTML = '';
-    if (!this.value) return;
-    const res = await fetch(`/inventory/api/inks/${this.value}`);
-    const inks = await res.json();
-    inks.forEach(ink => {
+const companySelect = document.getElementById('company_id');
+const itemSelect = document.getElementById('item_id');
+companySelect?.addEventListener('change', async function() {
+    itemSelect.innerHTML = '<option value="">Loading...</option>';
+    itemSelect.disabled = true;
+    if (!this.value) {
+        itemSelect.innerHTML = '<option value="">Select company first</option>';
+        return;
+    }
+    const res = await fetch(`/chemicals/inventory/api/items/${this.value}`);
+    const items = await res.json();
+    itemSelect.innerHTML = '<option value="">Select item</option>';
+    items.forEach(i => {
         const opt = document.createElement('option');
-        opt.value = ink.name;
-        list.appendChild(opt);
+        opt.value = i.id;
+        opt.textContent = i.name;
+        itemSelect.appendChild(opt);
     });
+    itemSelect.disabled = false;
 });
 document.getElementById('as_of_date').valueAsDate = new Date();
 </script>

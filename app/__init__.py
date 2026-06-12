@@ -4,11 +4,12 @@ from flask_sqlalchemy import SQLAlchemy
 
 from config import Config
 from app.module_context import (
+    ALL_MODULES,
     MODULE_INK,
+    all_module_options,
     get_active_module,
     module_dashboard_url,
     module_label,
-    other_module,
 )
 
 db = SQLAlchemy()
@@ -38,6 +39,11 @@ def create_app(config_class=Config):
     from app.routes.materials_main import materials_main_bp
     from app.routes.materials_inventory import materials_bp
     from app.routes.materials_reports import materials_reports_bp
+    from app.routes.glue_main import glue_main_bp
+    from app.routes.glue_inventory import glue_bp
+    from app.routes.chemicals_main import chemicals_main_bp
+    from app.routes.chemicals_inventory import chemicals_bp
+    from app.routes.pdf_builder import pdf_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -47,23 +53,19 @@ def create_app(config_class=Config):
     app.register_blueprint(materials_main_bp)
     app.register_blueprint(materials_bp)
     app.register_blueprint(materials_reports_bp)
+    app.register_blueprint(glue_main_bp)
+    app.register_blueprint(glue_bp)
+    app.register_blueprint(chemicals_main_bp)
+    app.register_blueprint(chemicals_bp)
+    app.register_blueprint(pdf_bp)
 
     @app.context_processor
     def inject_module_context():
         module = get_active_module()
-        if module:
-            other = other_module(module)
-            return {
-                "active_module": module,
-                "module_label": module_label(module),
-                "switch_target": other,
-                "switch_label": module_label(other),
-            }
         return {
-            "active_module": None,
-            "module_label": "",
-            "switch_target": MODULE_INK,
-            "switch_label": module_label(MODULE_INK),
+            "active_module": module,
+            "module_label": module_label(module) if module else "",
+            "all_modules": all_module_options(module),
         }
 
     @app.before_request

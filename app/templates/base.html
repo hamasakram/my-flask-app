@@ -34,7 +34,8 @@
             <li><a href="{{ url_for('reports.monthly_report') }}">Monthly</a></li>
             <li><a href="{{ url_for('reports.yearly_report') }}">Yearly</a></li>
             <li><a href="{{ url_for('reports.audit_trail') }}">Audit Trail</a></li>
-            {% else %}
+            <li><a href="{{ url_for('pdf.builder', module='ink') }}">Custom PDF</a></li>
+            {% elif active_module == 'materials' %}
             <li><a href="{{ url_for('materials_main.dashboard') }}" class="{% if request.endpoint == 'materials_main.dashboard' %}active{% endif %}">Dashboard</a></li>
             <li class="nav-section">Materials</li>
             <li><a href="{{ url_for('materials.companies') }}">Companies</a></li>
@@ -50,6 +51,29 @@
             <li><a href="{{ url_for('materials_reports.monthly_report') }}">Monthly</a></li>
             <li><a href="{{ url_for('materials_reports.yearly_report') }}">Yearly</a></li>
             <li><a href="{{ url_for('materials_reports.audit_trail') }}">Audit Trail</a></li>
+            <li><a href="{{ url_for('pdf.builder', module='materials') }}">Custom PDF</a></li>
+            {% elif active_module == 'glue' %}
+            <li><a href="{{ url_for('glue_main.dashboard') }}" class="{% if request.endpoint == 'glue_main.dashboard' %}active{% endif %}">Dashboard</a></li>
+            <li class="nav-section">Glue</li>
+            <li><a href="{{ url_for('glue.companies') }}">Companies</a></li>
+            <li><a href="{{ url_for('glue.catalog') }}">Items to Add</a></li>
+            <li><a href="{{ url_for('glue.opening_stock') }}">Opening Stock</a></li>
+            <li><a href="{{ url_for('glue.receive_stock') }}">Stock Received</a></li>
+            <li><a href="{{ url_for('glue.use_stock') }}">Stock Used</a></li>
+            <li><a href="{{ url_for('glue.live_inventory') }}">Live Inventory</a></li>
+            <li class="nav-section">Reports</li>
+            <li><a href="{{ url_for('pdf.builder', module='glue') }}">Custom PDF</a></li>
+            {% elif active_module == 'chemicals' %}
+            <li><a href="{{ url_for('chemicals_main.dashboard') }}" class="{% if request.endpoint == 'chemicals_main.dashboard' %}active{% endif %}">Dashboard</a></li>
+            <li class="nav-section">Chemicals</li>
+            <li><a href="{{ url_for('chemicals.companies') }}">Companies</a></li>
+            <li><a href="{{ url_for('chemicals.catalog') }}">Items to Add</a></li>
+            <li><a href="{{ url_for('chemicals.opening_stock') }}">Opening Stock</a></li>
+            <li><a href="{{ url_for('chemicals.receive_stock') }}">Stock Received</a></li>
+            <li><a href="{{ url_for('chemicals.use_stock') }}">Stock Used</a></li>
+            <li><a href="{{ url_for('chemicals.live_inventory') }}">Live Inventory</a></li>
+            <li class="nav-section">Reports</li>
+            <li><a href="{{ url_for('pdf.builder', module='chemicals') }}">Custom PDF</a></li>
             {% endif %}
             {% if current_user.is_admin() %}
             <li class="nav-section">Admin</li>
@@ -72,9 +96,12 @@
         {% if current_user.is_authenticated and active_module and request.endpoint != 'auth.choose_module' %}
         <div class="module-switcher">
             <span class="module-switcher-label">{{ module_label }}</span>
-            <a href="{{ url_for('auth.switch_module', module=switch_target) }}" class="btn btn-sm btn-secondary module-switch-btn">
-                Switch to {{ switch_label }}
-            </a>
+            <select class="module-switch-select" onchange="if(this.value) window.location.href=this.value">
+                {% for mod in all_modules %}
+                <option value="{{ mod.url }}" {% if mod.active %}selected{% endif %}>{{ mod.label }}</option>
+                {% endfor %}
+            </select>
+            <a href="{{ url_for('pdf.builder', module=active_module) }}" class="btn btn-sm btn-primary">Generate PDF</a>
         </div>
         {% endif %}
 

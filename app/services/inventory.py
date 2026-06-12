@@ -7,16 +7,30 @@ from app import db
 from app.models import AppSetting, AuditLog, InkType, InventoryTransaction, OpeningStock
 
 
-def get_or_create_ink_type(company_id: int, ink_name: str) -> InkType:
+def get_or_create_ink_type(
+    company_id: int,
+    ink_name: str,
+    color_code: str = "",
+    unit_type: str = "",
+) -> InkType:
     cleaned = ink_name.strip()
     if not cleaned:
         raise ValueError("Ink name is required.")
 
     ink = InkType.query.filter_by(company_id=company_id, name=cleaned).first()
     if ink:
+        if color_code:
+            ink.color_code = color_code.strip()
+        if unit_type:
+            ink.unit_type = unit_type.strip()
         return ink
 
-    ink = InkType(company_id=company_id, name=cleaned)
+    ink = InkType(
+        company_id=company_id,
+        name=cleaned,
+        color_code=color_code.strip() or None,
+        unit_type=unit_type.strip() or None,
+    )
     db.session.add(ink)
     db.session.flush()
     return ink
