@@ -62,6 +62,7 @@
         <thead>
             <tr>
                 <th>Date</th><th>Company</th><th>Material</th><th>Left (kg)</th><th>Used (kg)</th><th>Production / Notes</th><th>Entered By</th>
+                {% if current_user.can_edit() %}<th></th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -74,9 +75,12 @@
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
                 <td>{{ txn.notes or '—' }}</td>
                 <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
+                {% if current_user.can_edit() %}
+                <td><a href="{{ url_for('stock_edits.edit_materials_used', txn_id=txn.id) }}" class="btn btn-sm btn-secondary">Edit</a></td>
+                {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty">No usage records yet</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No usage records yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

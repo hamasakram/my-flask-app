@@ -13,6 +13,7 @@ from app.services.glue_chemical_inventory import (
     glue_used_from_left,
 )
 from app.services.inventory import log_audit
+from app.services.weights import calculate_gross_net
 
 glue_bp = Blueprint("glue", __name__, url_prefix="/glue/inventory")
 
@@ -207,12 +208,15 @@ def receive_stock():
             return redirect(url_for("glue.receive_stock"))
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
+        gross_weight, net_weight = calculate_gross_net(quantity, weight_per_quantity or 0)
         txn = GlueTransaction(
             company_id=company_id,
             item_id=item_id,
             transaction_type=GlueTransaction.TRANSACTION_RECEIVED,
             quantity=quantity,
             weight_per_quantity=weight_per_quantity,
+            gross_weight=gross_weight if weight_per_quantity else None,
+            net_weight=net_weight if weight_per_quantity else None,
             transaction_date=parsed_date,
             notes=notes,
             created_by_id=current_user.id,
@@ -230,7 +234,17 @@ def receive_stock():
         flash(f"Stock received: {quantity} of '{item.display_name}' recorded.", "success")
         return redirect(url_for("glue.receive_stock"))
 
-    return render_template("glue/receive_stock.html", companies=companies)
+    recent_received = (
+        GlueTransaction.query.filter_by(transaction_type=GlueTransaction.TRANSACTION_RECEIVED)
+        .order_by(GlueTransaction.transaction_date.desc(), GlueTransaction.id.desc())
+        .limit(30)
+        .all()
+    )
+    return render_template(
+        "glue/receive_stock.html",
+        companies=companies,
+        recent_received=recent_received,
+    )
 
 
 @glue_bp.route("/use", methods=["GET", "POST"])

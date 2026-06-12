@@ -249,7 +249,22 @@ def receive_stock():
         flash(f"Stock received: {quantity} kg of '{material.display_name}' recorded.", "success")
         return redirect(url_for("materials.receive_stock"))
 
-    return render_template("materials/receive_stock.html", companies=companies)
+    recent_received = (
+        MaterialTransaction.query.filter_by(
+            transaction_type=MaterialTransaction.TRANSACTION_RECEIVED
+        )
+        .order_by(
+            MaterialTransaction.transaction_date.desc(),
+            MaterialTransaction.id.desc(),
+        )
+        .limit(30)
+        .all()
+    )
+    return render_template(
+        "materials/receive_stock.html",
+        companies=companies,
+        recent_received=recent_received,
+    )
 
 
 @materials_bp.route("/use", methods=["GET", "POST"])

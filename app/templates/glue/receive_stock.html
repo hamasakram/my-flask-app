@@ -9,7 +9,7 @@
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
     <h2>Record Stock Received</h2>
-    <form method="POST" class="form-grid">
+    <form method="POST" class="form-grid" id="receive-form">
         <div class="form-group">
             <label for="company_id">Company</label>
             <select id="company_id" name="company_id" required>
@@ -30,8 +30,16 @@
             <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" required>
         </div>
         <div class="form-group">
-            <label for="weight_per_quantity">Weight per Quantity <span class="hint">(optional)</span></label>
-            <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" placeholder="e.g. kg per unit">
+            <label for="weight_per_quantity">Weight per Quantity</label>
+            <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" placeholder="Weight per unit">
+        </div>
+        <div class="form-group">
+            <label for="gross_weight">Gross Weight (auto)</label>
+            <input type="text" id="gross_weight" readonly placeholder="Quantity × Weight">
+        </div>
+        <div class="form-group">
+            <label for="net_weight">Net Weight (auto)</label>
+            <input type="text" id="net_weight" readonly>
         </div>
         <div class="form-group">
             <label for="transaction_date">Receive Date</label>
@@ -48,12 +56,61 @@
     <p class="field-note">Add companies and items first. <a href="{{ url_for('glue.companies') }}">Companies</a> · <a href="{{ url_for('glue.catalog') }}">Items to Add</a></p>
 </div>
 {% endif %}
+
+<div class="card">
+    <h2>Recent Stock Received</h2>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th><th>Company</th><th>Item</th><th>Qty</th><th>Wt/Qty</th><th>Gross</th><th>Net</th><th>Notes</th>
+                {% if current_user.can_edit() %}<th></th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for txn in recent_received %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.company.name }}</td>
+                <td>{{ txn.item.display_name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ "%.2f"|format(txn.weight_per_quantity) if txn.weight_per_quantity is not none else '—' }}</td>
+                <td>{{ "%.2f"|format(txn.gross_weight) if txn.gross_weight is not none else '—' }}</td>
+                <td>{{ "%.2f"|format(txn.net_weight) if txn.net_weight is not none else '—' }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                <td><a href="{{ url_for('stock_edits.edit_glue_received', txn_id=txn.id) }}" class="btn btn-sm btn-secondary">Edit</a></td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No receipts yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 const companySelect = document.getElementById('company_id');
 const itemSelect = document.getElementById('item_id');
+const quantityInput = document.getElementById('quantity');
+const weightInput = document.getElementById('weight_per_quantity');
+const grossInput = document.getElementById('gross_weight');
+const netInput = document.getElementById('net_weight');
+
+function updateWeights() {
+    const qty = parseFloat(quantityInput?.value);
+    const wpq = parseFloat(weightInput?.value);
+    if (Number.isNaN(qty) || Number.isNaN(wpq)) {
+        if (grossInput) grossInput.value = '';
+        if (netInput) netInput.value = '';
+        return;
+    }
+    const gross = qty * wpq;
+    grossInput.value = gross.toFixed(2);
+    netInput.value = gross.toFixed(2);
+}
+
 companySelect?.addEventListener('change', async function() {
     itemSelect.innerHTML = '<option value="">Loading...</option>';
     itemSelect.disabled = true;
@@ -72,6 +129,7 @@ companySelect?.addEventListener('change', async function() {
     });
     itemSelect.disabled = false;
 });
+[quantityInput, weightInput].forEach(el => el?.addEventListener('input', updateWeights));
 document.getElementById('transaction_date').valueAsDate = new Date();
 </script>
 {% endblock %}

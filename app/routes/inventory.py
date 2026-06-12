@@ -9,9 +9,11 @@ from app.services.companies import get_ink_companies
 from app.services.inventory import (
     calculate_used_from_left,
     get_or_create_ink_type,
+    get_recent_received_records,
     get_stock_usage_records,
     log_audit,
 )
+from app.services.weights import calculate_gross_net
 
 inventory_bp = Blueprint("inventory", __name__, url_prefix="/inventory")
 
@@ -113,6 +115,7 @@ def receive_stock():
         color_code = request.form.get("color_code", "").strip()
         unit_type = request.form.get("unit_type", "").strip()
         quantity = request.form.get("quantity", type=float)
+        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -125,12 +128,18 @@ def receive_stock():
                 company_id, ink_name, color_code=color_code, unit_type=unit_type
             )
             parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
+            gross_weight, net_weight = calculate_gross_net(
+                quantity, weight_per_quantity or 0
+            )
 
             txn = InventoryTransaction(
                 company_id=company_id,
                 ink_type_id=ink.id,
                 transaction_type=InventoryTransaction.TRANSACTION_RECEIVED,
                 quantity=quantity,
+                weight_per_quantity=weight_per_quantity,
+                gross_weight=gross_weight if weight_per_quantity else None,
+                net_weight=net_weight if weight_per_quantity else None,
                 transaction_date=parsed_date,
                 notes=notes,
                 created_by_id=current_user.id,
@@ -153,10 +162,12 @@ def receive_stock():
 
         return redirect(url_for("inventory.receive_stock"))
 
+    recent_received = get_recent_received_records()
     return render_template(
         "receive_stock.html",
         companies=companies,
         unit_types=("Can", "Drum", "Tin"),
+        recent_received=recent_received,
     )
 
 

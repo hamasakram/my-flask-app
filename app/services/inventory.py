@@ -163,6 +163,20 @@ def get_stock_usage_records(limit: int = 30) -> list[InventoryTransaction]:
     )
 
 
+def get_recent_received_records(limit: int = 30) -> list[InventoryTransaction]:
+    return (
+        InventoryTransaction.query.filter_by(
+            transaction_type=InventoryTransaction.TRANSACTION_RECEIVED
+        )
+        .order_by(
+            InventoryTransaction.transaction_date.desc(),
+            InventoryTransaction.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+
 def get_dashboard_stats(today: date) -> dict:
     live_stock = calculate_live_stock()
     total_inventory = sum(item["current"] for item in live_stock)

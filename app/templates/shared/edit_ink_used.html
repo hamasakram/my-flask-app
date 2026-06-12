@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Edit Stock Used - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Stock Used</h1>
+    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.ink_type.name }}</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="quantity_left">Quantity Left</label>
+            <input type="number" id="quantity_left" name="quantity_left" step="0.1" min="0" value="{{ txn.quantity_left }}" required>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Used Amount</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Usage Date</label>
+            <input type="date" id="transaction_date" name="transaction_date" value="{{ txn.transaction_date.isoformat() }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Where Used / Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ txn.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

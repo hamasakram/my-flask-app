@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Edit Purchase - Materials{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Stock Purchased</h1>
+    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.material.display_name }}</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <form method="POST" class="form-grid" id="purchase-form">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                {% for company in companies %}
+                <option value="{{ company.id }}" {% if company.id == txn.company_id %}selected{% endif %}>{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_id">Material</label>
+            <select id="material_id" name="material_id" required>
+                <option value="{{ txn.material_id }}" selected>{{ txn.material.display_name }}</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantity</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
+        </div>
+        <div class="form-group">
+            <label for="weight_per_quantity">Weight per Quantity</label>
+            <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" value="{{ txn.weight_per_quantity or '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="gross_weight">Gross Weight (auto)</label>
+            <input type="text" id="gross_weight" readonly>
+        </div>
+        <div class="form-group">
+            <label for="tw">TW</label>
+            <input type="number" id="tw" name="tw" step="0.01" min="0" value="{{ txn.tw or 0 }}">
+        </div>
+        <div class="form-group">
+            <label for="net_weight">Net Weight (auto)</label>
+            <input type="text" id="net_weight" readonly>
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Purchase Date</label>
+            <input type="date" id="transaction_date" name="transaction_date" value="{{ txn.transaction_date.isoformat() }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes" value="{{ txn.notes or '' }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const materialSelect = document.getElementById('material_id');
+const quantityInput = document.getElementById('quantity');
+const weightInput = document.getElementById('weight_per_quantity');
+const twInput = document.getElementById('tw');
+const grossInput = document.getElementById('gross_weight');
+const netInput = document.getElementById('net_weight');
+
+function updateWeights() {
+    const qty = parseFloat(quantityInput.value);
+    const wpq = parseFloat(weightInput.value);
+    const tw = parseFloat(twInput.value) || 0;
+    if (Number.isNaN(qty) || Number.isNaN(wpq)) {
+        grossInput.value = '';
+        netInput.value = '';
+        return;
+    }
+    const gross = qty * wpq;
+    grossInput.value = gross.toFixed(2);
+    netInput.value = (gross - tw).toFixed(2);
+}
+
+companySelect?.addEventListener('change', async function() {
+    if (!this.value) return;
+    const res = await fetch(`/materials/inventory/api/materials/${this.value}`);
+    const materials = await res.json();
+    materialSelect.innerHTML = '';
+    materials.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name;
+        materialSelect.appendChild(opt);
+    });
+});
+
+[quantityInput, weightInput, twInput].forEach(el => el?.addEventListener('input', updateWeights));
+updateWeights();
+</script>
+{% endblock %}

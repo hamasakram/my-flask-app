@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Edit Stock Received{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Stock Received</h1>
+    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.item.display_name }}</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <form method="POST" class="form-grid" id="receive-form">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                {% for company in companies %}
+                <option value="{{ company.id }}" {% if company.id == txn.company_id %}selected{% endif %}>{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="item_id">{{ item_label }}</label>
+            <select id="item_id" name="item_id" required>
+                <option value="{{ txn.item_id }}" selected>{{ txn.item.display_name }}</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantity Received</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
+        </div>
+        <div class="form-group">
+            <label for="weight_per_quantity">Weight per Quantity</label>
+            <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" value="{{ txn.weight_per_quantity or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="gross_weight">Gross Weight (auto)</label>
+            <input type="text" id="gross_weight" readonly>
+        </div>
+        <div class="form-group">
+            <label for="net_weight">Net Weight (auto)</label>
+            <input type="text" id="net_weight" readonly>
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Receive Date</label>
+            <input type="date" id="transaction_date" name="transaction_date" value="{{ txn.transaction_date.isoformat() }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes" value="{{ txn.notes or '' }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const moduleName = {{ module|tojson }};
+const apiPrefix = moduleName === 'glue' ? '/glue/inventory' : '/chemicals/inventory';
+const companySelect = document.getElementById('company_id');
+const itemSelect = document.getElementById('item_id');
+const quantityInput = document.getElementById('quantity');
+const weightInput = document.getElementById('weight_per_quantity');
+const grossInput = document.getElementById('gross_weight');
+const netInput = document.getElementById('net_weight');
+
+function updateWeights() {
+    const qty = parseFloat(quantityInput.value);
+    const wpq = parseFloat(weightInput.value);
+    if (Number.isNaN(qty) || Number.isNaN(wpq)) {
+        grossInput.value = '';
+        netInput.value = '';
+        return;
+    }
+    const gross = qty * wpq;
+    grossInput.value = gross.toFixed(2);
+    netInput.value = gross.toFixed(2);
+}
+
+companySelect?.addEventListener('change', async function() {
+    if (!this.value) return;
+    const res = await fetch(`${apiPrefix}/api/items/${this.value}`);
+    const items = await res.json();
+    itemSelect.innerHTML = '';
+    items.forEach(i => {
+        const opt = document.createElement('option');
+        opt.value = i.id;
+        opt.textContent = i.name;
+        itemSelect.appendChild(opt);
+    });
+});
+
+[quantityInput, weightInput].forEach(el => el?.addEventListener('input', updateWeights));
+updateWeights();
+</script>
+{% endblock %}
