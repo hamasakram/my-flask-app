@@ -1,0 +1,18 @@
+{% macro manual_weight_fields(gross_value='', tw_value='', net_value='', wpq_value='') %}
+<div class="form-group">
+    <label for="weight_per_quantity">Weight per Quantity <span class="hint">(optional)</span></label>
+    <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" value="{{ wpq_value }}">
+</div>
+<div class="form-group">
+    <label for="gross_weight">Gross Weight</label>
+    <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0" value="{{ gross_value }}">
+</div>
+<div class="form-group">
+    <label for="tw">TW</label>
+    <input type="number" id="tw" name="tw" step="0.01" min="0" value="{{ tw_value if tw_value is not none and tw_value != '' else '' }}">
+</div>
+<div class="form-group">
+    <label for="net_weight">Net Weight</label>
+    <input type="number" id="net_weight" name="net_weight" step="0.01" min="0" value="{{ net_value }}">
+</div>
+{% endmacro %}

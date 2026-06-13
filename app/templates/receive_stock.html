@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
+{% from "shared/manual_weight_fields.html" import manual_weight_fields %}
 {% block title %}Stock Received - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -43,18 +44,7 @@
             <label for="quantity">Quantity Received</label>
             <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" required>
         </div>
-        <div class="form-group">
-            <label for="weight_per_quantity">Weight per Quantity</label>
-            <input type="number" id="weight_per_quantity" name="weight_per_quantity" step="0.01" min="0" placeholder="Weight per unit">
-        </div>
-        <div class="form-group">
-            <label for="gross_weight">Gross Weight (auto)</label>
-            <input type="text" id="gross_weight" readonly placeholder="Quantity × Weight">
-        </div>
-        <div class="form-group">
-            <label for="net_weight">Net Weight (auto)</label>
-            <input type="text" id="net_weight" readonly>
-        </div>
+        {{ manual_weight_fields() }}
         <div class="form-group">
             <label for="transaction_date">Receipt Date</label>
             <input type="date" id="transaction_date" name="transaction_date" required>
@@ -83,6 +73,7 @@
                 <th>Qty</th>
                 <th>Wt/Qty</th>
                 <th>Gross</th>
+                <th>TW</th>
                 <th>Net</th>
                 <th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
@@ -97,6 +88,7 @@
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
                 <td>{{ "%.2f"|format(txn.weight_per_quantity) if txn.weight_per_quantity is not none else '—' }}</td>
                 <td>{{ "%.2f"|format(txn.gross_weight) if txn.gross_weight is not none else '—' }}</td>
+                <td>{{ "%.2f"|format(txn.tw) if txn.tw is not none else '—' }}</td>
                 <td>{{ "%.2f"|format(txn.net_weight) if txn.net_weight is not none else '—' }}</td>
                 <td>{{ txn.notes or '—' }}</td>
                 {{ row_actions(
@@ -105,7 +97,7 @@
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No receipts yet</td></tr>
+            <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No receipts yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -116,23 +108,6 @@
 <script>
 const companySelect = document.getElementById('company_id');
 const inkList = document.getElementById('existing-inks');
-const quantityInput = document.getElementById('quantity');
-const weightInput = document.getElementById('weight_per_quantity');
-const grossInput = document.getElementById('gross_weight');
-const netInput = document.getElementById('net_weight');
-
-function updateWeights() {
-    const qty = parseFloat(quantityInput?.value);
-    const wpq = parseFloat(weightInput?.value);
-    if (Number.isNaN(qty) || Number.isNaN(wpq)) {
-        if (grossInput) grossInput.value = '';
-        if (netInput) netInput.value = '';
-        return;
-    }
-    const gross = qty * wpq;
-    grossInput.value = gross.toFixed(2);
-    netInput.value = gross.toFixed(2);
-}
 
 companySelect?.addEventListener('change', async function() {
     inkList.innerHTML = '';
@@ -146,7 +121,6 @@ companySelect?.addEventListener('change', async function() {
     });
 });
 
-[quantityInput, weightInput].forEach(el => el?.addEventListener('input', updateWeights));
 document.getElementById('transaction_date').valueAsDate = new Date();
 </script>
 {% endblock %}

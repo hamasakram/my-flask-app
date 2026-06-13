@@ -13,7 +13,7 @@ from app.services.inventory import (
     get_stock_usage_records,
     log_audit,
 )
-from app.services.weights import calculate_gross_net
+from app.services.weights import parse_manual_weights
 
 inventory_bp = Blueprint("inventory", __name__, url_prefix="/inventory")
 
@@ -115,7 +115,6 @@ def receive_stock():
         color_code = request.form.get("color_code", "").strip()
         unit_type = request.form.get("unit_type", "").strip()
         quantity = request.form.get("quantity", type=float)
-        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -128,18 +127,17 @@ def receive_stock():
                 company_id, ink_name, color_code=color_code, unit_type=unit_type
             )
             parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
-            gross_weight, net_weight = calculate_gross_net(
-                quantity, weight_per_quantity or 0
-            )
+            weights = parse_manual_weights(request.form)
 
             txn = InventoryTransaction(
                 company_id=company_id,
                 ink_type_id=ink.id,
                 transaction_type=InventoryTransaction.TRANSACTION_RECEIVED,
                 quantity=quantity,
-                weight_per_quantity=weight_per_quantity,
-                gross_weight=gross_weight if weight_per_quantity else None,
-                net_weight=net_weight if weight_per_quantity else None,
+                weight_per_quantity=weights["weight_per_quantity"],
+                gross_weight=weights["gross_weight"],
+                tw=weights["tw"],
+                net_weight=weights["net_weight"],
                 transaction_date=parsed_date,
                 notes=notes,
                 created_by_id=current_user.id,

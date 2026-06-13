@@ -25,14 +25,17 @@ COLUMN_MIGRATIONS = {
         "quantity_left": "FLOAT",
         "weight_per_quantity": "FLOAT",
         "gross_weight": "FLOAT",
+        "tw": "FLOAT",
         "net_weight": "FLOAT",
     },
     "glue_transactions": {
         "gross_weight": "FLOAT",
+        "tw": "FLOAT",
         "net_weight": "FLOAT",
     },
     "chemical_transactions": {
         "gross_weight": "FLOAT",
+        "tw": "FLOAT",
         "net_weight": "FLOAT",
     },
 }

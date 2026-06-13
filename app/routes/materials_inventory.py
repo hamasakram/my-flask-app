@@ -7,6 +7,7 @@ from app import db
 from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction
 from app.services.companies import get_material_companies
 from app.services.inventory import log_audit
+from app.services.weights import parse_manual_weights
 from app.services.materials_inventory import (
     calculate_live_stock,
     calculate_used_from_left,
@@ -194,8 +195,7 @@ def receive_stock():
         company_id = request.form.get("company_id", type=int)
         material_id = request.form.get("material_id", type=int)
         quantity = request.form.get("quantity", type=float)
-        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
-        tw = request.form.get("tw", type=float) or 0
+        weights = parse_manual_weights(request.form)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -204,14 +204,9 @@ def receive_stock():
             or not material_id
             or not quantity
             or quantity <= 0
-            or weight_per_quantity is None
-            or weight_per_quantity < 0
             or not transaction_date
         ):
-            flash(
-                "Company, material, quantity, weight per quantity, and date are required.",
-                "danger",
-            )
+            flash("Company, material, quantity, and date are required.", "danger")
             return redirect(url_for("materials.receive_stock"))
 
         material = Material.query.filter_by(id=material_id, company_id=company_id).first()
@@ -219,18 +214,16 @@ def receive_stock():
             flash("Invalid material selection.", "danger")
             return redirect(url_for("materials.receive_stock"))
 
-        gross_weight = quantity * weight_per_quantity
-        net_weight = gross_weight - tw
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = MaterialTransaction(
             company_id=company_id,
             material_id=material_id,
             transaction_type=MaterialTransaction.TRANSACTION_RECEIVED,
             quantity=quantity,
-            weight_per_quantity=weight_per_quantity,
-            gross_weight=gross_weight,
-            tw=tw,
-            net_weight=net_weight,
+            weight_per_quantity=weights["weight_per_quantity"],
+            gross_weight=weights["gross_weight"],
+            tw=weights["tw"],
+            net_weight=weights["net_weight"],
             micron=material.micron,
             transaction_date=parsed_date,
             notes=notes,

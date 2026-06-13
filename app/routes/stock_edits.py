@@ -25,7 +25,7 @@ from app.services.companies import (
     get_material_companies,
 )
 from app.services.inventory import get_or_create_ink_type, log_audit
-from app.services.weights import calculate_gross_net
+from app.services.weights import parse_manual_weights
 
 stock_edits_bp = Blueprint("stock_edits", __name__, url_prefix="/stock-edit")
 
@@ -56,7 +56,6 @@ def edit_ink_received(txn_id):
         color_code = request.form.get("color_code", "").strip()
         unit_type = request.form.get("unit_type", "").strip()
         quantity = request.form.get("quantity", type=float)
-        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -68,15 +67,14 @@ def edit_ink_received(txn_id):
             ink = get_or_create_ink_type(
                 company_id, ink_name, color_code=color_code, unit_type=unit_type
             )
-            gross_weight, net_weight = calculate_gross_net(
-                quantity, weight_per_quantity or 0
-            )
+            weights = parse_manual_weights(request.form)
             txn.company_id = company_id
             txn.ink_type_id = ink.id
             txn.quantity = quantity
-            txn.weight_per_quantity = weight_per_quantity
-            txn.gross_weight = gross_weight if weight_per_quantity else None
-            txn.net_weight = net_weight if weight_per_quantity else None
+            txn.weight_per_quantity = weights["weight_per_quantity"]
+            txn.gross_weight = weights["gross_weight"]
+            txn.tw = weights["tw"]
+            txn.net_weight = weights["net_weight"]
             txn.transaction_date = _parse_date(transaction_date)
             txn.notes = notes
             log_audit(
@@ -209,8 +207,6 @@ def edit_materials_received(txn_id):
         company_id = request.form.get("company_id", type=int)
         material_id = request.form.get("material_id", type=int)
         quantity = request.form.get("quantity", type=float)
-        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
-        tw = request.form.get("tw", type=float) or 0
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -219,7 +215,6 @@ def edit_materials_received(txn_id):
             or not material_id
             or not quantity
             or quantity <= 0
-            or weight_per_quantity is None
             or not transaction_date
         ):
             flash("All required fields must be filled.", "danger")
@@ -230,14 +225,14 @@ def edit_materials_received(txn_id):
             flash("Invalid material selection.", "danger")
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
-        gross_weight, net_weight = calculate_gross_net(quantity, weight_per_quantity, tw)
+        weights = parse_manual_weights(request.form)
         txn.company_id = company_id
         txn.material_id = material_id
         txn.quantity = quantity
-        txn.weight_per_quantity = weight_per_quantity
-        txn.gross_weight = gross_weight
-        txn.tw = tw
-        txn.net_weight = net_weight
+        txn.weight_per_quantity = weights["weight_per_quantity"]
+        txn.gross_weight = weights["gross_weight"]
+        txn.tw = weights["tw"]
+        txn.net_weight = weights["net_weight"]
         txn.micron = material.micron
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
@@ -352,7 +347,6 @@ def edit_glue_received(txn_id):
         company_id = request.form.get("company_id", type=int)
         item_id = request.form.get("item_id", type=int)
         quantity = request.form.get("quantity", type=float)
-        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -365,13 +359,14 @@ def edit_glue_received(txn_id):
             flash("Invalid item selection.", "danger")
             return redirect(url_for("stock_edits.edit_glue_received", txn_id=txn_id))
 
-        gross_weight, net_weight = calculate_gross_net(quantity, weight_per_quantity or 0)
+        weights = parse_manual_weights(request.form)
         txn.company_id = company_id
         txn.item_id = item_id
         txn.quantity = quantity
-        txn.weight_per_quantity = weight_per_quantity
-        txn.gross_weight = gross_weight if weight_per_quantity else None
-        txn.net_weight = net_weight if weight_per_quantity else None
+        txn.weight_per_quantity = weights["weight_per_quantity"]
+        txn.gross_weight = weights["gross_weight"]
+        txn.tw = weights["tw"]
+        txn.net_weight = weights["net_weight"]
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
         log_audit(
@@ -489,7 +484,6 @@ def edit_chemicals_received(txn_id):
         company_id = request.form.get("company_id", type=int)
         item_id = request.form.get("item_id", type=int)
         quantity = request.form.get("quantity", type=float)
-        weight_per_quantity = request.form.get("weight_per_quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
@@ -502,13 +496,14 @@ def edit_chemicals_received(txn_id):
             flash("Invalid item selection.", "danger")
             return redirect(url_for("stock_edits.edit_chemicals_received", txn_id=txn_id))
 
-        gross_weight, net_weight = calculate_gross_net(quantity, weight_per_quantity or 0)
+        weights = parse_manual_weights(request.form)
         txn.company_id = company_id
         txn.item_id = item_id
         txn.quantity = quantity
-        txn.weight_per_quantity = weight_per_quantity
-        txn.gross_weight = gross_weight if weight_per_quantity else None
-        txn.net_weight = net_weight if weight_per_quantity else None
+        txn.weight_per_quantity = weights["weight_per_quantity"]
+        txn.gross_weight = weights["gross_weight"]
+        txn.tw = weights["tw"]
+        txn.net_weight = weights["net_weight"]
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
         log_audit(
