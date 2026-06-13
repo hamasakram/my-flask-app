@@ -49,8 +49,8 @@ def _add_column_if_missing(table: str, column: str, col_type: str):
             conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
 
 
-def _fix_materials_unique_constraint():
-    """Replace legacy (company_id, name, size) unique index with category included."""
+def _drop_materials_unique_constraint():
+    """Remove legacy unique index so duplicate item names are allowed."""
     inspector = inspect(db.engine)
     if not inspector.has_table("materials"):
         return
@@ -59,24 +59,18 @@ def _fix_materials_unique_constraint():
 
     if dialect == "postgresql":
         with db.engine.begin() as conn:
-            row = conn.execute(
+            exists = conn.execute(
                 text(
                     """
-                    SELECT pg_get_constraintdef(c.oid) AS def
+                    SELECT 1
                     FROM pg_constraint c
                     JOIN pg_class t ON c.conrelid = t.oid
                     WHERE t.relname = 'materials' AND c.conname = 'uq_company_material'
                     """
                 )
             ).fetchone()
-            if row and "category" not in row[0]:
+            if exists:
                 conn.execute(text("ALTER TABLE materials DROP CONSTRAINT uq_company_material"))
-                conn.execute(
-                    text(
-                        "ALTER TABLE materials ADD CONSTRAINT uq_company_material "
-                        "UNIQUE (company_id, category, name, size)"
-                    )
-                )
         return
 
     if dialect == "sqlite":
@@ -86,7 +80,7 @@ def _fix_materials_unique_constraint():
                     "SELECT sql FROM sqlite_master WHERE type='table' AND name='materials'"
                 )
             ).scalar()
-            if not table_sql or "category" in table_sql:
+            if not table_sql or "uq_company_material" not in table_sql:
                 return
 
             conn.execute(
@@ -101,8 +95,7 @@ def _fix_materials_unique_constraint():
                         micron VARCHAR(50),
                         low_stock_threshold INTEGER,
                         created_at DATETIME NOT NULL,
-                        FOREIGN KEY(company_id) REFERENCES companies (id),
-                        CONSTRAINT uq_company_material UNIQUE (company_id, category, name, size)
+                        FOREIGN KEY(company_id) REFERENCES companies (id)
                     )
                     """
                 )
@@ -127,7 +120,7 @@ def ensure_schema():
         for column, col_type in columns.items():
             _add_column_if_missing(table, column, col_type)
 
-    _fix_materials_unique_constraint()
+    _drop_materials_unique_constraint()
 
     inspector = inspect(db.engine)
     if inspector.has_table("companies"):

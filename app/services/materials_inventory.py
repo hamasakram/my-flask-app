@@ -7,13 +7,14 @@ from app import db
 from app.models import AppSetting, Material, MaterialOpeningStock, MaterialTransaction
 
 
-def get_or_create_material(
+def create_material(
     company_id: int,
     name: str,
     size: str = "",
     category: str = "PET",
     micron: str = "",
 ) -> Material:
+    """Always create a new material catalog entry (duplicates allowed)."""
     cleaned_name = name.strip()
     cleaned_size = (size or "").strip()
     cleaned_category = (category or "PET").strip().upper()
@@ -21,27 +22,27 @@ def get_or_create_material(
     if not cleaned_name:
         raise ValueError("Material name is required.")
 
-    material = Material.query.filter_by(
-        company_id=company_id,
-        category=cleaned_category,
-        name=cleaned_name,
-        size=cleaned_size,
-    ).first()
-    if material:
-        if cleaned_micron:
-            material.micron = cleaned_micron
-        return material
-
     material = Material(
         company_id=company_id,
         category=cleaned_category,
         name=cleaned_name,
         size=cleaned_size,
-        micron=cleaned_micron,
+        micron=cleaned_micron or None,
     )
     db.session.add(material)
     db.session.flush()
     return material
+
+
+def get_or_create_material(
+    company_id: int,
+    name: str,
+    size: str = "",
+    category: str = "PET",
+    micron: str = "",
+) -> Material:
+    """Backward-compatible alias — always creates a new material."""
+    return create_material(company_id, name, size, category, micron)
 
 
 def get_low_stock_threshold(material: Material) -> int:

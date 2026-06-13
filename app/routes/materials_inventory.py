@@ -2,7 +2,6 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction
@@ -11,8 +10,8 @@ from app.services.inventory import log_audit
 from app.services.materials_inventory import (
     calculate_live_stock,
     calculate_used_from_left,
+    create_material,
     get_current_stock,
-    get_or_create_material,
     get_stock_usage_records,
 )
 
@@ -82,7 +81,7 @@ def catalog():
             return redirect(url_for("materials.catalog"))
 
         try:
-            material = get_or_create_material(
+            material = create_material(
                 company_id, material_name, size, category=category, micron=micron
             )
             log_audit(
@@ -90,19 +89,13 @@ def catalog():
                 "CREATE",
                 "Material",
                 material.id,
-                f"Material saved: {material.display_name}",
+                f"Material added: {material.display_name}",
             )
             db.session.commit()
-            flash(f"Material '{material.display_name}' saved for later use.", "success")
+            flash(f"Material '{material.display_name}' added.", "success")
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
-        except IntegrityError:
-            db.session.rollback()
-            flash(
-                "This material already exists for this company (same category, name, and size).",
-                "danger",
-            )
 
         return redirect(url_for("materials.catalog"))
 
@@ -360,7 +353,11 @@ def get_company_materials(company_id):
     )
     return jsonify(
         [
-            {"id": m.id, "name": m.display_name, "size": m.size or ""}
+            {
+                "id": m.id,
+                "name": f"{m.display_name} (#{m.id})",
+                "size": m.size or "",
+            }
             for m in materials
         ]
     )

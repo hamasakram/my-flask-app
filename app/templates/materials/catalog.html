@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Materials to Add</h1>
-    <p class="page-subtitle">Select category, then register item details for stock entries</p>
+    <p class="page-subtitle">Each save creates a new item — duplicate names are allowed (use size/micron to tell them apart)</p>
 </div>
 
 {% if current_user.can_edit() %}
@@ -51,10 +51,11 @@
 <div class="card">
     <h2>Saved Materials</h2>
     <table class="data-table">
-        <thead><tr><th>Category</th><th>Company</th><th>Item</th><th>Size</th><th>Micron</th><th>Added</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
+        <thead><tr><th>ID</th><th>Category</th><th>Company</th><th>Item</th><th>Size</th><th>Micron</th><th>Added</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for material in materials %}
             <tr>
+                <td>#{{ material.id }}</td>
                 <td><span class="badge badge-blue">{{ material.category }}</span></td>
                 <td>{{ material.company.name }}</td>
                 <td>{{ material.name }}</td>
@@ -67,7 +68,7 @@
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No materials saved yet</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No materials saved yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

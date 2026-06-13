@@ -134,12 +134,6 @@ class Material(db.Model):
         "MaterialTransaction", back_populates="material", lazy="dynamic"
     )
 
-    __table_args__ = (
-        db.UniqueConstraint(
-            "company_id", "category", "name", "size", name="uq_company_material"
-        ),
-    )
-
     @property
     def display_name(self):
         parts = [self.category, self.name]
