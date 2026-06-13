@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Edit Item{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Item</h1>
+    <p class="page-subtitle">{{ item.display_name }}</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                {% for company in companies %}
+                <option value="{{ company.id }}" {% if company.id == item.company_id %}selected{% endif %}>{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="item_name">Item Name</label>
+            <input type="text" id="item_name" name="item_name" value="{{ item.name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="unit_type">Unit Type</label>
+            <select id="unit_type" name="unit_type" required>
+                {% for unit in ['Kg', 'Litre', 'Can', 'Drum', 'Bag', 'Box'] %}
+                <option value="{{ unit }}" {% if item.unit_type == unit %}selected{% endif %}>{{ unit }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "shared/macros.html" import row_actions %}
 {% block title %}Companies - Glue{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -31,15 +32,19 @@
 <div class="card">
     <h2>Saved Companies</h2>
     <table class="data-table">
-        <thead><tr><th>Company Name</th><th>Added On</th></tr></thead>
+        <thead><tr><th>Company Name</th><th>Added On</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for company in companies %}
             <tr>
                 <td>{{ company.name }}</td>
                 <td>{{ company.created_at.strftime('%d-%m-%Y') }}</td>
+                {{ row_actions(
+                    url_for('stock_edits.edit_glue_company', company_id=company.id),
+                    url_for('stock_deletes.delete_glue_company', company_id=company.id)
+                ) }}
             </tr>
             {% else %}
-            <tr><td colspan="2" class="empty">No companies yet — add your first company above</td></tr>
+            <tr><td colspan="{{ 3 if current_user.can_edit() else 2 }}" class="empty">No companies yet — add your first company above</td></tr>
             {% endfor %}
         </tbody>
     </table>

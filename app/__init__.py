@@ -45,6 +45,7 @@ def create_app(config_class=Config):
     from app.routes.chemicals_inventory import chemicals_bp
     from app.routes.pdf_builder import pdf_bp
     from app.routes.stock_edits import stock_edits_bp
+    from app.routes.stock_deletes import stock_deletes_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
@@ -60,6 +61,7 @@ def create_app(config_class=Config):
     app.register_blueprint(chemicals_bp)
     app.register_blueprint(pdf_bp)
     app.register_blueprint(stock_edits_bp)
+    app.register_blueprint(stock_deletes_bp)
 
     @app.context_processor
     def inject_module_context():

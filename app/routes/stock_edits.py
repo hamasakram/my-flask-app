@@ -8,6 +8,7 @@ from app.models import (
     ChemicalItem,
     ChemicalOpeningStock,
     ChemicalTransaction,
+    Company,
     GlueItem,
     GlueOpeningStock,
     GlueTransaction,
@@ -607,4 +608,216 @@ def edit_chemicals_opening(record_id):
         record=record,
         module="chemicals",
         cancel_url=url_for("chemicals.opening_stock"),
+    )
+
+
+# --- Company & catalog edits ---
+
+
+@stock_edits_bp.route("/materials/company/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_materials_company(company_id):
+    company = Company.query.get_or_404(company_id)
+    if company.scope != Company.SCOPE_MATERIALS:
+        abort(404)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_materials_company", company_id=company_id))
+
+        existing = Company.query.filter(Company.name == name, Company.id != company_id).first()
+        if existing:
+            flash("This company name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_materials_company", company_id=company_id))
+
+        company.name = name
+        log_audit(current_user.id, "UPDATE", "Company", company.id, f"Renamed materials company to {name}")
+        db.session.commit()
+        flash("Company updated.", "success")
+        return redirect(url_for("materials.companies"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="Materials",
+        cancel_url=url_for("materials.companies"),
+    )
+
+
+@stock_edits_bp.route("/materials/catalog/<int:material_id>", methods=["GET", "POST"])
+@login_required
+def edit_materials_catalog(material_id):
+    material = Material.query.get_or_404(material_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        company_id = request.form.get("company_id", type=int)
+        category = request.form.get("category", "PET").strip().upper()
+        material_name = request.form.get("material_name", "").strip()
+        size = request.form.get("size", "").strip()
+        micron = request.form.get("micron", "").strip()
+
+        if not company_id or not material_name or category not in ("PET", "METALIZE", "LD"):
+            flash("Company, category, and item name are required.", "danger")
+            return redirect(url_for("stock_edits.edit_materials_catalog", material_id=material_id))
+
+        material.company_id = company_id
+        material.category = category
+        material.name = material_name
+        material.size = size
+        material.micron = micron or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "Material",
+            material.id,
+            f"Updated material: {material.display_name}",
+        )
+        db.session.commit()
+        flash("Material updated.", "success")
+        return redirect(url_for("materials.catalog"))
+
+    return render_template(
+        "shared/edit_material_catalog.html",
+        material=material,
+        companies=get_material_companies(),
+        categories=("PET", "METALIZE", "LD"),
+        cancel_url=url_for("materials.catalog"),
+    )
+
+
+@stock_edits_bp.route("/glue/company/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_glue_company(company_id):
+    company = Company.query.get_or_404(company_id)
+    if company.scope != Company.SCOPE_GLUE:
+        abort(404)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_glue_company", company_id=company_id))
+
+        existing = Company.query.filter(Company.name == name, Company.id != company_id).first()
+        if existing:
+            flash("This company name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_glue_company", company_id=company_id))
+
+        company.name = name
+        log_audit(current_user.id, "UPDATE", "Company", company.id, f"Renamed glue company to {name}")
+        db.session.commit()
+        flash("Company updated.", "success")
+        return redirect(url_for("glue.companies"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="Glue",
+        cancel_url=url_for("glue.companies"),
+    )
+
+
+@stock_edits_bp.route("/glue/catalog/<int:item_id>", methods=["GET", "POST"])
+@login_required
+def edit_glue_catalog(item_id):
+    item = GlueItem.query.get_or_404(item_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        company_id = request.form.get("company_id", type=int)
+        item_name = request.form.get("item_name", "").strip()
+        unit_type = request.form.get("unit_type", "Kg").strip() or "Kg"
+
+        if not company_id or not item_name:
+            flash("Company and item name are required.", "danger")
+            return redirect(url_for("stock_edits.edit_glue_catalog", item_id=item_id))
+
+        item.company_id = company_id
+        item.name = item_name
+        item.unit_type = unit_type
+        log_audit(current_user.id, "UPDATE", "GlueItem", item.id, f"Updated item: {item.display_name}")
+        db.session.commit()
+        flash("Item updated.", "success")
+        return redirect(url_for("glue.catalog"))
+
+    return render_template(
+        "shared/edit_product_catalog.html",
+        item=item,
+        companies=get_glue_companies(),
+        module="glue",
+        cancel_url=url_for("glue.catalog"),
+    )
+
+
+@stock_edits_bp.route("/chemicals/company/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_chemicals_company(company_id):
+    company = Company.query.get_or_404(company_id)
+    if company.scope != Company.SCOPE_CHEMICALS:
+        abort(404)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_chemicals_company", company_id=company_id))
+
+        existing = Company.query.filter(Company.name == name, Company.id != company_id).first()
+        if existing:
+            flash("This company name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_chemicals_company", company_id=company_id))
+
+        company.name = name
+        log_audit(
+            current_user.id, "UPDATE", "Company", company.id, f"Renamed chemicals company to {name}"
+        )
+        db.session.commit()
+        flash("Company updated.", "success")
+        return redirect(url_for("chemicals.companies"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="Chemicals",
+        cancel_url=url_for("chemicals.companies"),
+    )
+
+
+@stock_edits_bp.route("/chemicals/catalog/<int:item_id>", methods=["GET", "POST"])
+@login_required
+def edit_chemicals_catalog(item_id):
+    item = ChemicalItem.query.get_or_404(item_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        company_id = request.form.get("company_id", type=int)
+        item_name = request.form.get("item_name", "").strip()
+        unit_type = request.form.get("unit_type", "Kg").strip() or "Kg"
+
+        if not company_id or not item_name:
+            flash("Company and item name are required.", "danger")
+            return redirect(url_for("stock_edits.edit_chemicals_catalog", item_id=item_id))
+
+        item.company_id = company_id
+        item.name = item_name
+        item.unit_type = unit_type
+        log_audit(
+            current_user.id, "UPDATE", "ChemicalItem", item.id, f"Updated item: {item.display_name}"
+        )
+        db.session.commit()
+        flash("Item updated.", "success")
+        return redirect(url_for("chemicals.catalog"))
+
+    return render_template(
+        "shared/edit_product_catalog.html",
+        item=item,
+        companies=get_chemical_companies(),
+        module="chemicals",
+        cancel_url=url_for("chemicals.catalog"),
     )

@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction
@@ -96,6 +97,12 @@ def catalog():
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
+        except IntegrityError:
+            db.session.rollback()
+            flash(
+                "This material already exists for this company (same category, name, and size).",
+                "danger",
+            )
 
         return redirect(url_for("materials.catalog"))
 

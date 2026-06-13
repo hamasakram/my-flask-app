@@ -1,0 +1,14 @@
+{% macro row_actions(edit_url=None, delete_url=None) %}
+{% if current_user.can_edit() %}
+<td class="table-actions">
+    {% if edit_url %}
+    <a href="{{ edit_url }}" class="btn btn-sm btn-secondary">Edit</a>
+    {% endif %}
+    {% if delete_url %}
+    <form method="POST" action="{{ delete_url }}" class="inline-action-form" onsubmit="return confirm('Delete this record permanently?');">
+        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+    </form>
+    {% endif %}
+</td>
+{% endif %}
+{% endmacro %}

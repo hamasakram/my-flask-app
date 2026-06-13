@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "shared/macros.html" import row_actions %}
 {% block title %}Stock Received - Chemicals{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -63,7 +64,7 @@
         <thead>
             <tr>
                 <th>Date</th><th>Company</th><th>Item</th><th>Qty</th><th>Wt/Qty</th><th>Gross</th><th>Net</th><th>Notes</th>
-                {% if current_user.can_edit() %}<th></th>{% endif %}
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -77,9 +78,10 @@
                 <td>{{ "%.2f"|format(txn.gross_weight) if txn.gross_weight is not none else '—' }}</td>
                 <td>{{ "%.2f"|format(txn.net_weight) if txn.net_weight is not none else '—' }}</td>
                 <td>{{ txn.notes or '—' }}</td>
-                {% if current_user.can_edit() %}
-                <td><a href="{{ url_for('stock_edits.edit_chemicals_received', txn_id=txn.id) }}" class="btn btn-sm btn-secondary">Edit</a></td>
-                {% endif %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_chemicals_received', txn_id=txn.id),
+                    url_for('stock_deletes.delete_chemicals_received', txn_id=txn.id)
+                ) }}
             </tr>
             {% else %}
             <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No receipts yet</td></tr>

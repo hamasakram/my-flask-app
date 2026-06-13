@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "shared/macros.html" import row_actions %}
 {% block title %}Materials to Add - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -50,7 +51,7 @@
 <div class="card">
     <h2>Saved Materials</h2>
     <table class="data-table">
-        <thead><tr><th>Category</th><th>Company</th><th>Item</th><th>Size</th><th>Micron</th><th>Added</th></tr></thead>
+        <thead><tr><th>Category</th><th>Company</th><th>Item</th><th>Size</th><th>Micron</th><th>Added</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for material in materials %}
             <tr>
@@ -60,9 +61,13 @@
                 <td>{{ material.size or '—' }}</td>
                 <td>{{ material.micron or '—' }}</td>
                 <td>{{ material.created_at.strftime('%d-%m-%Y') }}</td>
+                {{ row_actions(
+                    url_for('stock_edits.edit_materials_catalog', material_id=material.id),
+                    url_for('stock_deletes.delete_materials_catalog', material_id=material.id)
+                ) }}
             </tr>
             {% else %}
-            <tr><td colspan="6" class="empty">No materials saved yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No materials saved yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

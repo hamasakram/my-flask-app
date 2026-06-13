@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "shared/macros.html" import row_actions %}
 {% block title %}Opening Stock - Chemicals{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -58,7 +59,7 @@
 <div class="card">
     <h2>Current Opening Stock Records</h2>
     <table class="data-table">
-        <thead><tr><th>Company</th><th>Item</th><th>Quantity</th><th>As of Date</th><th>Notes</th>{% if current_user.can_edit() %}<th></th>{% endif %}</tr></thead>
+        <thead><tr><th>Company</th><th>Item</th><th>Quantity</th><th>As of Date</th><th>Notes</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for record in records %}
             <tr>
@@ -67,9 +68,10 @@
                 <td>{{ "%.1f"|format(record.quantity) }}</td>
                 <td>{{ record.as_of_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ record.notes or '—' }}</td>
-                {% if current_user.can_edit() %}
-                <td><a href="{{ url_for('stock_edits.edit_chemicals_opening', record_id=record.id) }}" class="btn btn-sm btn-secondary">Edit</a></td>
-                {% endif %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_chemicals_opening', record_id=record.id),
+                    url_for('stock_deletes.delete_chemicals_opening', record_id=record.id)
+                ) }}
             </tr>
             {% else %}
             <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No opening stock set</td></tr>

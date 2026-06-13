@@ -253,7 +253,11 @@ main.with-sidebar {
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-secondary { background: #e2e8f0; color: var(--text); }
 .btn-secondary:hover { background: #cbd5e1; }
+.btn-danger { background: #c62828; color: white; }
+.btn-danger:hover { background: #b71c1c; }
 .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
+.table-actions { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+.inline-action-form { display: inline; margin: 0; }
 .btn-block { width: 100%; }
 
 .form-grid {
