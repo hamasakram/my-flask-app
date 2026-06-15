@@ -16,6 +16,8 @@ from app.models import (
     MaterialOpeningStock,
     MaterialTransaction,
     OpeningStock,
+    HomeLedgerEntry,
+    HomeParty,
     InventoryTransaction,
     ShClientCompany,
     ShGatePass,
@@ -1177,4 +1179,93 @@ def edit_sh_gate_pass(gate_pass_id):
         suppliers=suppliers,
         clients=clients,
         cancel_url=url_for("sh_main.gate_passes"),
+    )
+
+
+# --- Home Ledger ---
+
+
+@stock_edits_bp.route("/home/party/<int:party_id>", methods=["GET", "POST"])
+@login_required
+def edit_home_party(party_id):
+    party = HomeParty.query.get_or_404(party_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("party_name", "").strip()
+        balance_kind = request.form.get("balance_kind", HomeParty.KIND_TO_PAY)
+        opening_amount = request.form.get("opening_amount", type=float) or 0
+        notes = request.form.get("notes", "").strip()
+
+        if not name:
+            flash("Party name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_home_party", party_id=party_id))
+
+        existing = HomeParty.query.filter(HomeParty.name == name, HomeParty.id != party_id).first()
+        if existing:
+            flash("This party name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_home_party", party_id=party_id))
+
+        if balance_kind not in (HomeParty.KIND_TO_PAY, HomeParty.KIND_TO_RECEIVE):
+            balance_kind = HomeParty.KIND_TO_PAY
+
+        party.name = name
+        party.balance_kind = balance_kind
+        party.opening_amount = opening_amount
+        party.notes = notes or None
+        log_audit(current_user.id, "UPDATE", "HomeParty", party.id, f"Updated home party: {name}")
+        db.session.commit()
+        flash("Party updated.", "success")
+        return redirect(url_for("home_ledger.party_ledger", party_id=party_id))
+
+    return render_template(
+        "home_ledger/edit_party.html",
+        party=party,
+        cancel_url=url_for("home_ledger.party_ledger", party_id=party_id),
+    )
+
+
+@stock_edits_bp.route("/home/ledger/<int:entry_id>", methods=["GET", "POST"])
+@login_required
+def edit_home_ledger_entry(entry_id):
+    entry = HomeLedgerEntry.query.get_or_404(entry_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        entry_date = request.form.get("entry_date")
+        given = request.form.get("given", type=float) or 0
+        received = request.form.get("received", type=float) or 0
+        notes = request.form.get("notes", "").strip()
+
+        if not entry_date:
+            flash("Entry date is required.", "danger")
+            return redirect(url_for("stock_edits.edit_home_ledger_entry", entry_id=entry_id))
+
+        if given <= 0 and received <= 0:
+            flash("Enter a given or received amount.", "danger")
+            return redirect(url_for("stock_edits.edit_home_ledger_entry", entry_id=entry_id))
+
+        if given > 0 and received > 0:
+            flash("Enter either given or received, not both.", "danger")
+            return redirect(url_for("stock_edits.edit_home_ledger_entry", entry_id=entry_id))
+
+        entry.entry_date = _parse_date(entry_date)
+        entry.given = given
+        entry.received = received
+        entry.notes = notes or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "HomeLedgerEntry",
+            entry.id,
+            f"Updated home ledger entry #{entry_id}",
+        )
+        db.session.commit()
+        flash("Ledger entry updated.", "success")
+        return redirect(url_for("home_ledger.party_ledger", party_id=entry.party_id))
+
+    return render_template(
+        "home_ledger/edit_entry.html",
+        entry=entry,
+        cancel_url=url_for("home_ledger.party_ledger", party_id=entry.party_id),
     )

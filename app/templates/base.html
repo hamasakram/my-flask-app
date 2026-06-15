@@ -91,6 +91,10 @@
             <li><a href="{{ url_for('sh_main.party_balances') }}">Party Balances</a></li>
             <li class="nav-section">Reports</li>
             <li><a href="{{ url_for('pdf.builder', module='sh_traders') }}">Custom PDF</a></li>
+            {% elif active_module == 'home_ledger' %}
+            <li><a href="{{ url_for('home_ledger.dashboard') }}" class="{% if request.endpoint == 'home_ledger.dashboard' %}active{% endif %}">Dashboard</a></li>
+            <li class="nav-section">Home Ledger</li>
+            <li><a href="{{ url_for('home_ledger.parties') }}">Parties</a></li>
             {% endif %}
             {% if current_user.is_admin() %}
             <li class="nav-section">Admin</li>
@@ -118,7 +122,9 @@
                 <option value="{{ mod.url }}" {% if mod.active %}selected{% endif %}>{{ mod.label }}</option>
                 {% endfor %}
             </select>
+            {% if active_module != 'home_ledger' %}
             <a href="{{ url_for('pdf.builder', module=active_module) }}" class="btn btn-sm btn-primary">Generate PDF</a>
+            {% endif %}
         </div>
         {% endif %}
 

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}{{ party.name }} - Home Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ party.name }}</h1>
+        <p class="page-subtitle">
+            {{ party.kind_label }} · Opening: ₨ {{ "{:,.2f}".format(party.opening_amount) }}
+        </p>
+    </div>
+    <div class="page-header-actions">
+        <a href="{{ url_for('home_ledger.parties') }}" class="btn btn-secondary">All Parties</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card {% if party.balance_kind == 'to_pay' %}accent-red{% else %}accent-green{% endif %}">
+        <span class="stat-label">Current Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
+        <small class="field-note">{{ party.kind_label }} — updates when you add given/received</small>
+    </div>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Ledger Entry</h2>
+    {% if party.balance_kind == 'to_pay' %}
+    <p class="field-note">Record <strong>Given</strong> when you pay this party — balance subtracts automatically.</p>
+    {% else %}
+    <p class="field-note">Record <strong>Received</strong> when this party pays you — balance subtracts automatically.</p>
+    {% endif %}
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="entry_date">Date</label>
+            <input type="date" id="entry_date" name="entry_date" required>
+        </div>
+        <div class="form-group">
+            <label for="given">Given (paid out)</label>
+            <input type="number" id="given" name="given" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="received">Received (paid in)</label>
+            <input type="number" id="received" name="received" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Payment details, reference, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Entry</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Payment Ledger — {{ party.name }}</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Given</th>
+                <th>Received</th>
+                <th>Balance</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in ledger_rows %}
+            {% if row.type == 'opening' %}
+            <tr class="row-opening">
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
+                <td>Opening total{% if party.notes %} — {{ party.notes }}{% endif %}</td>
+                {% if current_user.can_edit() %}<td>—</td>{% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>{% if row.entry.given %}₨ {{ "{:,.2f}".format(row.entry.given) }}{% else %}—{% endif %}</td>
+                <td>{% if row.entry.received %}₨ {{ "{:,.2f}".format(row.entry.received) }}{% else %}—{% endif %}</td>
+                <td><strong>₨ {{ "{:,.2f}".format(row.balance) }}</strong></td>
+                <td>{{ row.entry.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_home_ledger_entry', entry_id=row.entry.id),
+                    url_for('stock_deletes.delete_home_ledger_entry', entry_id=row.entry.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% endif %}
+            {% else %}
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No entries yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const dateInput = document.getElementById('entry_date');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+})();
+</script>
+{% endblock %}

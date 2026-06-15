@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Edit Party - Home Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Party</h1>
+</div>
+
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="party_name">Party Name</label>
+            <input type="text" id="party_name" name="party_name" value="{{ party.name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="balance_kind">Payment Type</label>
+            <select id="balance_kind" name="balance_kind" required>
+                <option value="to_pay" {% if party.balance_kind == 'to_pay' %}selected{% endif %}>To Pay</option>
+                <option value="to_receive" {% if party.balance_kind == 'to_receive' %}selected{% endif %}>To Receive</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="opening_amount">Opening Total</label>
+            <input type="number" id="opening_amount" name="opening_amount" step="0.01" min="0" value="{{ party.opening_amount }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ party.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

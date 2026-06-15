@@ -10,6 +10,8 @@ from app.models import (
     GlueItem,
     GlueOpeningStock,
     GlueTransaction,
+    HomeLedgerEntry,
+    HomeParty,
     InventoryTransaction,
     Material,
     MaterialOpeningStock,
@@ -414,4 +416,32 @@ def delete_sh_gate_pass(gate_pass_id):
         "ShGatePass",
         f"Deleted gate pass {gate_pass.gate_pass_number}",
         url_for("sh_main.gate_passes"),
+    )
+
+
+# --- Home Ledger ---
+
+
+@stock_deletes_bp.route("/home/party/<int:party_id>", methods=["POST"])
+@login_required
+def delete_home_party(party_id):
+    party = HomeParty.query.get_or_404(party_id)
+    return _delete_entity(
+        party,
+        "HomeParty",
+        f"Deleted home party: {party.name}",
+        url_for("home_ledger.parties"),
+    )
+
+
+@stock_deletes_bp.route("/home/ledger/<int:entry_id>", methods=["POST"])
+@login_required
+def delete_home_ledger_entry(entry_id):
+    entry = HomeLedgerEntry.query.get_or_404(entry_id)
+    party_id = entry.party_id
+    return _delete_entity(
+        entry,
+        "HomeLedgerEntry",
+        f"Deleted home ledger entry #{entry_id}",
+        url_for("home_ledger.party_ledger", party_id=party_id),
     )

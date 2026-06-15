@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Home Ledger Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Home Ledger</h1>
+        <p class="page-subtitle">Personal party payments — balances update automatically</p>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Parties</span>
+        <span class="stat-value">{{ stats.party_count }}</span>
+    </div>
+    <div class="stat-card accent-red">
+        <span class="stat-label">Total To Pay</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_to_pay) }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total To Receive</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_to_receive) }}</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>All Parties</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Party</th>
+                <th>Type</th>
+                <th>Opening</th>
+                <th>Current Balance</th>
+                <th>Ledger</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in stats.parties %}
+            <tr>
+                <td><strong>{{ item.party.name }}</strong></td>
+                <td>
+                    <span class="badge badge-{{ 'orange' if item.party.balance_kind == 'to_pay' else 'green' }}">
+                        {{ item.party.kind_label }}
+                    </span>
+                </td>
+                <td>₨ {{ "{:,.2f}".format(item.party.opening_amount) }}</td>
+                <td class="{% if item.balance > 0 %}text-danger{% elif item.balance == 0 %}text-success{% endif %}">
+                    <strong>₨ {{ "{:,.2f}".format(item.balance) }}</strong>
+                </td>
+                <td>
+                    <a href="{{ url_for('home_ledger.party_ledger', party_id=item.party.id) }}" class="btn btn-sm btn-primary">Open Ledger</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">No parties yet — add your first party</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="quick-actions">
+    <a href="{{ url_for('home_ledger.parties') }}" class="btn btn-primary">+ Add Party</a>
+</div>
+{% endif %}
+{% endblock %}

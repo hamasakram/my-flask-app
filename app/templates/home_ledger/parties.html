@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Parties - Home Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Parties</h1>
+    <p class="page-subtitle">Add names and opening totals — each party gets its own ledger</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Party</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="party_name">Party Name</label>
+            <input type="text" id="party_name" name="party_name" placeholder="Person or entity name" required>
+        </div>
+        <div class="form-group">
+            <label for="balance_kind">Payment Type</label>
+            <select id="balance_kind" name="balance_kind" required>
+                <option value="to_pay">To Pay — we owe this party</option>
+                <option value="to_receive">To Receive — party owes us</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="opening_amount">Opening Total</label>
+            <input type="number" id="opening_amount" name="opening_amount" step="0.01" min="0" value="0" required>
+            <small class="field-note">Starting balance for this party</small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save &amp; Open Ledger</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Parties</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Party</th>
+                <th>Type</th>
+                <th>Opening</th>
+                <th>Balance</th>
+                <th>Entries</th>
+                <th>Ledger</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in parties %}
+            <tr>
+                <td><strong>{{ item.party.name }}</strong></td>
+                <td>{{ item.party.kind_label }}</td>
+                <td>₨ {{ "{:,.2f}".format(item.party.opening_amount) }}</td>
+                <td class="{% if item.balance > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(item.balance) }}</td>
+                <td>{{ item.entry_count }}</td>
+                <td>
+                    <a href="{{ url_for('home_ledger.party_ledger', party_id=item.party.id) }}" class="btn btn-sm btn-primary">Ledger</a>
+                </td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_home_party', party_id=item.party.id),
+                    url_for('stock_deletes.delete_home_party', party_id=item.party.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No parties yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

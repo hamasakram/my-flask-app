@@ -522,3 +522,47 @@ class ShGatePass(db.Model):
     supplier = db.relationship("ShSupplierCompany")
     purchase = db.relationship("ShPurchase")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class HomeParty(db.Model):
+    """Party in Home Ledger — person or entity for payments to give or receive."""
+
+    __tablename__ = "home_parties"
+
+    KIND_TO_PAY = "to_pay"
+    KIND_TO_RECEIVE = "to_receive"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    balance_kind = db.Column(db.String(20), nullable=False, default=KIND_TO_PAY)
+    opening_amount = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    entries = db.relationship(
+        "HomeLedgerEntry", back_populates="party", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def kind_label(self) -> str:
+        if self.balance_kind == self.KIND_TO_RECEIVE:
+            return "To Receive"
+        return "To Pay"
+
+
+class HomeLedgerEntry(db.Model):
+    __tablename__ = "home_ledger_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    party_id = db.Column(db.Integer, db.ForeignKey("home_parties.id"), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    given = db.Column(db.Float, nullable=False, default=0)
+    received = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    party = db.relationship("HomeParty", back_populates="entries")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
