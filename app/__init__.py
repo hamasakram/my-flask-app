@@ -7,6 +7,7 @@ from app.module_context import (
     ALL_MODULES,
     MODULE_INK,
     all_module_options,
+    dashboard_only_allowed_endpoints,
     get_active_module,
     module_dashboard_url,
     module_label,
@@ -93,6 +94,10 @@ def create_app(config_class=Config):
 
         if not get_active_module():
             return redirect(url_for("auth.choose_module"))
+
+        if current_user.is_dashboard_only():
+            if request.endpoint not in dashboard_only_allowed_endpoints():
+                return redirect(module_dashboard_url(get_active_module()))
 
         return None
 

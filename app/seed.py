@@ -56,9 +56,17 @@ def seed_database():
     if not admin:
         admin = User(username="hamas9478", role=User.ROLE_ADMIN)
         db.session.add(admin)
-    admin.set_password("hamas9478")
+    admin.set_password("hamas9478@")
     admin.is_active = True
     admin.role = User.ROLE_ADMIN
+
+    dashboard_user = User.query.filter_by(username="user9478").first()
+    if not dashboard_user:
+        dashboard_user = User(username="user9478", role=User.ROLE_DASHBOARD)
+        db.session.add(dashboard_user)
+    dashboard_user.set_password("user9478@")
+    dashboard_user.is_active = True
+    dashboard_user.role = User.ROLE_DASHBOARD
 
     if not User.query.filter_by(username="manager").first():
         manager = User(username="manager", role=User.ROLE_MANAGER)

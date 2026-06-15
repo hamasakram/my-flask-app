@@ -4,6 +4,7 @@
 {% block content %}
 {{ sh_page_header('SH Traders Dashboard', 'Material trading overview — ' ~ today.strftime('%d %B %Y')) }}
 
+{% if current_user.can_view_sensitive() %}
 <div class="stats-grid">
     <div class="stat-card">
         <span class="stat-label">Purchased ({{ stats.last_month_label }})</span>
@@ -32,6 +33,21 @@
         <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_receivable) }}</span>
     </div>
 </div>
+{% else %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Purchased ({{ stats.last_month_label }})</span>
+        <span class="stat-value">{{ "{:,.1f}".format(stats.last_month_total_kg) }} kg</span>
+        <small class="field-note">{{ stats.last_month_count }} purchase(s)</small>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Recent Activity</span>
+        <span class="stat-value">{{ stats.recent_purchases|length }}</span>
+        <small class="field-note">Recent purchase records shown below</small>
+    </div>
+</div>
+<div class="flash flash-info">View-only access — payment and balance details are hidden.</div>
+{% endif %}
 
 {% if stats.latest_purchase %}
 <div class="card highlight-card">
@@ -43,9 +59,11 @@
                 <th>Supplier</th>
                 <th>Material</th>
                 <th>Total KG</th>
+                {% if current_user.can_view_sensitive() %}
                 <th>Total Amount</th>
                 <th>Paid</th>
                 <th>Amount Due</th>
+                {% endif %}
                 <th>Purchased For</th>
             </tr>
         </thead>
@@ -55,9 +73,11 @@
                 <td>{{ stats.latest_purchase.supplier.name }}</td>
                 <td>{{ stats.latest_purchase.material_name }}{% if stats.latest_purchase.size %} ({{ stats.latest_purchase.size }}){% endif %}</td>
                 <td>{{ "{:,.1f}".format(stats.latest_purchase.total_kg) }}</td>
+                {% if current_user.can_view_sensitive() %}
                 <td>₨ {{ "{:,.2f}".format(stats.latest_purchase.total_amount) }}</td>
                 <td>₨ {{ "{:,.2f}".format(stats.latest_purchase.paid_amount) }}</td>
                 <td class="{% if stats.latest_purchase.amount_due > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(stats.latest_purchase.amount_due) }}</td>
+                {% endif %}
                 <td>{{ stats.latest_purchase.client.name }}</td>
             </tr>
         </tbody>
@@ -74,8 +94,10 @@
                 <th>Supplier</th>
                 <th>Material</th>
                 <th>KG</th>
+                {% if current_user.can_view_sensitive() %}
                 <th>Total Amount</th>
                 <th>Due</th>
+                {% endif %}
                 <th>Purchased For</th>
             </tr>
         </thead>
@@ -86,12 +108,14 @@
                 <td>{{ p.supplier.name }}</td>
                 <td>{{ p.material_name }}</td>
                 <td>{{ "{:,.1f}".format(p.total_kg) }}</td>
+                {% if current_user.can_view_sensitive() %}
                 <td>₨ {{ "{:,.2f}".format(p.total_amount) }}</td>
                 <td>₨ {{ "{:,.2f}".format(p.amount_due) }}</td>
+                {% endif %}
                 <td>{{ p.client.name }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty">No purchases recorded yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_view_sensitive() else 5 }}" class="empty">No purchases recorded yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

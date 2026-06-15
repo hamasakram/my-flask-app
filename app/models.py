@@ -335,7 +335,8 @@ class User(UserMixin, db.Model):
     ROLE_ADMIN = "admin"
     ROLE_MANAGER = "manager"
     ROLE_VIEWER = "viewer"
-    ROLES = (ROLE_ADMIN, ROLE_MANAGER, ROLE_VIEWER)
+    ROLE_DASHBOARD = "dashboard"
+    ROLES = (ROLE_ADMIN, ROLE_MANAGER, ROLE_VIEWER, ROLE_DASHBOARD)
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -352,6 +353,12 @@ class User(UserMixin, db.Model):
 
     def can_edit(self):
         return self.role in (self.ROLE_ADMIN, self.ROLE_MANAGER)
+
+    def is_dashboard_only(self):
+        return self.role == self.ROLE_DASHBOARD
+
+    def can_view_sensitive(self):
+        return not self.is_dashboard_only()
 
     def is_admin(self):
         return self.role == self.ROLE_ADMIN

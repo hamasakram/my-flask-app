@@ -8,6 +8,7 @@
     </div>
 </div>
 
+{% if current_user.can_view_sensitive() %}
 <div class="stats-grid">
     <div class="stat-card">
         <span class="stat-label">Parties</span>
@@ -19,7 +20,7 @@
     </div>
     <div class="stat-card accent-green">
         <span class="stat-label">Total To Receive</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_to_receive) }}</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_receivable) }}</span>
     </div>
 </div>
 
@@ -58,6 +59,15 @@
         </tbody>
     </table>
 </div>
+{% else %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Parties</span>
+        <span class="stat-value">{{ stats.party_count }}</span>
+    </div>
+</div>
+<div class="flash flash-info">View-only access — party balances and payment details are hidden.</div>
+{% endif %}
 
 {% if current_user.can_edit() %}
 <div class="quick-actions">

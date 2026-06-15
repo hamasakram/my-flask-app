@@ -82,6 +82,16 @@ def all_module_options(current: str | None = None):
     ]
 
 
+def dashboard_only_allowed_endpoints() -> set[str | None]:
+    return set(MODULE_DASHBOARD_ENDPOINTS.values()) | {
+        "auth.login",
+        "auth.logout",
+        "auth.choose_module",
+        "static",
+        None,
+    }
+
+
 def other_module(current: str) -> str:
     try:
         index = ALL_MODULES.index(current)
