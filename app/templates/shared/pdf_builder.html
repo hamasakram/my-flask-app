@@ -18,7 +18,12 @@
         {% if is_sh_module %}
         <div class="form-group">
             <label for="report_type">Report Type</label>
-            <select id="report_type" name="report_type" onchange="window.location.href='{{ url_for('pdf.builder', module=module) }}?report_type=' + this.value">
+            <select
+                id="report_type"
+                name="report_type"
+                data-builder-url="{{ url_for('pdf.builder', module=module) }}"
+                onchange="window.location.href = this.dataset.builderUrl + '&report_type=' + encodeURIComponent(this.value)"
+            >
                 <option value="purchases" {% if report_type == 'purchases' %}selected{% endif %}>Purchases</option>
                 <option value="ledger" {% if report_type == 'ledger' %}selected{% endif %}>Payment Ledger</option>
             </select>

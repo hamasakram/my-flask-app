@@ -75,7 +75,7 @@
     function updateTotal() {
         const kg = parseFloat(kgInput.value) || 0;
         const rate = parseFloat(rateInput.value) || 0;
-        totalDisplay.value = ((kg / 1000) * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        totalDisplay.value = (kg * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     kgInput.addEventListener('input', updateTotal);
     rateInput.addEventListener('input', updateTotal);

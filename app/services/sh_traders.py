@@ -8,10 +8,10 @@ from app.models import ShClientCompany, ShLedgerEntry, ShOpeningBalance, ShPurch
 
 
 def calculate_total_amount(total_kg: float, rate_per_1000_kg: float) -> float:
-    """Total = (kg / 1000) × rate per 1000 kg."""
+    """Total = Total Purchased (KG) × Amount for 1000 KG."""
     if not total_kg or not rate_per_1000_kg:
         return 0.0
-    return (float(total_kg) / 1000.0) * float(rate_per_1000_kg)
+    return float(total_kg) * float(rate_per_1000_kg)
 
 
 def get_opening_balance() -> Optional[ShOpeningBalance]:

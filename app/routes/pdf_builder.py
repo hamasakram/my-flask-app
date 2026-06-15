@@ -1,7 +1,13 @@
 from flask import Blueprint, redirect, render_template, request, send_file, url_for
 from flask_login import login_required
 
-from app.module_context import ALL_MODULES, MODULE_SH_TRADERS, module_dashboard_url, module_label
+from app.module_context import (
+    ALL_MODULES,
+    MODULE_SH_TRADERS,
+    module_dashboard_url,
+    module_label,
+    set_active_module,
+)
 from app.services.pdf_builder import generate_custom_pdf, get_pdf_fields
 
 pdf_bp = Blueprint("pdf", __name__, url_prefix="/pdf")
@@ -13,6 +19,8 @@ def builder():
     module = request.args.get("module") or request.form.get("module")
     if module not in ALL_MODULES:
         return redirect(url_for("auth.choose_module"))
+
+    set_active_module(module)
 
     report_type = request.args.get("report_type") or request.form.get("report_type") or "purchases"
     fields = get_pdf_fields(module, report_type=report_type)

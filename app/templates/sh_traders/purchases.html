@@ -50,7 +50,7 @@
         <div class="form-group">
             <label for="total_amount_display">Total Amount (auto)</label>
             <input type="text" id="total_amount_display" readonly class="readonly-field" value="0.00">
-            <small class="field-note">(Total KG ÷ 1000) × Amount for 1000 KG</small>
+            <small class="field-note">Total Purchased (KG) × Amount for 1000 KG</small>
         </div>
         <div class="form-group">
             <label for="paid_amount">Paid to the Company</label>
@@ -136,7 +136,7 @@
     function updateTotal() {
         const kg = parseFloat(kgInput.value) || 0;
         const rate = parseFloat(rateInput.value) || 0;
-        const total = (kg / 1000) * rate;
+        const total = kg * rate;
         totalDisplay.value = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
