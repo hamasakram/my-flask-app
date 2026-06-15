@@ -38,6 +38,15 @@ COLUMN_MIGRATIONS = {
         "tw": "FLOAT",
         "net_weight": "FLOAT",
     },
+    "sh_gate_passes": {
+        "rolls": "FLOAT",
+        "gross_weight_per_roll": "FLOAT",
+        "net_weight_per_roll": "FLOAT",
+    },
+    "sh_ledger_entries": {
+        "supplier_company_id": "INTEGER",
+        "client_company_id": "INTEGER",
+    },
 }
 
 

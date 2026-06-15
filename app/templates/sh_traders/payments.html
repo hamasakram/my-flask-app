@@ -10,6 +10,15 @@
         <span class="stat-label">Current Ledger Balance</span>
         <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
     </div>
+    <div class="stat-card accent-red">
+        <span class="stat-label">Total To Pay (Suppliers)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(party_totals.total_payable) }}</span>
+        <small class="field-note"><a href="{{ url_for('sh_main.party_balances') }}">View party balances</a></small>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Total To Receive (Clients)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(party_totals.total_receivable) }}</span>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
@@ -62,12 +71,30 @@
 
 <div class="card highlight-card">
     <h2>Add Ledger Entry</h2>
-    <p class="field-note">Record where payments were used — debit (money out) or credit (money in).</p>
+    <p class="field-note">Record where payments were used — debit (money out) or credit (money in). Link a supplier or client to update party balances automatically.</p>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="ledger">
         <div class="form-group">
             <label for="entry_date">Date</label>
             <input type="date" id="entry_date" name="entry_date" required>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier (payment out)</label>
+            <select id="supplier_company_id" name="supplier_company_id">
+                <option value="">None</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Client (payment in)</label>
+            <select id="client_company_id" name="client_company_id">
+                <option value="">None</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="form-group">
             <label for="debit">Debit (out)</label>
@@ -96,6 +123,7 @@
                 <th>Date</th>
                 <th>Debit</th>
                 <th>Credit</th>
+                <th>Party</th>
                 <th>Balance</th>
                 <th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
@@ -107,6 +135,7 @@
                 <td>{{ opening.created_at.strftime('%d-%m-%Y') }}</td>
                 <td>—</td>
                 <td>₨ {{ "{:,.2f}".format(opening.amount) }}</td>
+                <td>—</td>
                 <td>₨ {{ "{:,.2f}".format(opening.amount) }}</td>
                 <td>{{ opening.notes or 'Opening balance' }}</td>
                 {% if current_user.can_edit() %}<td>—</td>{% endif %}
@@ -117,6 +146,11 @@
                 <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
                 <td>{% if row.entry.debit %}₨ {{ "{:,.2f}".format(row.entry.debit) }}{% else %}—{% endif %}</td>
                 <td>{% if row.entry.credit %}₨ {{ "{:,.2f}".format(row.entry.credit) }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if row.entry.supplier %}Supplier: {{ row.entry.supplier.name }}
+                    {% elif row.entry.client %}Client: {{ row.entry.client.name }}
+                    {% else %}—{% endif %}
+                </td>
                 <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
                 <td>{{ row.entry.notes or '—' }}</td>
                 {% if current_user.can_edit() %}
@@ -128,7 +162,7 @@
             </tr>
             {% else %}
             {% if not opening %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No ledger entries yet — set opening balance to begin</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No ledger entries yet — set opening balance to begin</td></tr>
             {% endif %}
             {% endfor %}
         </tbody>

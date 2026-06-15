@@ -84,7 +84,7 @@ MODULE_PDF_FIELDS = {
         ("size", "Size"),
         ("micron", "Micron"),
         ("total_kg", "Total KG"),
-        ("rate_1000", "Rate / 1000 KG"),
+        ("rate_1000", "Rate / KG"),
         ("total_amount", "Total Amount"),
         ("paid", "Paid"),
         ("amount_due", "Amount Due"),

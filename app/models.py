@@ -454,10 +454,18 @@ class ShLedgerEntry(db.Model):
     entry_date = db.Column(db.Date, nullable=False)
     debit = db.Column(db.Float, nullable=False, default=0)
     credit = db.Column(db.Float, nullable=False, default=0)
+    supplier_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=True
+    )
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=True
+    )
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
+    supplier = db.relationship("ShSupplierCompany")
+    client = db.relationship("ShClientCompany")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
@@ -499,6 +507,9 @@ class ShGatePass(db.Model):
     material_name = db.Column(db.String(150), nullable=False)
     size = db.Column(db.String(100), default="")
     micron = db.Column(db.String(50))
+    rolls = db.Column(db.Float)
+    gross_weight_per_roll = db.Column(db.Float)
+    net_weight_per_roll = db.Column(db.Float)
     gross_weight = db.Column(db.Float, nullable=False)
     net_weight = db.Column(db.Float, nullable=False)
     amount_per_kg = db.Column(db.Float, nullable=False)

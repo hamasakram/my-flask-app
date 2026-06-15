@@ -22,6 +22,7 @@ from app.services.sh_traders import (
     get_dashboard_stats,
     get_ledger_rows,
     get_opening_balance,
+    get_party_balance_totals,
     next_gate_pass_number,
 )
 from app.services.sh_uploads import save_payment_screenshot
@@ -236,6 +237,8 @@ def payments():
         entry_date = request.form.get("entry_date")
         debit = request.form.get("debit", type=float) or 0
         credit = request.form.get("credit", type=float) or 0
+        supplier_id = request.form.get("supplier_company_id", type=int) or None
+        client_id = request.form.get("client_company_id", type=int) or None
         notes = request.form.get("notes", "").strip()
 
         if not entry_date:
@@ -254,6 +257,8 @@ def payments():
             entry_date=_parse_date(entry_date),
             debit=debit,
             credit=credit,
+            supplier_company_id=supplier_id,
+            client_company_id=client_id,
             notes=notes or None,
             created_by_id=current_user.id,
         )
@@ -271,11 +276,27 @@ def payments():
         return redirect(url_for("sh_main.payments"))
 
     ledger_rows = get_ledger_rows()
+    party_totals = get_party_balance_totals()
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
     return render_template(
         "sh_traders/payments.html",
         opening=opening,
         ledger_rows=ledger_rows,
         current_balance=get_current_ledger_balance(),
+        party_totals=party_totals,
+        suppliers=suppliers,
+        clients=clients,
+    )
+
+
+@sh_main_bp.route("/party-balances")
+@login_required
+def party_balances():
+    party_totals = get_party_balance_totals()
+    return render_template(
+        "sh_traders/party_balances.html",
+        party_totals=party_totals,
     )
 
 
@@ -368,6 +389,9 @@ def gate_passes():
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
+        rolls = request.form.get("rolls", type=float)
+        gross_weight_per_roll = request.form.get("gross_weight_per_roll", type=float)
+        net_weight_per_roll = request.form.get("net_weight_per_roll", type=float)
         gross_weight = request.form.get("gross_weight", type=float)
         net_weight = request.form.get("net_weight", type=float)
         amount_per_kg = request.form.get("amount_per_kg", type=float)
@@ -401,6 +425,9 @@ def gate_passes():
             material_name=material_name,
             size=size,
             micron=micron or None,
+            rolls=rolls,
+            gross_weight_per_roll=gross_weight_per_roll,
+            net_weight_per_roll=net_weight_per_roll,
             gross_weight=gross_weight,
             net_weight=net_weight,
             amount_per_kg=amount_per_kg,

@@ -1009,6 +1009,8 @@ def edit_sh_ledger(entry_id):
         entry_date = request.form.get("entry_date")
         debit = request.form.get("debit", type=float) or 0
         credit = request.form.get("credit", type=float) or 0
+        supplier_id = request.form.get("supplier_company_id", type=int) or None
+        client_id = request.form.get("client_company_id", type=int) or None
         notes = request.form.get("notes", "").strip()
 
         if not entry_date:
@@ -1026,6 +1028,8 @@ def edit_sh_ledger(entry_id):
         entry.entry_date = _parse_date(entry_date)
         entry.debit = debit
         entry.credit = credit
+        entry.supplier_company_id = supplier_id
+        entry.client_company_id = client_id
         entry.notes = notes or None
         log_audit(
             current_user.id,
@@ -1041,6 +1045,8 @@ def edit_sh_ledger(entry_id):
     return render_template(
         "sh_traders/edit_ledger.html",
         entry=entry,
+        suppliers=ShSupplierCompany.query.order_by(ShSupplierCompany.name).all(),
+        clients=ShClientCompany.query.order_by(ShClientCompany.name).all(),
         cancel_url=url_for("sh_main.payments"),
     )
 
@@ -1116,6 +1122,9 @@ def edit_sh_gate_pass(gate_pass_id):
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
+        rolls = request.form.get("rolls", type=float)
+        gross_weight_per_roll = request.form.get("gross_weight_per_roll", type=float)
+        net_weight_per_roll = request.form.get("net_weight_per_roll", type=float)
         gross_weight = request.form.get("gross_weight", type=float)
         net_weight = request.form.get("net_weight", type=float)
         amount_per_kg = request.form.get("amount_per_kg", type=float)
@@ -1143,6 +1152,9 @@ def edit_sh_gate_pass(gate_pass_id):
         gate_pass.material_name = material_name
         gate_pass.size = size
         gate_pass.micron = micron or None
+        gate_pass.rolls = rolls
+        gate_pass.gross_weight_per_roll = gross_weight_per_roll
+        gate_pass.net_weight_per_roll = net_weight_per_roll
         gate_pass.gross_weight = gross_weight
         gate_pass.net_weight = net_weight
         gate_pass.amount_per_kg = amount_per_kg

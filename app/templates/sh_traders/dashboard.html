@@ -23,6 +23,14 @@
         <small class="field-note">Opening balance not set</small>
         {% endif %}
     </div>
+    <div class="stat-card accent-red">
+        <span class="stat-label">To Pay (Suppliers)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_payable) }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">To Receive (Clients)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_receivable) }}</span>
+    </div>
 </div>
 
 {% if stats.latest_purchase %}
@@ -97,6 +105,7 @@
     <a href="{{ url_for('sh_main.suppliers') }}" class="btn btn-secondary">Supplier Companies</a>
     <a href="{{ url_for('sh_main.clients') }}" class="btn btn-secondary">Client Companies</a>
     <a href="{{ url_for('sh_main.payments') }}" class="btn btn-secondary">Payments & Ledger</a>
+    <a href="{{ url_for('sh_main.party_balances') }}" class="btn btn-secondary">Party Balances</a>
 </div>
 {% endif %}
 {% endblock %}

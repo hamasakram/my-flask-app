@@ -4,14 +4,21 @@ from typing import Optional
 from sqlalchemy import func
 
 from app import db
-from app.models import ShClientCompany, ShLedgerEntry, ShOpeningBalance, ShPurchase, ShSupplierCompany
+from app.models import (
+    ShClientCompany,
+    ShLedgerEntry,
+    ShOpeningBalance,
+    ShPaymentScreenshot,
+    ShPurchase,
+    ShSupplierCompany,
+)
 
 
-def calculate_total_amount(total_kg: float, rate_per_1000_kg: float) -> float:
-    """Total = Total Purchased (KG) × Amount for 1000 KG."""
-    if not total_kg or not rate_per_1000_kg:
+def calculate_total_amount(total_kg: float, rate_per_kg: float) -> float:
+    """Total = Total Purchased (KG) × Amount / KG."""
+    if not total_kg or not rate_per_kg:
         return 0.0
-    return float(total_kg) * float(rate_per_1000_kg)
+    return float(total_kg) * float(rate_per_kg)
 
 
 def calculate_gate_pass_total(net_weight: float, amount_per_kg: float) -> float:
@@ -66,6 +73,85 @@ def get_current_ledger_balance() -> float:
     return float(opening.amount) if opening else 0.0
 
 
+def get_supplier_party_balances() -> list[dict]:
+    """Amount to pay each supplier — auto from purchases minus ledger payments."""
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    rows = []
+    for supplier in suppliers:
+        purchases = ShPurchase.query.filter_by(supplier_company_id=supplier.id).all()
+        total_purchased = sum(float(p.total_amount or 0) for p in purchases)
+        paid_on_purchases = sum(float(p.paid_amount or 0) for p in purchases)
+        purchase_due = sum(float(p.amount_due) for p in purchases)
+
+        ledger_payments = (
+            db.session.query(func.coalesce(func.sum(ShLedgerEntry.debit), 0))
+            .filter(ShLedgerEntry.supplier_company_id == supplier.id)
+            .scalar()
+            or 0
+        )
+        screenshot_payments = (
+            db.session.query(func.coalesce(func.sum(ShPaymentScreenshot.amount_paid), 0))
+            .filter(ShPaymentScreenshot.supplier_company_id == supplier.id)
+            .scalar()
+            or 0
+        )
+
+        balance_to_pay = max(0.0, purchase_due - float(ledger_payments))
+
+        rows.append(
+            {
+                "party": supplier,
+                "total_purchased": float(total_purchased),
+                "paid_on_purchases": float(paid_on_purchases),
+                "ledger_payments": float(ledger_payments),
+                "screenshot_payments": float(screenshot_payments),
+                "balance_to_pay": float(balance_to_pay),
+                "purchase_count": len(purchases),
+            }
+        )
+    return rows
+
+
+def get_client_party_balances() -> list[dict]:
+    """Amount to receive from each client — auto from purchases minus ledger receipts."""
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    rows = []
+    for client in clients:
+        purchases = ShPurchase.query.filter_by(client_company_id=client.id).all()
+        total_billed = sum(float(p.total_amount or 0) for p in purchases)
+
+        ledger_received = (
+            db.session.query(func.coalesce(func.sum(ShLedgerEntry.credit), 0))
+            .filter(ShLedgerEntry.client_company_id == client.id)
+            .scalar()
+            or 0
+        )
+
+        balance_to_receive = max(0.0, float(total_billed) - float(ledger_received))
+
+        rows.append(
+            {
+                "party": client,
+                "total_billed": float(total_billed),
+                "ledger_received": float(ledger_received),
+                "balance_to_receive": float(balance_to_receive),
+                "purchase_count": len(purchases),
+            }
+        )
+    return rows
+
+
+def get_party_balance_totals() -> dict:
+    suppliers = get_supplier_party_balances()
+    clients = get_client_party_balances()
+    return {
+        "total_payable": sum(r["balance_to_pay"] for r in suppliers),
+        "total_receivable": sum(r["balance_to_receive"] for r in clients),
+        "supplier_rows": suppliers,
+        "client_rows": clients,
+    }
+
+
 def get_dashboard_stats(today: date) -> dict:
     month_start = today.replace(day=1)
     if month_start.month == 1:
@@ -104,6 +190,8 @@ def get_dashboard_stats(today: date) -> dict:
         .all()
     )
 
+    party_totals = get_party_balance_totals()
+
     return {
         "last_month_label": last_month_start.strftime("%B %Y"),
         "last_month_total_amount": float(last_month_total_amount),
@@ -116,6 +204,8 @@ def get_dashboard_stats(today: date) -> dict:
         if get_opening_balance()
         else None,
         "recent_purchases": recent_purchases,
+        "total_payable": party_totals["total_payable"],
+        "total_receivable": party_totals["total_receivable"],
     }
 
 

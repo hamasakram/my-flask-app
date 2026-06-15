@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Party Balances - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Party Balances', 'Amounts to pay suppliers and receive from clients — updated automatically') }}
+
+<div class="stats-grid">
+    <div class="stat-card accent-red">
+        <span class="stat-label">Total To Pay (Suppliers)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(party_totals.total_payable) }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total To Receive (Clients)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(party_totals.total_receivable) }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Net Position</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(party_totals.total_receivable - party_totals.total_payable) }}</span>
+        <small class="field-note">Receivable minus payable</small>
+    </div>
+</div>
+
+<p class="field-note balance-note">
+    Balances update automatically when you add or edit <strong>Advance Stock Purchased</strong>,
+    record <strong>Paid to the Company</strong> on purchases, or add ledger entries linked to a supplier or client in
+    <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a>.
+</p>
+
+<div class="grid-2">
+    <div class="card">
+        <h2>Suppliers — Amount To Pay</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Supplier</th>
+                    <th>Total Purchased</th>
+                    <th>Paid (Purchases)</th>
+                    <th>Ledger Paid</th>
+                    <th>Balance To Pay</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in party_totals.supplier_rows %}
+                <tr>
+                    <td><strong>{{ row.party.name }}</strong></td>
+                    <td>₨ {{ "{:,.2f}".format(row.total_purchased) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.paid_on_purchases) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.ledger_payments) }}</td>
+                    <td class="{% if row.balance_to_pay > 0 %}text-danger{% endif %}">
+                        <strong>₨ {{ "{:,.2f}".format(row.balance_to_pay) }}</strong>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">No suppliers yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="card">
+        <h2>Clients — Amount To Receive</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Total Billed</th>
+                    <th>Received (Ledger)</th>
+                    <th>Balance To Receive</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in party_totals.client_rows %}
+                <tr>
+                    <td><strong>{{ row.party.name }}</strong></td>
+                    <td>₨ {{ "{:,.2f}".format(row.total_billed) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.ledger_received) }}</td>
+                    <td class="{% if row.balance_to_receive > 0 %}text-success{% endif %}">
+                        <strong>₨ {{ "{:,.2f}".format(row.balance_to_receive) }}</strong>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty">No clients yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="quick-actions">
+    <a href="{{ url_for('sh_main.payments') }}" class="btn btn-primary">Payments &amp; Ledger</a>
+    <a href="{{ url_for('sh_main.purchases') }}" class="btn btn-secondary">Advance Stock Purchased</a>
+</div>
+{% endblock %}

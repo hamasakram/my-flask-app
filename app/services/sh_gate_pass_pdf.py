@@ -92,9 +92,36 @@ def generate_gate_pass_pdf(gate_pass: ShGatePass) -> BytesIO:
     elements.append(meta_table)
     elements.append(Spacer(1, 0.2 * inch))
 
+    roll_rows = []
+    if gate_pass.rolls:
+        roll_rows.append(["Rolls", f"{gate_pass.rolls:,.0f}"])
+    if gate_pass.gross_weight_per_roll:
+        roll_rows.append(["Gross Weight / Roll (KG)", f"{gate_pass.gross_weight_per_roll:,.2f}"])
+    if gate_pass.net_weight_per_roll:
+        roll_rows.append(["Net Weight / Roll (KG)", f"{gate_pass.net_weight_per_roll:,.2f}"])
+    if roll_rows:
+        roll_table = Table(roll_rows, colWidths=[2.4 * inch, 3.8 * inch])
+        roll_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (0, -1), LIGHT_BG),
+                    ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                    ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 10),
+                    ("BOX", (0, 0), (-1, -1), 0.8, BORDER_GREY),
+                    ("INNERGRID", (0, 0), (-1, -1), 0.4, BORDER_GREY),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                    ("TOPPADDING", (0, 0), (-1, -1), 7),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+                ]
+            )
+        )
+        elements.append(roll_table)
+        elements.append(Spacer(1, 0.15 * inch))
+
     weight_data = [
-        ["Gross Weight (KG)", f"{gate_pass.gross_weight:,.2f}"],
-        ["Net Weight (KG)", f"{gate_pass.net_weight:,.2f}"],
+        ["Total Gross Weight (KG)", f"{gate_pass.gross_weight:,.2f}"],
+        ["Total Net Weight (KG)", f"{gate_pass.net_weight:,.2f}"],
         ["Amount Per KG", f"₨ {gate_pass.amount_per_kg:,.2f}"],
         ["Total Amount", f"₨ {gate_pass.total_amount:,.2f}"],
     ]
@@ -130,7 +157,7 @@ def generate_gate_pass_pdf(gate_pass: ShGatePass) -> BytesIO:
     )
     elements.append(
         Paragraph(
-            "Total Amount = Net Weight (KG) × Amount Per KG",
+            "Total Amount = Total Net Weight (KG) × Amount Per KG",
             formula_style,
         )
     )

@@ -68,12 +68,26 @@
             <input type="text" id="micron" name="micron">
         </div>
         <div class="form-group">
-            <label for="gross_weight">Gross Weight (KG)</label>
-            <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0.01" required>
+            <label for="rolls">Rolls</label>
+            <input type="number" id="rolls" name="rolls" step="1" min="0">
         </div>
         <div class="form-group">
-            <label for="net_weight">Net Weight (KG)</label>
+            <label for="gross_weight_per_roll">Gross Weight / Roll (KG)</label>
+            <input type="number" id="gross_weight_per_roll" name="gross_weight_per_roll" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label for="net_weight_per_roll">Net Weight / Roll (KG)</label>
+            <input type="number" id="net_weight_per_roll" name="net_weight_per_roll" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label for="gross_weight">Total Gross Weight (KG)</label>
+            <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0.01" required>
+            <small class="field-note">Auto: Rolls × Gross Weight / Roll</small>
+        </div>
+        <div class="form-group">
+            <label for="net_weight">Total Net Weight (KG)</label>
             <input type="number" id="net_weight" name="net_weight" step="0.01" min="0.01" required>
+            <small class="field-note">Auto: Rolls × Net Weight / Roll</small>
         </div>
         <div class="form-group">
             <label for="amount_per_kg">Amount Per KG</label>
@@ -82,7 +96,7 @@
         <div class="form-group">
             <label for="total_amount_display">Total Amount (auto)</label>
             <input type="text" id="total_amount_display" readonly class="readonly-field" value="0.00">
-            <small class="field-note">Net Weight (KG) × Amount Per KG</small>
+            <small class="field-note">Total Net Weight (KG) × Amount Per KG</small>
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
@@ -105,8 +119,9 @@
                 <th>Date &amp; Time</th>
                 <th>Sold To</th>
                 <th>Material</th>
-                <th>Gross KG</th>
-                <th>Net KG</th>
+                <th>Rolls</th>
+                <th>Total Gross KG</th>
+                <th>Total Net KG</th>
                 <th>Total Amount</th>
                 <th>PDF</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
@@ -119,6 +134,7 @@
                 <td>{{ g.issued_at.strftime('%d-%m-%Y %H:%M:%S') }}</td>
                 <td>{{ g.sold_to.name }}</td>
                 <td>{{ g.material_name }}</td>
+                <td>{% if g.rolls %}{{ "{:,.0f}".format(g.rolls) }}{% else %}—{% endif %}</td>
                 <td>{{ "{:,.2f}".format(g.gross_weight) }}</td>
                 <td>{{ "{:,.2f}".format(g.net_weight) }}</td>
                 <td>₨ {{ "{:,.2f}".format(g.total_amount) }}</td>
@@ -133,7 +149,7 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No gate passes created yet</td></tr>
+            <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No gate passes created yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -149,6 +165,10 @@
     const materialInput = document.getElementById('material_name');
     const sizeInput = document.getElementById('size');
     const micronInput = document.getElementById('micron');
+    const rollsInput = document.getElementById('rolls');
+    const grossPerRollInput = document.getElementById('gross_weight_per_roll');
+    const netPerRollInput = document.getElementById('net_weight_per_roll');
+    const grossInput = document.getElementById('gross_weight');
     const netInput = document.getElementById('net_weight');
     const rateInput = document.getElementById('amount_per_kg');
     const totalDisplay = document.getElementById('total_amount_display');
@@ -173,6 +193,19 @@
         });
     }
 
+    function updateRollTotals() {
+        const rolls = parseFloat(rollsInput?.value) || 0;
+        const grossPerRoll = parseFloat(grossPerRollInput?.value) || 0;
+        const netPerRoll = parseFloat(netPerRollInput?.value) || 0;
+        if (rolls > 0 && grossPerRoll > 0 && grossInput) {
+            grossInput.value = (rolls * grossPerRoll).toFixed(2);
+        }
+        if (rolls > 0 && netPerRoll > 0 && netInput) {
+            netInput.value = (rolls * netPerRoll).toFixed(2);
+        }
+        updateTotal();
+    }
+
     function updateTotal() {
         if (!netInput || !rateInput || !totalDisplay) return;
         const net = parseFloat(netInput.value) || 0;
@@ -180,6 +213,9 @@
         totalDisplay.value = (net * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    [rollsInput, grossPerRollInput, netPerRollInput].forEach(function (el) {
+        if (el) el.addEventListener('input', updateRollTotals);
+    });
     if (netInput) netInput.addEventListener('input', updateTotal);
     if (rateInput) rateInput.addEventListener('input', updateTotal);
 })();

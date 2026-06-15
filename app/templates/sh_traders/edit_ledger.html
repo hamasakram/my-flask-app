@@ -11,6 +11,24 @@
             <input type="date" id="entry_date" name="entry_date" value="{{ entry.entry_date.isoformat() }}" required>
         </div>
         <div class="form-group">
+            <label for="supplier_company_id">Supplier (payment out)</label>
+            <select id="supplier_company_id" name="supplier_company_id">
+                <option value="">None</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if entry.supplier_company_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Client (payment in)</label>
+            <select id="client_company_id" name="client_company_id">
+                <option value="">None</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if entry.client_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
             <label for="debit">Debit (out)</label>
             <input type="number" id="debit" name="debit" step="0.01" min="0" value="{{ entry.debit }}">
         </div>
