@@ -1,0 +1,15 @@
+{% macro sh_page_header(title, subtitle=None) %}
+<div class="page-header sh-page-header">
+    <img
+        src="{{ url_for('static', filename='images/sh-traders-logo.png') }}"
+        alt="Sami Hamas Traders"
+        class="sh-module-logo"
+    >
+    <div>
+        <h1>{{ title }}</h1>
+        {% if subtitle %}
+        <p class="page-subtitle">{{ subtitle }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}

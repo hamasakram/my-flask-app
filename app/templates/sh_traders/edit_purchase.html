@@ -1,9 +1,8 @@
 {% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}Edit Purchase - SH Traders{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Edit Purchase</h1>
-</div>
+{{ sh_page_header('Edit Purchase') }}
 
 <div class="card">
     <form method="POST" class="form-grid" id="purchase-form">

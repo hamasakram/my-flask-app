@@ -1,11 +1,9 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}Payments & Ledger - SH Traders{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Payment Handling</h1>
-    <p class="page-subtitle">Opening balance and manual payment ledger</p>
-</div>
+{{ sh_page_header('Payment Handling', 'Opening balance and manual payment ledger') }}
 
 <div class="stats-grid">
     <div class="stat-card accent-green">

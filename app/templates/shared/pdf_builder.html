@@ -1,10 +1,15 @@
 {% extends "base.html" %}
 {% block title %}PDF Builder - {{ module_label }}{% endblock %}
 {% block content %}
+{% if is_sh_module %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{{ sh_page_header('Custom PDF Report', module_label ~ ' — choose columns and optional company filter') }}
+{% else %}
 <div class="page-header">
     <h1>Custom PDF Report</h1>
     <p class="page-subtitle">{{ module_label }} — choose columns and optional company filter</p>
 </div>
+{% endif %}
 
 <div class="card">
     <form method="POST" class="form-grid">

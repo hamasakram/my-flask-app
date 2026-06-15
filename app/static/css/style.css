@@ -50,6 +50,35 @@ body {
     text-align: center;
 }
 
+.brand-logo-sh {
+    max-width: 200px;
+    padding: 0.35rem 0.5rem;
+}
+
+.sh-page-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.sh-module-logo {
+    width: 130px;
+    height: auto;
+    flex-shrink: 0;
+    border-radius: 8px;
+    background: white;
+    padding: 0.35rem;
+    box-shadow: var(--shadow);
+}
+
+.module-card-logo {
+    width: 100%;
+    max-width: 160px;
+    height: auto;
+    margin: 0 auto 0.5rem;
+    display: block;
+}
+
 .brand-logo {
     width: 100%;
     max-width: 180px;

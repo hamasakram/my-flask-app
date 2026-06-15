@@ -23,6 +23,7 @@ from app.services.materials_inventory import calculate_live_stock as material_li
 from app.services.sh_traders import get_ledger_pdf_rows, get_purchase_pdf_rows
 
 LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "images" / "rn-colour-logo.png"
+SH_LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "images" / "sh-traders-logo.png"
 BRAND_RED = colors.HexColor("#B21E22")
 BRAND_BLACK = colors.HexColor("#1A1A1A")
 HEADER_BG = BRAND_RED
@@ -196,8 +197,13 @@ def generate_custom_pdf(
     styles = getSampleStyleSheet()
     elements = []
 
-    if LOGO_PATH.exists():
-        elements.append(Image(str(LOGO_PATH), width=2 * inch, height=0.78 * inch, kind="proportional"))
+    logo_path = SH_LOGO_PATH if module == MODULE_SH_TRADERS else LOGO_PATH
+    if logo_path.exists():
+        logo_width = 2.4 * inch if module == MODULE_SH_TRADERS else 2 * inch
+        logo_height = 1.1 * inch if module == MODULE_SH_TRADERS else 0.78 * inch
+        elements.append(
+            Image(str(logo_path), width=logo_width, height=logo_height, kind="proportional")
+        )
         elements.append(Spacer(1, 0.12 * inch))
 
     title_style = ParagraphStyle(
@@ -216,7 +222,7 @@ def generate_custom_pdf(
     report_title = title or f"RN COLOUR — {module.replace('_', ' ').title()} Report"
     if module == MODULE_SH_TRADERS:
         suffix = "Payment Ledger" if report_type == "ledger" else "Purchases"
-        report_title = f"RN COLOUR — SH Traders {suffix}"
+        report_title = f"Sami Hamas Traders — {suffix}"
     elements.append(Paragraph(report_title, title_style))
     elements.append(
         Paragraph(

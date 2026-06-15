@@ -1,9 +1,8 @@
 {% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}Edit Opening Balance - SH Traders{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Edit Opening Balance</h1>
-</div>
+{{ sh_page_header('Edit Opening Balance') }}
 
 <div class="card">
     <form method="POST" class="form-grid">

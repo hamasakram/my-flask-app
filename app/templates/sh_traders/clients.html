@@ -1,11 +1,9 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}Client Companies - SH Traders{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Client Companies</h1>
-    <p class="page-subtitle">Purchased For — companies you buy material on behalf of</p>
-</div>
+{{ sh_page_header('Client Companies', 'Purchased For — companies you buy material on behalf of') }}
 
 {% if current_user.can_edit() %}
 <div class="card highlight-card">

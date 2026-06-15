@@ -1,11 +1,9 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}Advance Stock Purchased - SH Traders{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Advance Stock Purchased</h1>
-    <p class="page-subtitle">Record material purchases from suppliers</p>
-</div>
+{{ sh_page_header('Advance Stock Purchased', 'Record material purchases from suppliers') }}
 
 {% if current_user.can_edit() %}
 {% if not suppliers %}

@@ -1,12 +1,8 @@
 {% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}SH Traders Dashboard{% endblock %}
 {% block content %}
-<div class="page-header">
-    <div>
-        <h1>SH Traders Dashboard</h1>
-        <p class="page-subtitle">Material trading overview — {{ today.strftime('%d %B %Y') }}</p>
-    </div>
-</div>
+{{ sh_page_header('SH Traders Dashboard', 'Material trading overview — ' ~ today.strftime('%d %B %Y')) }}
 
 <div class="stats-grid">
     <div class="stat-card">

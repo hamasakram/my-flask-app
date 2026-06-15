@@ -4,8 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}RN COLOUR Stock Management System{% endblock %}</title>
+    {% if active_module == 'sh_traders' %}
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/sh-traders-logo.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/sh-traders-logo.png') }}">
+    {% else %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
+    {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
@@ -13,9 +18,9 @@
     <nav class="sidebar">
         <div class="brand">
             <img
-                src="{{ url_for('static', filename='images/rn-colour-logo.png') }}"
-                alt="RN COLOUR"
-                class="brand-logo"
+                src="{{ url_for('static', filename='images/' ~ ('sh-traders-logo.png' if active_module == 'sh_traders' else 'rn-colour-logo.png')) }}"
+                alt="{{ 'Sami Hamas Traders' if active_module == 'sh_traders' else 'RN COLOUR' }}"
+                class="brand-logo{% if active_module == 'sh_traders' %} brand-logo-sh{% endif %}"
             >
             <small class="brand-tagline">{{ module_label }}</small>
         </div>
