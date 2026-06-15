@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Payment Screenshots - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Supplier Payment Screenshots', 'Upload proof of payments made to suppliers') }}
+
+{% if current_user.can_edit() %}
+{% if not suppliers %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Upload Payment Screenshot</h2>
+    <form method="POST" enctype="multipart/form-data" class="form-grid">
+        <div class="form-group">
+            <label for="payment_date">Payment Date</label>
+            <input type="date" id="payment_date" name="payment_date" required>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                <option value="">Select supplier</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="amount_paid">Amount Paid</label>
+            <input type="number" id="amount_paid" name="amount_paid" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label for="purchase_id">Link to Purchase (optional)</label>
+            <select id="purchase_id" name="purchase_id">
+                <option value="">None</option>
+                {% for p in purchases %}
+                <option value="{{ p.id }}">{{ p.date_purchased.strftime('%d-%m-%Y') }} — {{ p.material_name }} ({{ p.supplier.name }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group full-width">
+            <label for="screenshot">Screenshot / Receipt File</label>
+            <input type="file" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,image/*" required>
+            <small class="field-note">PNG, JPG, GIF, WEBP, or PDF — max 10 MB</small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Upload Screenshot</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Uploaded Payment Proofs</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Amount</th>
+                <th>Purchase</th>
+                <th>File</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.payment_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ r.supplier.name }}</td>
+                <td>{% if r.amount_paid %}₨ {{ "{:,.2f}".format(r.amount_paid) }}{% else %}—{% endif %}</td>
+                <td>{% if r.purchase %}#{{ r.purchase.id }} — {{ r.purchase.material_name }}{% else %}—{% endif %}</td>
+                <td>
+                    <a href="{{ url_for('static', filename=r.screenshot_filename) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
+                </td>
+                <td>{{ r.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_payment_screenshot', record_id=r.id),
+                    url_for('stock_deletes.delete_sh_payment_screenshot', record_id=r.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No payment screenshots uploaded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

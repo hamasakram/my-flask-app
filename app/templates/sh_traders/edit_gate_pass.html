@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Edit Gate Pass - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Edit Gate Pass', gate_pass.gate_pass_number) }}
+
+<div class="card">
+    <form method="POST" class="form-grid" id="gate-pass-form">
+        <div class="form-group">
+            <label>Gate Pass Number</label>
+            <input type="text" readonly class="readonly-field" value="{{ gate_pass.gate_pass_number }}">
+        </div>
+        <div class="form-group">
+            <label for="issued_date">Date</label>
+            <input type="date" id="issued_date" name="issued_date" value="{{ gate_pass.issued_at.strftime('%Y-%m-%d') }}" required>
+        </div>
+        <div class="form-group">
+            <label for="issued_time">Time</label>
+            <input type="time" id="issued_time" name="issued_time" step="1" value="{{ gate_pass.issued_at.strftime('%H:%M:%S') }}" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_to_client_id">Sold To</label>
+            <select id="sold_to_client_id" name="sold_to_client_id" required>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if c.id == gate_pass.sold_to_client_id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if s.id == gate_pass.supplier_company_id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" value="{{ gate_pass.material_name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size" value="{{ gate_pass.size or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron" value="{{ gate_pass.micron or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="gross_weight">Gross Weight (KG)</label>
+            <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0.01" value="{{ gate_pass.gross_weight }}" required>
+        </div>
+        <div class="form-group">
+            <label for="net_weight">Net Weight (KG)</label>
+            <input type="number" id="net_weight" name="net_weight" step="0.01" min="0.01" value="{{ gate_pass.net_weight }}" required>
+        </div>
+        <div class="form-group">
+            <label for="amount_per_kg">Amount Per KG</label>
+            <input type="number" id="amount_per_kg" name="amount_per_kg" step="0.01" min="0.01" value="{{ gate_pass.amount_per_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="total_amount_display">Total Amount (auto)</label>
+            <input type="text" id="total_amount_display" readonly class="readonly-field">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ gate_pass.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('sh_main.gate_pass_pdf', gate_pass_id=gate_pass.id) }}" target="_blank" class="btn btn-secondary">Print PDF</a>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const netInput = document.getElementById('net_weight');
+    const rateInput = document.getElementById('amount_per_kg');
+    const totalDisplay = document.getElementById('total_amount_display');
+    function updateTotal() {
+        const net = parseFloat(netInput.value) || 0;
+        const rate = parseFloat(rateInput.value) || 0;
+        totalDisplay.value = (net * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    netInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('input', updateTotal);
+    updateTotal();
+})();
+</script>
+{% endblock %}

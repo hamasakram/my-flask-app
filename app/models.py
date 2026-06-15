@@ -459,3 +459,55 @@ class ShLedgerEntry(db.Model):
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class ShPaymentScreenshot(db.Model):
+    """Payment proof screenshot uploaded for supplier payments."""
+
+    __tablename__ = "sh_payment_screenshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    payment_date = db.Column(db.Date, nullable=False)
+    supplier_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=False
+    )
+    amount_paid = db.Column(db.Float)
+    purchase_id = db.Column(db.Integer, db.ForeignKey("sh_purchases.id"))
+    screenshot_filename = db.Column(db.String(255), nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    supplier = db.relationship("ShSupplierCompany")
+    purchase = db.relationship("ShPurchase")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class ShGatePass(db.Model):
+    __tablename__ = "sh_gate_passes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    gate_pass_number = db.Column(db.String(30), unique=True, nullable=False)
+    issued_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    sold_to_client_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    supplier_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=False
+    )
+    purchase_id = db.Column(db.Integer, db.ForeignKey("sh_purchases.id"))
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50))
+    gross_weight = db.Column(db.Float, nullable=False)
+    net_weight = db.Column(db.Float, nullable=False)
+    amount_per_kg = db.Column(db.Float, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    sold_to = db.relationship("ShClientCompany")
+    supplier = db.relationship("ShSupplierCompany")
+    purchase = db.relationship("ShPurchase")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])

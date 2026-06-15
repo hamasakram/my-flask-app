@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Edit Payment Screenshot - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Edit Payment Screenshot') }}
+
+<div class="card">
+    <form method="POST" enctype="multipart/form-data" class="form-grid">
+        <div class="form-group">
+            <label for="payment_date">Payment Date</label>
+            <input type="date" id="payment_date" name="payment_date" value="{{ record.payment_date.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if s.id == record.supplier_company_id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="amount_paid">Amount Paid</label>
+            <input type="number" id="amount_paid" name="amount_paid" step="0.01" min="0" value="{{ record.amount_paid or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="purchase_id">Link to Purchase</label>
+            <select id="purchase_id" name="purchase_id">
+                <option value="">None</option>
+                {% for p in purchases %}
+                <option value="{{ p.id }}" {% if record.purchase_id == p.id %}selected{% endif %}>{{ p.date_purchased.strftime('%d-%m-%Y') }} — {{ p.material_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group full-width">
+            <label for="screenshot">Replace File (optional)</label>
+            <input type="file" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,image/*">
+            <small class="field-note">Leave blank to keep current file. <a href="{{ url_for('static', filename=record.screenshot_filename) }}" target="_blank">View current</a></small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ record.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

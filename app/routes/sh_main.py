@@ -1,24 +1,30 @@
 from datetime import datetime
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app import db
 from app.models import (
     ShClientCompany,
+    ShGatePass,
     ShLedgerEntry,
     ShOpeningBalance,
+    ShPaymentScreenshot,
     ShPurchase,
     ShSupplierCompany,
 )
 from app.services.inventory import log_audit
+from app.services.sh_gate_pass_pdf import generate_gate_pass_pdf
 from app.services.sh_traders import (
+    calculate_gate_pass_total,
     calculate_total_amount,
     get_current_ledger_balance,
     get_dashboard_stats,
     get_ledger_rows,
     get_opening_balance,
+    next_gate_pass_number,
 )
+from app.services.sh_uploads import save_payment_screenshot
 
 sh_main_bp = Blueprint("sh_main", __name__, url_prefix="/sh-traders")
 
@@ -270,4 +276,172 @@ def payments():
         opening=opening,
         ledger_rows=ledger_rows,
         current_balance=get_current_ledger_balance(),
+    )
+
+
+@sh_main_bp.route("/payment-screenshots", methods=["GET", "POST"])
+@login_required
+def payment_screenshots():
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    purchases = (
+        ShPurchase.query.order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc()).all()
+    )
+
+    if request.method == "POST":
+        require_edit_access()
+        if not suppliers:
+            flash("Add at least one supplier company first.", "danger")
+            return redirect(url_for("sh_main.suppliers"))
+
+        payment_date = request.form.get("payment_date")
+        supplier_id = request.form.get("supplier_company_id", type=int)
+        amount_paid = request.form.get("amount_paid", type=float)
+        purchase_id = request.form.get("purchase_id", type=int) or None
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not payment_date or not supplier_id:
+            flash("Payment date and supplier are required.", "danger")
+            return redirect(url_for("sh_main.payment_screenshots"))
+
+        try:
+            filename = save_payment_screenshot(screenshot)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.payment_screenshots"))
+
+        record = ShPaymentScreenshot(
+            payment_date=_parse_date(payment_date),
+            supplier_company_id=supplier_id,
+            amount_paid=amount_paid,
+            purchase_id=purchase_id,
+            screenshot_filename=filename,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        db.session.add(record)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShPaymentScreenshot",
+            record.id,
+            f"Payment screenshot for supplier #{supplier_id}",
+        )
+        db.session.commit()
+        flash("Payment screenshot uploaded.", "success")
+        return redirect(url_for("sh_main.payment_screenshots"))
+
+    records = (
+        ShPaymentScreenshot.query.order_by(
+            ShPaymentScreenshot.payment_date.desc(), ShPaymentScreenshot.id.desc()
+        ).all()
+    )
+    return render_template(
+        "sh_traders/payment_screenshots.html",
+        records=records,
+        suppliers=suppliers,
+        purchases=purchases,
+    )
+
+
+@sh_main_bp.route("/gate-passes", methods=["GET", "POST"])
+@login_required
+def gate_passes():
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    purchases = (
+        ShPurchase.query.order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc()).all()
+    )
+
+    if request.method == "POST":
+        require_edit_access()
+        if not suppliers or not clients:
+            flash("Add supplier and client companies first.", "danger")
+            return redirect(url_for("sh_main.gate_passes"))
+
+        issued_date = request.form.get("issued_date")
+        issued_time = request.form.get("issued_time")
+        sold_to_id = request.form.get("sold_to_client_id", type=int)
+        supplier_id = request.form.get("supplier_company_id", type=int)
+        purchase_id = request.form.get("purchase_id", type=int) or None
+        material_name = request.form.get("material_name", "").strip()
+        size = request.form.get("size", "").strip()
+        micron = request.form.get("micron", "").strip()
+        gross_weight = request.form.get("gross_weight", type=float)
+        net_weight = request.form.get("net_weight", type=float)
+        amount_per_kg = request.form.get("amount_per_kg", type=float)
+        notes = request.form.get("notes", "").strip()
+
+        if (
+            not issued_date
+            or not issued_time
+            or not sold_to_id
+            or not supplier_id
+            or not material_name
+            or not gross_weight
+            or gross_weight <= 0
+            or not net_weight
+            or net_weight <= 0
+            or not amount_per_kg
+            or amount_per_kg <= 0
+        ):
+            flash("Date, time, sold to, supplier, material, weights, and amount per KG are required.", "danger")
+            return redirect(url_for("sh_main.gate_passes"))
+
+        issued_at = datetime.strptime(f"{issued_date} {issued_time}", "%Y-%m-%d %H:%M")
+        total_amount = calculate_gate_pass_total(net_weight, amount_per_kg)
+
+        gate_pass = ShGatePass(
+            gate_pass_number=next_gate_pass_number(),
+            issued_at=issued_at,
+            sold_to_client_id=sold_to_id,
+            supplier_company_id=supplier_id,
+            purchase_id=purchase_id,
+            material_name=material_name,
+            size=size,
+            micron=micron or None,
+            gross_weight=gross_weight,
+            net_weight=net_weight,
+            amount_per_kg=amount_per_kg,
+            total_amount=total_amount,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        db.session.add(gate_pass)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShGatePass",
+            gate_pass.id,
+            f"Gate pass {gate_pass.gate_pass_number}",
+        )
+        db.session.commit()
+        flash(f"Gate pass {gate_pass.gate_pass_number} created.", "success")
+        return redirect(url_for("sh_main.gate_pass_pdf", gate_pass_id=gate_pass.id))
+
+    gate_pass_list = (
+        ShGatePass.query.order_by(ShGatePass.issued_at.desc(), ShGatePass.id.desc()).all()
+    )
+    return render_template(
+        "sh_traders/gate_passes.html",
+        gate_passes=gate_pass_list,
+        suppliers=suppliers,
+        clients=clients,
+        purchases=purchases,
+    )
+
+
+@sh_main_bp.route("/gate-passes/<int:gate_pass_id>/pdf")
+@login_required
+def gate_pass_pdf(gate_pass_id):
+    gate_pass = ShGatePass.query.get_or_404(gate_pass_id)
+    output = generate_gate_pass_pdf(gate_pass)
+    filename = f"gate_pass_{gate_pass.gate_pass_number}.pdf"
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=filename,
+        mimetype="application/pdf",
     )

@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import func
@@ -12,6 +12,33 @@ def calculate_total_amount(total_kg: float, rate_per_1000_kg: float) -> float:
     if not total_kg or not rate_per_1000_kg:
         return 0.0
     return float(total_kg) * float(rate_per_1000_kg)
+
+
+def calculate_gate_pass_total(net_weight: float, amount_per_kg: float) -> float:
+    """Total Amount = Net Weight (KG) × Amount Per KG."""
+    if not net_weight or not amount_per_kg:
+        return 0.0
+    return float(net_weight) * float(amount_per_kg)
+
+
+def next_gate_pass_number() -> str:
+    from app.models import ShGatePass
+
+    year = datetime.now().year
+    prefix = f"GP-{year}-"
+    latest = (
+        ShGatePass.query.filter(ShGatePass.gate_pass_number.like(f"{prefix}%"))
+        .order_by(ShGatePass.id.desc())
+        .first()
+    )
+    if latest:
+        try:
+            seq = int(latest.gate_pass_number.rsplit("-", 1)[-1]) + 1
+        except ValueError:
+            seq = latest.id + 1
+    else:
+        seq = 1
+    return f"{prefix}{seq:05d}"
 
 
 def get_opening_balance() -> Optional[ShOpeningBalance]:

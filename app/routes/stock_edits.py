@@ -18,8 +18,10 @@ from app.models import (
     OpeningStock,
     InventoryTransaction,
     ShClientCompany,
+    ShGatePass,
     ShLedgerEntry,
     ShOpeningBalance,
+    ShPaymentScreenshot,
     ShPurchase,
     ShSupplierCompany,
 )
@@ -30,7 +32,8 @@ from app.services.companies import (
     get_material_companies,
 )
 from app.services.inventory import get_or_create_ink_type, log_audit
-from app.services.sh_traders import calculate_total_amount
+from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount
+from app.services.sh_uploads import delete_payment_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
 stock_edits_bp = Blueprint("stock_edits", __name__, url_prefix="/stock-edit")
@@ -1039,4 +1042,127 @@ def edit_sh_ledger(entry_id):
         "sh_traders/edit_ledger.html",
         entry=entry,
         cancel_url=url_for("sh_main.payments"),
+    )
+
+
+@stock_edits_bp.route("/sh/payment-screenshot/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_payment_screenshot(record_id):
+    record = ShPaymentScreenshot.query.get_or_404(record_id)
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    purchases = ShPurchase.query.order_by(ShPurchase.date_purchased.desc()).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        payment_date = request.form.get("payment_date")
+        supplier_id = request.form.get("supplier_company_id", type=int)
+        amount_paid = request.form.get("amount_paid", type=float)
+        purchase_id = request.form.get("purchase_id", type=int) or None
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not payment_date or not supplier_id:
+            flash("Payment date and supplier are required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_payment_screenshot", record_id=record_id))
+
+        record.payment_date = _parse_date(payment_date)
+        record.supplier_company_id = supplier_id
+        record.amount_paid = amount_paid
+        record.purchase_id = purchase_id
+        record.notes = notes or None
+
+        if screenshot and screenshot.filename:
+            try:
+                new_filename = save_payment_screenshot(screenshot)
+                delete_payment_screenshot(record.screenshot_filename)
+                record.screenshot_filename = new_filename
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(url_for("stock_edits.edit_sh_payment_screenshot", record_id=record_id))
+
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShPaymentScreenshot",
+            record.id,
+            f"Updated payment screenshot #{record_id}",
+        )
+        db.session.commit()
+        flash("Payment screenshot updated.", "success")
+        return redirect(url_for("sh_main.payment_screenshots"))
+
+    return render_template(
+        "sh_traders/edit_payment_screenshot.html",
+        record=record,
+        suppliers=suppliers,
+        purchases=purchases,
+        cancel_url=url_for("sh_main.payment_screenshots"),
+    )
+
+
+@stock_edits_bp.route("/sh/gate-pass/<int:gate_pass_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_gate_pass(gate_pass_id):
+    gate_pass = ShGatePass.query.get_or_404(gate_pass_id)
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        issued_date = request.form.get("issued_date")
+        issued_time = request.form.get("issued_time")
+        sold_to_id = request.form.get("sold_to_client_id", type=int)
+        supplier_id = request.form.get("supplier_company_id", type=int)
+        material_name = request.form.get("material_name", "").strip()
+        size = request.form.get("size", "").strip()
+        micron = request.form.get("micron", "").strip()
+        gross_weight = request.form.get("gross_weight", type=float)
+        net_weight = request.form.get("net_weight", type=float)
+        amount_per_kg = request.form.get("amount_per_kg", type=float)
+        notes = request.form.get("notes", "").strip()
+
+        if (
+            not issued_date
+            or not issued_time
+            or not sold_to_id
+            or not supplier_id
+            or not material_name
+            or not gross_weight
+            or gross_weight <= 0
+            or not net_weight
+            or net_weight <= 0
+            or not amount_per_kg
+            or amount_per_kg <= 0
+        ):
+            flash("All required fields must be filled.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_gate_pass", gate_pass_id=gate_pass_id))
+
+        gate_pass.issued_at = datetime.strptime(f"{issued_date} {issued_time}", "%Y-%m-%d %H:%M")
+        gate_pass.sold_to_client_id = sold_to_id
+        gate_pass.supplier_company_id = supplier_id
+        gate_pass.material_name = material_name
+        gate_pass.size = size
+        gate_pass.micron = micron or None
+        gate_pass.gross_weight = gross_weight
+        gate_pass.net_weight = net_weight
+        gate_pass.amount_per_kg = amount_per_kg
+        gate_pass.total_amount = calculate_gate_pass_total(net_weight, amount_per_kg)
+        gate_pass.notes = notes or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShGatePass",
+            gate_pass.id,
+            f"Updated gate pass {gate_pass.gate_pass_number}",
+        )
+        db.session.commit()
+        flash("Gate pass updated.", "success")
+        return redirect(url_for("sh_main.gate_passes"))
+
+    return render_template(
+        "sh_traders/edit_gate_pass.html",
+        gate_pass=gate_pass,
+        suppliers=suppliers,
+        clients=clients,
+        cancel_url=url_for("sh_main.gate_passes"),
     )

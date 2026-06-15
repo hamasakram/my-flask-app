@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Gate Passes - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Gate Passes', 'Create printable gate passes when stock arrives') }}
+
+{% if current_user.can_edit() %}
+{% if not suppliers or not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">suppliers</a> and <a href="{{ url_for('sh_main.clients') }}">clients</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Create Gate Pass</h2>
+    <form method="POST" class="form-grid" id="gate-pass-form">
+        <div class="form-group">
+            <label for="purchase_id">Link to Purchase (optional)</label>
+            <select id="purchase_id" name="purchase_id">
+                <option value="">Manual entry</option>
+                {% for p in purchases %}
+                <option
+                    value="{{ p.id }}"
+                    data-supplier="{{ p.supplier_company_id }}"
+                    data-client="{{ p.client_company_id }}"
+                    data-material="{{ p.material_name }}"
+                    data-size="{{ p.size or '' }}"
+                    data-micron="{{ p.micron or '' }}"
+                >{{ p.date_purchased.strftime('%d-%m-%Y') }} — {{ p.material_name }} ({{ p.supplier.name }})</option>
+                {% endfor %}
+            </select>
+            <small class="field-note">Select a purchase to pre-fill supplier, sold to, and material</small>
+        </div>
+        <div class="form-group">
+            <label for="issued_date">Date</label>
+            <input type="date" id="issued_date" name="issued_date" required>
+        </div>
+        <div class="form-group">
+            <label for="issued_time">Time</label>
+            <input type="time" id="issued_time" name="issued_time" step="1" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_to_client_id">Sold To</label>
+            <select id="sold_to_client_id" name="sold_to_client_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                <option value="">Select supplier</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron">
+        </div>
+        <div class="form-group">
+            <label for="gross_weight">Gross Weight (KG)</label>
+            <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="net_weight">Net Weight (KG)</label>
+            <input type="number" id="net_weight" name="net_weight" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="amount_per_kg">Amount Per KG</label>
+            <input type="number" id="amount_per_kg" name="amount_per_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="total_amount_display">Total Amount (auto)</label>
+            <input type="text" id="total_amount_display" readonly class="readonly-field" value="0.00">
+            <small class="field-note">Net Weight (KG) × Amount Per KG</small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create &amp; Print Gate Pass</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Gate Pass Records</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Gate Pass #</th>
+                <th>Date &amp; Time</th>
+                <th>Sold To</th>
+                <th>Material</th>
+                <th>Gross KG</th>
+                <th>Net KG</th>
+                <th>Total Amount</th>
+                <th>PDF</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for g in gate_passes %}
+            <tr>
+                <td><strong>{{ g.gate_pass_number }}</strong></td>
+                <td>{{ g.issued_at.strftime('%d-%m-%Y %H:%M:%S') }}</td>
+                <td>{{ g.sold_to.name }}</td>
+                <td>{{ g.material_name }}</td>
+                <td>{{ "{:,.2f}".format(g.gross_weight) }}</td>
+                <td>{{ "{:,.2f}".format(g.net_weight) }}</td>
+                <td>₨ {{ "{:,.2f}".format(g.total_amount) }}</td>
+                <td>
+                    <a href="{{ url_for('sh_main.gate_pass_pdf', gate_pass_id=g.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                </td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_gate_pass', gate_pass_id=g.id),
+                    url_for('stock_deletes.delete_sh_gate_pass', gate_pass_id=g.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No gate passes created yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const purchaseSelect = document.getElementById('purchase_id');
+    const supplierSelect = document.getElementById('supplier_company_id');
+    const clientSelect = document.getElementById('sold_to_client_id');
+    const materialInput = document.getElementById('material_name');
+    const sizeInput = document.getElementById('size');
+    const micronInput = document.getElementById('micron');
+    const netInput = document.getElementById('net_weight');
+    const rateInput = document.getElementById('amount_per_kg');
+    const totalDisplay = document.getElementById('total_amount_display');
+    const dateInput = document.getElementById('issued_date');
+    const timeInput = document.getElementById('issued_time');
+
+    if (dateInput && !dateInput.value) {
+        const now = new Date();
+        dateInput.value = now.toISOString().slice(0, 10);
+        timeInput.value = now.toTimeString().slice(0, 8);
+    }
+
+    if (purchaseSelect) {
+        purchaseSelect.addEventListener('change', function () {
+            const opt = this.options[this.selectedIndex];
+            if (!opt || !opt.value) return;
+            if (supplierSelect) supplierSelect.value = opt.dataset.supplier || '';
+            if (clientSelect) clientSelect.value = opt.dataset.client || '';
+            if (materialInput) materialInput.value = opt.dataset.material || '';
+            if (sizeInput) sizeInput.value = opt.dataset.size || '';
+            if (micronInput) micronInput.value = opt.dataset.micron || '';
+        });
+    }
+
+    function updateTotal() {
+        if (!netInput || !rateInput || !totalDisplay) return;
+        const net = parseFloat(netInput.value) || 0;
+        const rate = parseFloat(rateInput.value) || 0;
+        totalDisplay.value = (net * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    if (netInput) netInput.addEventListener('input', updateTotal);
+    if (rateInput) rateInput.addEventListener('input', updateTotal);
+})();
+</script>
+{% endblock %}
