@@ -17,6 +17,11 @@ from app.models import (
     MaterialTransaction,
     OpeningStock,
     InventoryTransaction,
+    ShClientCompany,
+    ShLedgerEntry,
+    ShOpeningBalance,
+    ShPurchase,
+    ShSupplierCompany,
 )
 from app.services.companies import (
     get_chemical_companies,
@@ -25,6 +30,7 @@ from app.services.companies import (
     get_material_companies,
 )
 from app.services.inventory import get_or_create_ink_type, log_audit
+from app.services.sh_traders import calculate_total_amount
 from app.services.weights import parse_manual_weights
 
 stock_edits_bp = Blueprint("stock_edits", __name__, url_prefix="/stock-edit")
@@ -815,4 +821,222 @@ def edit_chemicals_catalog(item_id):
         companies=get_chemical_companies(),
         module="chemicals",
         cancel_url=url_for("chemicals.catalog"),
+    )
+
+
+# --- SH Traders ---
+
+
+@stock_edits_bp.route("/sh/supplier/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_supplier(company_id):
+    company = ShSupplierCompany.query.get_or_404(company_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_supplier", company_id=company_id))
+
+        existing = ShSupplierCompany.query.filter(
+            ShSupplierCompany.name == name, ShSupplierCompany.id != company_id
+        ).first()
+        if existing:
+            flash("This supplier name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_supplier", company_id=company_id))
+
+        company.name = name
+        log_audit(
+            current_user.id, "UPDATE", "ShSupplierCompany", company.id, f"Renamed supplier to {name}"
+        )
+        db.session.commit()
+        flash("Supplier updated.", "success")
+        return redirect(url_for("sh_main.suppliers"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="SH Traders (Supplier)",
+        cancel_url=url_for("sh_main.suppliers"),
+    )
+
+
+@stock_edits_bp.route("/sh/client/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_client(company_id):
+    company = ShClientCompany.query.get_or_404(company_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_client", company_id=company_id))
+
+        existing = ShClientCompany.query.filter(
+            ShClientCompany.name == name, ShClientCompany.id != company_id
+        ).first()
+        if existing:
+            flash("This client name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_client", company_id=company_id))
+
+        company.name = name
+        log_audit(
+            current_user.id, "UPDATE", "ShClientCompany", company.id, f"Renamed client to {name}"
+        )
+        db.session.commit()
+        flash("Client updated.", "success")
+        return redirect(url_for("sh_main.clients"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="SH Traders (Client)",
+        cancel_url=url_for("sh_main.clients"),
+    )
+
+
+@stock_edits_bp.route("/sh/purchase/<int:purchase_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_purchase(purchase_id):
+    purchase = ShPurchase.query.get_or_404(purchase_id)
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        date_purchased = request.form.get("date_purchased")
+        supplier_id = request.form.get("supplier_company_id", type=int)
+        material_name = request.form.get("material_name", "").strip()
+        size = request.form.get("size", "").strip()
+        micron = request.form.get("micron", "").strip()
+        total_kg = request.form.get("total_kg", type=float)
+        rate_per_1000 = request.form.get("rate_per_1000_kg", type=float)
+        paid_amount = request.form.get("paid_amount", type=float) or 0
+        client_id = request.form.get("client_company_id", type=int)
+        notes = request.form.get("notes", "").strip()
+
+        if (
+            not date_purchased
+            or not supplier_id
+            or not material_name
+            or not total_kg
+            or total_kg <= 0
+            or not rate_per_1000
+            or rate_per_1000 <= 0
+            or not client_id
+        ):
+            flash("All required fields must be filled.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_purchase", purchase_id=purchase_id))
+
+        purchase.date_purchased = _parse_date(date_purchased)
+        purchase.supplier_company_id = supplier_id
+        purchase.material_name = material_name
+        purchase.size = size
+        purchase.micron = micron or None
+        purchase.total_kg = total_kg
+        purchase.rate_per_1000_kg = rate_per_1000
+        purchase.total_amount = calculate_total_amount(total_kg, rate_per_1000)
+        purchase.paid_amount = paid_amount
+        purchase.client_company_id = client_id
+        purchase.notes = notes or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShPurchase",
+            purchase.id,
+            f"Updated SH purchase #{purchase_id}",
+        )
+        db.session.commit()
+        flash("Purchase updated.", "success")
+        return redirect(url_for("sh_main.purchases"))
+
+    return render_template(
+        "sh_traders/edit_purchase.html",
+        purchase=purchase,
+        suppliers=suppliers,
+        clients=clients,
+        cancel_url=url_for("sh_main.purchases"),
+    )
+
+
+@stock_edits_bp.route("/sh/opening", methods=["GET", "POST"])
+@login_required
+def edit_sh_opening():
+    opening = ShOpeningBalance.query.order_by(ShOpeningBalance.id.asc()).first()
+    if not opening:
+        abort(404)
+
+    if request.method == "POST":
+        require_edit_access()
+        amount = request.form.get("opening_amount", type=float)
+        notes = request.form.get("opening_notes", "").strip()
+        if amount is None or amount < 0:
+            flash("Enter a valid opening balance.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_opening"))
+
+        opening.amount = amount
+        opening.notes = notes or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShOpeningBalance",
+            opening.id,
+            f"Updated opening balance to {amount:,.2f}",
+        )
+        db.session.commit()
+        flash("Opening balance updated.", "success")
+        return redirect(url_for("sh_main.payments"))
+
+    return render_template(
+        "sh_traders/edit_opening.html",
+        opening=opening,
+        cancel_url=url_for("sh_main.payments"),
+    )
+
+
+@stock_edits_bp.route("/sh/ledger/<int:entry_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_ledger(entry_id):
+    entry = ShLedgerEntry.query.get_or_404(entry_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        entry_date = request.form.get("entry_date")
+        debit = request.form.get("debit", type=float) or 0
+        credit = request.form.get("credit", type=float) or 0
+        notes = request.form.get("notes", "").strip()
+
+        if not entry_date:
+            flash("Entry date is required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_ledger", entry_id=entry_id))
+
+        if debit <= 0 and credit <= 0:
+            flash("Enter a debit or credit amount.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_ledger", entry_id=entry_id))
+
+        if debit > 0 and credit > 0:
+            flash("Enter either debit or credit, not both.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_ledger", entry_id=entry_id))
+
+        entry.entry_date = _parse_date(entry_date)
+        entry.debit = debit
+        entry.credit = credit
+        entry.notes = notes or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShLedgerEntry",
+            entry.id,
+            f"Updated ledger entry #{entry_id}",
+        )
+        db.session.commit()
+        flash("Ledger entry updated.", "success")
+        return redirect(url_for("sh_main.payments"))
+
+    return render_template(
+        "sh_traders/edit_ledger.html",
+        entry=entry,
+        cancel_url=url_for("sh_main.payments"),
     )

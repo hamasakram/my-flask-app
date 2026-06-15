@@ -432,6 +432,7 @@ textarea { resize: vertical; min-height: 4rem; }
     max-width: 1100px;
 }
 .module-card-chemicals { border-top: 4px solid #059669; }
+.module-card-sh { border-top: 4px solid #2563eb; }
 
 .category-options {
     display: flex;
@@ -491,6 +492,16 @@ textarea { resize: vertical; min-height: 4rem; }
 .workflow-list li { margin-bottom: 0.35rem; }
 
 .workflow-note { margin: 0; }
+
+.text-danger { color: var(--red); font-weight: 600; }
+
+.readonly-field {
+    background: #f1f5f9;
+    color: var(--muted);
+    cursor: not-allowed;
+}
+
+.row-opening td { background: #f0fdf4; }
 
 @media (max-width: 900px) {
     .sidebar {

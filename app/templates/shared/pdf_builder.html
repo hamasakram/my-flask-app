@@ -10,6 +10,16 @@
     <form method="POST" class="form-grid">
         <input type="hidden" name="module" value="{{ module }}">
 
+        {% if is_sh_module %}
+        <div class="form-group">
+            <label for="report_type">Report Type</label>
+            <select id="report_type" name="report_type" onchange="window.location.href='{{ url_for('pdf.builder', module=module) }}?report_type=' + this.value">
+                <option value="purchases" {% if report_type == 'purchases' %}selected{% endif %}>Purchases</option>
+                <option value="ledger" {% if report_type == 'ledger' %}selected{% endif %}>Payment Ledger</option>
+            </select>
+        </div>
+        {% endif %}
+
         <div class="form-group full-width">
             <label>Columns to include</label>
             <div class="checkbox-grid">
@@ -22,6 +32,7 @@
             </div>
         </div>
 
+        {% if companies and report_type != 'ledger' %}
         <div class="form-group">
             <label for="company_id">Company Filter</label>
             <select id="company_id" name="company_id">
@@ -31,6 +42,7 @@
                 {% endfor %}
             </select>
         </div>
+        {% endif %}
 
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Generate PDF</button>

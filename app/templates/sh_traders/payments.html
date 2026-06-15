@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Payments & Ledger - SH Traders{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Payment Handling</h1>
+    <p class="page-subtitle">Opening balance and manual payment ledger</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Current Ledger Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
+    </div>
+</div>
+
+{% if current_user.can_edit() %}
+{% if not opening %}
+<div class="card highlight-card">
+    <h2>Starting Balance (set once)</h2>
+    <p class="field-note">Enter the total starting amount for SH Traders payments. This is recorded only once.</p>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="opening">
+        <div class="form-group">
+            <label for="opening_amount">Amount Total</label>
+            <input type="number" id="opening_amount" name="opening_amount" step="0.01" min="0" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="opening_notes">Notes</label>
+            <textarea id="opening_notes" name="opening_notes" rows="2" placeholder="Optional notes for opening balance"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Opening Balance</button>
+        </div>
+    </form>
+</div>
+{% else %}
+<div class="card">
+    <h2>Opening Balance</h2>
+    <table class="data-table compact">
+        <tr>
+            <th>Amount Total</th>
+            <td>₨ {{ "{:,.2f}".format(opening.amount) }}</td>
+        </tr>
+        <tr>
+            <th>Set On</th>
+            <td>{{ opening.created_at.strftime('%d-%m-%Y') }}</td>
+        </tr>
+        <tr>
+            <th>Notes</th>
+            <td>{{ opening.notes or '—' }}</td>
+        </tr>
+        {% if current_user.can_edit() %}
+        <tr>
+            <th>Actions</th>
+            <td>
+                <a href="{{ url_for('stock_edits.edit_sh_opening') }}" class="btn btn-sm btn-secondary">Edit</a>
+            </td>
+        </tr>
+        {% endif %}
+    </table>
+</div>
+{% endif %}
+
+<div class="card highlight-card">
+    <h2>Add Ledger Entry</h2>
+    <p class="field-note">Record where payments were used — debit (money out) or credit (money in).</p>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="ledger">
+        <div class="form-group">
+            <label for="entry_date">Date</label>
+            <input type="date" id="entry_date" name="entry_date" required>
+        </div>
+        <div class="form-group">
+            <label for="debit">Debit (out)</label>
+            <input type="number" id="debit" name="debit" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="credit">Credit (in)</label>
+            <input type="number" id="credit" name="credit" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes / Statement</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Where payment was used, reference, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Entry</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Payment Ledger</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Debit</th>
+                <th>Credit</th>
+                <th>Balance</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% if opening %}
+            <tr class="row-opening">
+                <td>{{ opening.created_at.strftime('%d-%m-%Y') }}</td>
+                <td>—</td>
+                <td>₨ {{ "{:,.2f}".format(opening.amount) }}</td>
+                <td>₨ {{ "{:,.2f}".format(opening.amount) }}</td>
+                <td>{{ opening.notes or 'Opening balance' }}</td>
+                {% if current_user.can_edit() %}<td>—</td>{% endif %}
+            </tr>
+            {% endif %}
+            {% for row in ledger_rows %}
+            <tr>
+                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>{% if row.entry.debit %}₨ {{ "{:,.2f}".format(row.entry.debit) }}{% else %}—{% endif %}</td>
+                <td>{% if row.entry.credit %}₨ {{ "{:,.2f}".format(row.entry.credit) }}{% else %}—{% endif %}</td>
+                <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
+                <td>{{ row.entry.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_ledger', entry_id=row.entry.id),
+                    url_for('stock_deletes.delete_sh_ledger', entry_id=row.entry.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            {% if not opening %}
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No ledger entries yet — set opening balance to begin</td></tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

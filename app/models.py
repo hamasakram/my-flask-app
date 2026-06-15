@@ -377,3 +377,85 @@ class AppSetting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(100), unique=True, nullable=False)
     value = db.Column(db.String(255), nullable=False)
+
+
+class ShSupplierCompany(db.Model):
+    """Supplier companies SH Traders purchases material from."""
+
+    __tablename__ = "sh_supplier_companies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    purchases = db.relationship("ShPurchase", back_populates="supplier", lazy="dynamic")
+
+
+class ShClientCompany(db.Model):
+    """Client companies — purchased on behalf of (Purchased For)."""
+
+    __tablename__ = "sh_client_companies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    purchases = db.relationship("ShPurchase", back_populates="client", lazy="dynamic")
+
+
+class ShPurchase(db.Model):
+    __tablename__ = "sh_purchases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    date_purchased = db.Column(db.Date, nullable=False)
+    supplier_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=False
+    )
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50))
+    total_kg = db.Column(db.Float, nullable=False)
+    rate_per_1000_kg = db.Column(db.Float, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
+    paid_amount = db.Column(db.Float, nullable=False, default=0)
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    supplier = db.relationship("ShSupplierCompany", back_populates="purchases")
+    client = db.relationship("ShClientCompany", back_populates="purchases")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def amount_due(self) -> float:
+        return float(self.total_amount or 0) - float(self.paid_amount or 0)
+
+
+class ShOpeningBalance(db.Model):
+    __tablename__ = "sh_opening_balance"
+
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    set_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    set_by = db.relationship("User", foreign_keys=[set_by_id])
+
+
+class ShLedgerEntry(db.Model):
+    __tablename__ = "sh_ledger_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    entry_date = db.Column(db.Date, nullable=False)
+    debit = db.Column(db.Float, nullable=False, default=0)
+    credit = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    created_by = db.relationship("User", foreign_keys=[created_by_id])

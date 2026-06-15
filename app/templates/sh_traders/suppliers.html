@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Supplier Companies - SH Traders{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Supplier Companies</h1>
+    <p class="page-subtitle">Companies SH Traders purchases material from</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Supplier</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group full-width">
+            <label for="company_name">Company Name</label>
+            <input type="text" id="company_name" name="company_name" placeholder="Supplier company name" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Supplier</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Suppliers</h2>
+    <table class="data-table">
+        <thead><tr><th>Company Name</th><th>Added On</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
+        <tbody>
+            {% for company in companies %}
+            <tr>
+                <td>{{ company.name }}</td>
+                <td>{{ company.created_at.strftime('%d-%m-%Y') }}</td>
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_supplier', company_id=company.id),
+                    url_for('stock_deletes.delete_sh_supplier', company_id=company.id)
+                ) }}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 3 if current_user.can_edit() else 2 }}" class="empty">No suppliers yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

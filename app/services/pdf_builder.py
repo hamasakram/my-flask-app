@@ -10,10 +10,17 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.module_context import MODULE_CHEMICALS, MODULE_GLUE, MODULE_INK, MODULE_MATERIALS
+from app.module_context import (
+    MODULE_CHEMICALS,
+    MODULE_GLUE,
+    MODULE_INK,
+    MODULE_MATERIALS,
+    MODULE_SH_TRADERS,
+)
 from app.services.glue_chemical_inventory import chemical_live_stock, glue_live_stock
 from app.services.inventory import calculate_live_stock
 from app.services.materials_inventory import calculate_live_stock as material_live_stock
+from app.services.sh_traders import get_ledger_pdf_rows, get_purchase_pdf_rows
 
 LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "images" / "rn-colour-logo.png"
 BRAND_RED = colors.HexColor("#B21E22")
@@ -69,10 +76,32 @@ MODULE_PDF_FIELDS = {
         ("threshold", "Threshold"),
         ("status", "Status"),
     ],
+    MODULE_SH_TRADERS: [
+        ("date", "Date Purchased"),
+        ("supplier", "Supplier"),
+        ("material", "Material"),
+        ("size", "Size"),
+        ("micron", "Micron"),
+        ("total_kg", "Total KG"),
+        ("rate_1000", "Rate / 1000 KG"),
+        ("total_amount", "Total Amount"),
+        ("paid", "Paid"),
+        ("amount_due", "Amount Due"),
+        ("client", "Purchased For"),
+        ("notes", "Notes"),
+    ],
 }
 
+SH_LEDGER_PDF_FIELDS = [
+    ("date", "Date"),
+    ("debit", "Debit"),
+    ("credit", "Credit"),
+    ("balance", "Balance"),
+    ("notes", "Notes"),
+]
 
-def get_module_rows(module: str, company_id=None):
+
+def get_module_rows(module: str, company_id=None, report_type: str = "purchases"):
     if module == MODULE_INK:
         rows = calculate_live_stock(company_id=company_id)
         return [_normalize_ink_row(r) for r in rows]
@@ -85,7 +114,17 @@ def get_module_rows(module: str, company_id=None):
     if module == MODULE_CHEMICALS:
         rows = chemical_live_stock(company_id=company_id)
         return [_normalize_product_row(r) for r in rows]
+    if module == MODULE_SH_TRADERS:
+        if report_type == "ledger":
+            return get_ledger_pdf_rows()
+        return get_purchase_pdf_rows(supplier_id=company_id)
     return []
+
+
+def get_pdf_fields(module: str, report_type: str = "purchases"):
+    if module == MODULE_SH_TRADERS and report_type == "ledger":
+        return SH_LEDGER_PDF_FIELDS
+    return MODULE_PDF_FIELDS.get(module, [])
 
 
 def _normalize_ink_row(row):
@@ -136,11 +175,17 @@ def _normalize_product_row(row):
     }
 
 
-def generate_custom_pdf(module: str, selected_fields: list[str], company_id=None, title=None):
-    fields = MODULE_PDF_FIELDS.get(module, [])
+def generate_custom_pdf(
+    module: str,
+    selected_fields: list[str],
+    company_id=None,
+    title=None,
+    report_type: str = "purchases",
+):
+    fields = get_pdf_fields(module, report_type=report_type)
     field_map = {key: label for key, label in fields}
     headers = [field_map[key] for key in selected_fields if key in field_map]
-    rows = get_module_rows(module, company_id=company_id)
+    rows = get_module_rows(module, company_id=company_id, report_type=report_type)
 
     data = [headers]
     for row in rows:
@@ -169,6 +214,9 @@ def generate_custom_pdf(module: str, selected_fields: list[str], company_id=None
         textColor=BRAND_RED,
     )
     report_title = title or f"RN COLOUR — {module.replace('_', ' ').title()} Report"
+    if module == MODULE_SH_TRADERS:
+        suffix = "Payment Ledger" if report_type == "ledger" else "Purchases"
+        report_title = f"RN COLOUR — SH Traders {suffix}"
     elements.append(Paragraph(report_title, title_style))
     elements.append(
         Paragraph(

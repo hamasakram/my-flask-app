@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Edit Purchase - SH Traders{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Purchase</h1>
+</div>
+
+<div class="card">
+    <form method="POST" class="form-grid" id="purchase-form">
+        <div class="form-group">
+            <label for="date_purchased">Date Purchased</label>
+            <input type="date" id="date_purchased" name="date_purchased" value="{{ purchase.date_purchased.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if s.id == purchase.supplier_company_id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" value="{{ purchase.material_name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size" value="{{ purchase.size or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron" value="{{ purchase.micron or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="total_kg">Total Purchased (KG)</label>
+            <input type="number" id="total_kg" name="total_kg" step="0.01" min="0.01" value="{{ purchase.total_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="rate_per_1000_kg">Amount for 1000 KG</label>
+            <input type="number" id="rate_per_1000_kg" name="rate_per_1000_kg" step="0.01" min="0.01" value="{{ purchase.rate_per_1000_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="total_amount_display">Total Amount (auto)</label>
+            <input type="text" id="total_amount_display" readonly class="readonly-field">
+        </div>
+        <div class="form-group">
+            <label for="paid_amount">Paid to the Company</label>
+            <input type="number" id="paid_amount" name="paid_amount" step="0.01" min="0" value="{{ purchase.paid_amount }}">
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Purchased For</label>
+            <select id="client_company_id" name="client_company_id" required>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if c.id == purchase.client_company_id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ purchase.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Update</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const kgInput = document.getElementById('total_kg');
+    const rateInput = document.getElementById('rate_per_1000_kg');
+    const totalDisplay = document.getElementById('total_amount_display');
+    function updateTotal() {
+        const kg = parseFloat(kgInput.value) || 0;
+        const rate = parseFloat(rateInput.value) || 0;
+        totalDisplay.value = ((kg / 1000) * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    kgInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('input', updateTotal);
+    updateTotal();
+})();
+</script>
+{% endblock %}

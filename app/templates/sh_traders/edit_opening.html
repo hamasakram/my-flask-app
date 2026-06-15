@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Edit Opening Balance - SH Traders{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Opening Balance</h1>
+</div>
+
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="opening_amount">Amount Total</label>
+            <input type="number" id="opening_amount" name="opening_amount" step="0.01" min="0" value="{{ opening.amount }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="opening_notes">Notes</label>
+            <textarea id="opening_notes" name="opening_notes" rows="2">{{ opening.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

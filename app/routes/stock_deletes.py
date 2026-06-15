@@ -15,6 +15,11 @@ from app.models import (
     MaterialOpeningStock,
     MaterialTransaction,
     OpeningStock,
+    ShClientCompany,
+    ShLedgerEntry,
+    ShOpeningBalance,
+    ShPurchase,
+    ShSupplierCompany,
 )
 from app.services.inventory import log_audit
 from app.services.record_delete import (
@@ -315,4 +320,63 @@ def delete_chemicals_catalog(item_id):
         "ChemicalItem",
         f"Deleted chemical item: {item.display_name}",
         url_for("chemicals.catalog"),
+    )
+
+
+# --- SH Traders ---
+
+
+@stock_deletes_bp.route("/sh/supplier/<int:company_id>", methods=["POST"])
+@login_required
+def delete_sh_supplier(company_id):
+    require_edit_access()
+    company = ShSupplierCompany.query.get_or_404(company_id)
+    if company.purchases.count() > 0:
+        flash("Cannot delete — this supplier has purchase records.", "danger")
+        return redirect(url_for("sh_main.suppliers"))
+    return _delete_entity(
+        company,
+        "ShSupplierCompany",
+        f"Deleted SH supplier: {company.name}",
+        url_for("sh_main.suppliers"),
+    )
+
+
+@stock_deletes_bp.route("/sh/client/<int:company_id>", methods=["POST"])
+@login_required
+def delete_sh_client(company_id):
+    require_edit_access()
+    company = ShClientCompany.query.get_or_404(company_id)
+    if company.purchases.count() > 0:
+        flash("Cannot delete — this client has purchase records.", "danger")
+        return redirect(url_for("sh_main.clients"))
+    return _delete_entity(
+        company,
+        "ShClientCompany",
+        f"Deleted SH client: {company.name}",
+        url_for("sh_main.clients"),
+    )
+
+
+@stock_deletes_bp.route("/sh/purchase/<int:purchase_id>", methods=["POST"])
+@login_required
+def delete_sh_purchase(purchase_id):
+    purchase = ShPurchase.query.get_or_404(purchase_id)
+    return _delete_entity(
+        purchase,
+        "ShPurchase",
+        f"Deleted SH purchase #{purchase_id}",
+        url_for("sh_main.purchases"),
+    )
+
+
+@stock_deletes_bp.route("/sh/ledger/<int:entry_id>", methods=["POST"])
+@login_required
+def delete_sh_ledger(entry_id):
+    entry = ShLedgerEntry.query.get_or_404(entry_id)
+    return _delete_entity(
+        entry,
+        "ShLedgerEntry",
+        f"Deleted SH ledger entry #{entry_id}",
+        url_for("sh_main.payments"),
     )

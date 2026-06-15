@@ -6,16 +6,18 @@ MODULE_INK = "ink"
 MODULE_MATERIALS = "materials"
 MODULE_GLUE = "glue"
 MODULE_CHEMICALS = "chemicals"
+MODULE_SH_TRADERS = "sh_traders"
 
 SESSION_KEY = "stock_module"
 
-ALL_MODULES = (MODULE_INK, MODULE_MATERIALS, MODULE_GLUE, MODULE_CHEMICALS)
+ALL_MODULES = (MODULE_INK, MODULE_MATERIALS, MODULE_GLUE, MODULE_CHEMICALS, MODULE_SH_TRADERS)
 
 MODULE_LABELS = {
     MODULE_INK: "Ink Stock Management",
     MODULE_MATERIALS: "Printing Materials Stock Management",
     MODULE_GLUE: "Glue Management",
     MODULE_CHEMICALS: "Chemicals Management",
+    MODULE_SH_TRADERS: "SH Traders",
 }
 
 MODULE_DASHBOARD_ENDPOINTS = {
@@ -23,6 +25,7 @@ MODULE_DASHBOARD_ENDPOINTS = {
     MODULE_MATERIALS: "materials_main.dashboard",
     MODULE_GLUE: "glue_main.dashboard",
     MODULE_CHEMICALS: "chemicals_main.dashboard",
+    MODULE_SH_TRADERS: "sh_main.dashboard",
 }
 
 MATERIAL_CATEGORIES = ("PET", "METALIZE", "LD")

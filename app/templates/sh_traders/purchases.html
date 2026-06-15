@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Advance Stock Purchased - SH Traders{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Advance Stock Purchased</h1>
+    <p class="page-subtitle">Record material purchases from suppliers</p>
+</div>
+
+{% if current_user.can_edit() %}
+{% if not suppliers %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> before recording purchases.</div>
+{% elif not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> (Purchased For) before recording purchases.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>New Purchase</h2>
+    <form method="POST" class="form-grid" id="purchase-form">
+        <div class="form-group">
+            <label for="date_purchased">Date Purchased</label>
+            <input type="date" id="date_purchased" name="date_purchased" required>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Company Name (Supplier)</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                <option value="">Select supplier</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron (Thickness)</label>
+            <input type="text" id="micron" name="micron">
+        </div>
+        <div class="form-group">
+            <label for="total_kg">Total Purchased (KG)</label>
+            <input type="number" id="total_kg" name="total_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="rate_per_1000_kg">Amount for 1000 KG</label>
+            <input type="number" id="rate_per_1000_kg" name="rate_per_1000_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="total_amount_display">Total Amount (auto)</label>
+            <input type="text" id="total_amount_display" readonly class="readonly-field" value="0.00">
+            <small class="field-note">(Total KG ÷ 1000) × Amount for 1000 KG</small>
+        </div>
+        <div class="form-group">
+            <label for="paid_amount">Paid to the Company</label>
+            <input type="number" id="paid_amount" name="paid_amount" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Purchased For</label>
+            <select id="client_company_id" name="client_company_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Purchase</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Purchase Records</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Material</th>
+                <th>Size</th>
+                <th>Micron</th>
+                <th>KG</th>
+                <th>Rate/1000</th>
+                <th>Total</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Purchased For</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in purchases %}
+            <tr>
+                <td>{{ p.date_purchased.strftime('%d-%m-%Y') }}</td>
+                <td>{{ p.supplier.name }}</td>
+                <td>{{ p.material_name }}</td>
+                <td>{{ p.size or '—' }}</td>
+                <td>{{ p.micron or '—' }}</td>
+                <td>{{ "{:,.1f}".format(p.total_kg) }}</td>
+                <td>{{ "{:,.2f}".format(p.rate_per_1000_kg) }}</td>
+                <td>₨ {{ "{:,.2f}".format(p.total_amount) }}</td>
+                <td>₨ {{ "{:,.2f}".format(p.paid_amount) }}</td>
+                <td class="{% if p.amount_due > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(p.amount_due) }}</td>
+                <td>{{ p.client.name }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_purchase', purchase_id=p.id),
+                    url_for('stock_deletes.delete_sh_purchase', purchase_id=p.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 12 if current_user.can_edit() else 11 }}" class="empty">No purchases yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const kgInput = document.getElementById('total_kg');
+    const rateInput = document.getElementById('rate_per_1000_kg');
+    const totalDisplay = document.getElementById('total_amount_display');
+    if (!kgInput || !rateInput || !totalDisplay) return;
+
+    function updateTotal() {
+        const kg = parseFloat(kgInput.value) || 0;
+        const rate = parseFloat(rateInput.value) || 0;
+        const total = (kg / 1000) * rate;
+        totalDisplay.value = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    kgInput.addEventListener('input', updateTotal);
+    rateInput.addEventListener('input', updateTotal);
+})();
+</script>
+{% endblock %}

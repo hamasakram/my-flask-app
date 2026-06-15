@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}SH Traders Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>SH Traders Dashboard</h1>
+        <p class="page-subtitle">Material trading overview — {{ today.strftime('%d %B %Y') }}</p>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Purchased ({{ stats.last_month_label }})</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.last_month_total_amount) }}</span>
+        <small class="field-note">{{ "{:,.1f}".format(stats.last_month_total_kg) }} kg · {{ stats.last_month_count }} purchase(s)</small>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Total Outstanding (Purchases)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_outstanding) }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Payment Ledger Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.ledger_balance) }}</span>
+        {% if stats.opening_balance is not none %}
+        <small class="field-note">Opening: ₨ {{ "{:,.2f}".format(stats.opening_balance) }}</small>
+        {% else %}
+        <small class="field-note">Opening balance not set</small>
+        {% endif %}
+    </div>
+</div>
+
+{% if stats.latest_purchase %}
+<div class="card highlight-card">
+    <h2>Latest Purchase</h2>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Material</th>
+                <th>Total KG</th>
+                <th>Total Amount</th>
+                <th>Paid</th>
+                <th>Amount Due</th>
+                <th>Purchased For</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>{{ stats.latest_purchase.date_purchased.strftime('%d-%m-%Y') }}</td>
+                <td>{{ stats.latest_purchase.supplier.name }}</td>
+                <td>{{ stats.latest_purchase.material_name }}{% if stats.latest_purchase.size %} ({{ stats.latest_purchase.size }}){% endif %}</td>
+                <td>{{ "{:,.1f}".format(stats.latest_purchase.total_kg) }}</td>
+                <td>₨ {{ "{:,.2f}".format(stats.latest_purchase.total_amount) }}</td>
+                <td>₨ {{ "{:,.2f}".format(stats.latest_purchase.paid_amount) }}</td>
+                <td class="{% if stats.latest_purchase.amount_due > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(stats.latest_purchase.amount_due) }}</td>
+                <td>{{ stats.latest_purchase.client.name }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Recent Purchases</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Material</th>
+                <th>KG</th>
+                <th>Total Amount</th>
+                <th>Due</th>
+                <th>Purchased For</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in stats.recent_purchases %}
+            <tr>
+                <td>{{ p.date_purchased.strftime('%d-%m-%Y') }}</td>
+                <td>{{ p.supplier.name }}</td>
+                <td>{{ p.material_name }}</td>
+                <td>{{ "{:,.1f}".format(p.total_kg) }}</td>
+                <td>₨ {{ "{:,.2f}".format(p.total_amount) }}</td>
+                <td>₨ {{ "{:,.2f}".format(p.amount_due) }}</td>
+                <td>{{ p.client.name }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No purchases recorded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="quick-actions">
+    <a href="{{ url_for('sh_main.purchases') }}" class="btn btn-primary">+ Advance Stock Purchase</a>
+    <a href="{{ url_for('sh_main.suppliers') }}" class="btn btn-secondary">Supplier Companies</a>
+    <a href="{{ url_for('sh_main.clients') }}" class="btn btn-secondary">Client Companies</a>
+    <a href="{{ url_for('sh_main.payments') }}" class="btn btn-secondary">Payments & Ledger</a>
+</div>
+{% endif %}
+{% endblock %}

@@ -74,6 +74,15 @@
             <li><a href="{{ url_for('chemicals.live_inventory') }}">Live Inventory</a></li>
             <li class="nav-section">Reports</li>
             <li><a href="{{ url_for('pdf.builder', module='chemicals') }}">Custom PDF</a></li>
+            {% elif active_module == 'sh_traders' %}
+            <li><a href="{{ url_for('sh_main.dashboard') }}" class="{% if request.endpoint == 'sh_main.dashboard' %}active{% endif %}">Dashboard</a></li>
+            <li class="nav-section">SH Traders</li>
+            <li><a href="{{ url_for('sh_main.suppliers') }}">Supplier Companies</a></li>
+            <li><a href="{{ url_for('sh_main.clients') }}">Client Companies</a></li>
+            <li><a href="{{ url_for('sh_main.purchases') }}">Advance Stock Purchased</a></li>
+            <li><a href="{{ url_for('sh_main.payments') }}">Payments & Ledger</a></li>
+            <li class="nav-section">Reports</li>
+            <li><a href="{{ url_for('pdf.builder', module='sh_traders') }}">Custom PDF</a></li>
             {% endif %}
             {% if current_user.is_admin() %}
             <li class="nav-section">Admin</li>
