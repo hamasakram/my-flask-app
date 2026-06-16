@@ -41,6 +41,16 @@
         <div class="form-group">
             <label for="total_amount_display">Total Amount (auto)</label>
             <input type="text" id="total_amount_display" readonly class="readonly-field">
+            <small class="field-note">Total Purchased (KG) × Amount / KG</small>
+        </div>
+        <div class="form-group">
+            <label for="client_rate_per_kg">Amount / KG for Client</label>
+            <input type="number" id="client_rate_per_kg" name="client_rate_per_kg" step="0.01" min="0" value="{{ purchase.client_rate_per_kg or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="client_total_amount_display">Client Total Amount (auto)</label>
+            <input type="text" id="client_total_amount_display" readonly class="readonly-field">
+            <small class="field-note">Total Purchased (KG) × Amount / KG for Client</small>
         </div>
         <div class="form-group">
             <label for="paid_amount">Paid to the Company</label>
@@ -72,14 +82,27 @@
     const kgInput = document.getElementById('total_kg');
     const rateInput = document.getElementById('rate_per_1000_kg');
     const totalDisplay = document.getElementById('total_amount_display');
-    function updateTotal() {
+    const clientRateInput = document.getElementById('client_rate_per_kg');
+    const clientTotalDisplay = document.getElementById('client_total_amount_display');
+
+    function formatAmount(value) {
+        return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function updateTotals() {
         const kg = parseFloat(kgInput.value) || 0;
         const rate = parseFloat(rateInput.value) || 0;
-        totalDisplay.value = (kg * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        totalDisplay.value = formatAmount(kg * rate);
+        if (clientRateInput && clientTotalDisplay) {
+            const clientRate = parseFloat(clientRateInput.value) || 0;
+            clientTotalDisplay.value = formatAmount(kg * clientRate);
+        }
     }
-    kgInput.addEventListener('input', updateTotal);
-    rateInput.addEventListener('input', updateTotal);
-    updateTotal();
+
+    kgInput.addEventListener('input', updateTotals);
+    rateInput.addEventListener('input', updateTotals);
+    if (clientRateInput) clientRateInput.addEventListener('input', updateTotals);
+    updateTotals();
 })();
 </script>
 {% endblock %}

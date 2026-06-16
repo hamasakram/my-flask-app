@@ -53,6 +53,15 @@
             <small class="field-note">Total Purchased (KG) × Amount / KG</small>
         </div>
         <div class="form-group">
+            <label for="client_rate_per_kg">Amount / KG for Client</label>
+            <input type="number" id="client_rate_per_kg" name="client_rate_per_kg" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label for="client_total_amount_display">Client Total Amount (auto)</label>
+            <input type="text" id="client_total_amount_display" readonly class="readonly-field" value="0.00">
+            <small class="field-note">Total Purchased (KG) × Amount / KG for Client</small>
+        </div>
+        <div class="form-group">
             <label for="paid_amount">Paid to the Company</label>
             <input type="number" id="paid_amount" name="paid_amount" step="0.01" min="0" value="0">
         </div>
@@ -90,6 +99,10 @@
                 <th>KG</th>
                 <th>Rate/KG</th>
                 <th>Total</th>
+                {% if current_user.can_view_sensitive() %}
+                <th>Client Rate/KG</th>
+                <th>Client Total</th>
+                {% endif %}
                 <th>Paid</th>
                 <th>Due</th>
                 <th>Purchased For</th>
@@ -107,6 +120,10 @@
                 <td>{{ "{:,.1f}".format(p.total_kg) }}</td>
                 <td>{{ "{:,.2f}".format(p.rate_per_1000_kg) }}</td>
                 <td>₨ {{ "{:,.2f}".format(p.total_amount) }}</td>
+                {% if current_user.can_view_sensitive() %}
+                <td>{% if p.client_rate_per_kg %}{{ "{:,.2f}".format(p.client_rate_per_kg) }}{% else %}—{% endif %}</td>
+                <td>{% if p.client_total_amount %}₨ {{ "{:,.2f}".format(p.client_total_amount) }}{% else %}—{% endif %}</td>
+                {% endif %}
                 <td>₨ {{ "{:,.2f}".format(p.paid_amount) }}</td>
                 <td class="{% if p.amount_due > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(p.amount_due) }}</td>
                 <td>{{ p.client.name }}</td>
@@ -118,7 +135,7 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 12 if current_user.can_edit() else 11 }}" class="empty">No purchases yet</td></tr>
+            <tr><td colspan="{% if current_user.can_edit() and current_user.can_view_sensitive() %}14{% elif current_user.can_edit() %}12{% elif current_user.can_view_sensitive() %}13{% else %}11{% endif %}" class="empty">No purchases yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -131,17 +148,27 @@
     const kgInput = document.getElementById('total_kg');
     const rateInput = document.getElementById('rate_per_1000_kg');
     const totalDisplay = document.getElementById('total_amount_display');
+    const clientRateInput = document.getElementById('client_rate_per_kg');
+    const clientTotalDisplay = document.getElementById('client_total_amount_display');
     if (!kgInput || !rateInput || !totalDisplay) return;
 
-    function updateTotal() {
-        const kg = parseFloat(kgInput.value) || 0;
-        const rate = parseFloat(rateInput.value) || 0;
-        const total = kg * rate;
-        totalDisplay.value = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    function formatAmount(value) {
+        return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    kgInput.addEventListener('input', updateTotal);
-    rateInput.addEventListener('input', updateTotal);
+    function updateTotals() {
+        const kg = parseFloat(kgInput.value) || 0;
+        const rate = parseFloat(rateInput.value) || 0;
+        totalDisplay.value = formatAmount(kg * rate);
+        if (clientRateInput && clientTotalDisplay) {
+            const clientRate = parseFloat(clientRateInput.value) || 0;
+            clientTotalDisplay.value = formatAmount(kg * clientRate);
+        }
+    }
+
+    kgInput.addEventListener('input', updateTotals);
+    rateInput.addEventListener('input', updateTotals);
+    if (clientRateInput) clientRateInput.addEventListener('input', updateTotals);
 })();
 </script>
 {% endblock %}

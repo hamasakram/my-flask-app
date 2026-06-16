@@ -47,6 +47,10 @@ COLUMN_MIGRATIONS = {
         "supplier_company_id": "INTEGER",
         "client_company_id": "INTEGER",
     },
+    "sh_purchases": {
+        "client_rate_per_kg": "FLOAT",
+        "client_total_amount": "FLOAT",
+    },
 }
 
 

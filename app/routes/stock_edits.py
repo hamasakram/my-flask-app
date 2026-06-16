@@ -918,6 +918,7 @@ def edit_sh_purchase(purchase_id):
         micron = request.form.get("micron", "").strip()
         total_kg = request.form.get("total_kg", type=float)
         rate_per_1000 = request.form.get("rate_per_1000_kg", type=float)
+        client_rate = request.form.get("client_rate_per_kg", type=float) or 0
         paid_amount = request.form.get("paid_amount", type=float) or 0
         client_id = request.form.get("client_company_id", type=int)
         notes = request.form.get("notes", "").strip()
@@ -943,6 +944,10 @@ def edit_sh_purchase(purchase_id):
         purchase.total_kg = total_kg
         purchase.rate_per_1000_kg = rate_per_1000
         purchase.total_amount = calculate_total_amount(total_kg, rate_per_1000)
+        purchase.client_rate_per_kg = client_rate if client_rate > 0 else None
+        purchase.client_total_amount = (
+            calculate_total_amount(total_kg, client_rate) if client_rate > 0 else None
+        )
         purchase.paid_amount = paid_amount
         purchase.client_company_id = client_id
         purchase.notes = notes or None

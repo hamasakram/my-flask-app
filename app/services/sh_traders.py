@@ -118,7 +118,7 @@ def get_client_party_balances() -> list[dict]:
     rows = []
     for client in clients:
         purchases = ShPurchase.query.filter_by(client_company_id=client.id).all()
-        total_billed = sum(float(p.total_amount or 0) for p in purchases)
+        total_billed = sum(float(p.client_total_amount or 0) for p in purchases)
 
         ledger_received = (
             db.session.query(func.coalesce(func.sum(ShLedgerEntry.credit), 0))
@@ -259,5 +259,11 @@ def _normalize_purchase_row(purchase: ShPurchase) -> dict:
         "paid": f"{purchase.paid_amount:,.2f}",
         "amount_due": f"{purchase.amount_due:,.2f}",
         "client": purchase.client.name,
+        "client_rate": f"{purchase.client_rate_per_kg:,.2f}"
+        if purchase.client_rate_per_kg
+        else "—",
+        "client_total": f"{purchase.client_total_amount:,.2f}"
+        if purchase.client_total_amount
+        else "—",
         "notes": purchase.notes or "—",
     }

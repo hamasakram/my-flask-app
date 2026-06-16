@@ -425,6 +425,8 @@ class ShPurchase(db.Model):
     rate_per_1000_kg = db.Column(db.Float, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
     paid_amount = db.Column(db.Float, nullable=False, default=0)
+    client_rate_per_kg = db.Column(db.Float, nullable=True)
+    client_total_amount = db.Column(db.Float, nullable=True)
     client_company_id = db.Column(
         db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
     )

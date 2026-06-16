@@ -138,6 +138,7 @@ def purchases():
         micron = request.form.get("micron", "").strip()
         total_kg = request.form.get("total_kg", type=float)
         rate_per_1000 = request.form.get("rate_per_1000_kg", type=float)
+        client_rate = request.form.get("client_rate_per_kg", type=float) or 0
         paid_amount = request.form.get("paid_amount", type=float) or 0
         client_id = request.form.get("client_company_id", type=int)
         notes = request.form.get("notes", "").strip()
@@ -156,6 +157,7 @@ def purchases():
             return redirect(url_for("sh_main.purchases"))
 
         total_amount = calculate_total_amount(total_kg, rate_per_1000)
+        client_total_amount = calculate_total_amount(total_kg, client_rate) if client_rate > 0 else 0
         purchase = ShPurchase(
             date_purchased=_parse_date(date_purchased),
             supplier_company_id=supplier_id,
@@ -166,6 +168,8 @@ def purchases():
             rate_per_1000_kg=rate_per_1000,
             total_amount=total_amount,
             paid_amount=paid_amount,
+            client_rate_per_kg=client_rate if client_rate > 0 else None,
+            client_total_amount=client_total_amount if client_rate > 0 else None,
             client_company_id=client_id,
             notes=notes or None,
             created_by_id=current_user.id,

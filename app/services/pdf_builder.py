@@ -89,6 +89,8 @@ MODULE_PDF_FIELDS = {
         ("paid", "Paid"),
         ("amount_due", "Amount Due"),
         ("client", "Purchased For"),
+        ("client_rate", "Client Rate / KG"),
+        ("client_total", "Client Total Amount"),
         ("notes", "Notes"),
     ],
 }
