@@ -367,6 +367,14 @@ def delete_sh_client(company_id):
 @login_required
 def delete_sh_purchase(purchase_id):
     purchase = ShPurchase.query.get_or_404(purchase_id)
+    ShPaymentScreenshot.query.filter_by(purchase_id=purchase_id).update(
+        {ShPaymentScreenshot.purchase_id: None},
+        synchronize_session=False,
+    )
+    ShGatePass.query.filter_by(purchase_id=purchase_id).update(
+        {ShGatePass.purchase_id: None},
+        synchronize_session=False,
+    )
     return _delete_entity(
         purchase,
         "ShPurchase",

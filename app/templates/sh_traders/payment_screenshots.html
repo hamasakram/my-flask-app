@@ -77,7 +77,7 @@
                 <td>{% if r.amount_paid %}₨ {{ "{:,.2f}".format(r.amount_paid) }}{% else %}—{% endif %}</td>
                 <td>{% if r.purchase %}#{{ r.purchase.id }} — {{ r.purchase.material_name }}{% else %}—{% endif %}</td>
                 <td>
-                    <a href="{{ url_for('static', filename=r.screenshot_filename) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
+                    <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=r.id) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
                 </td>
                 <td>{{ r.notes or '—' }}</td>
                 {% if current_user.can_edit() %}

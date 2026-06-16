@@ -491,6 +491,8 @@ class ShPaymentScreenshot(db.Model):
     amount_paid = db.Column(db.Float)
     purchase_id = db.Column(db.Integer, db.ForeignKey("sh_purchases.id"))
     screenshot_filename = db.Column(db.String(255), nullable=False)
+    screenshot_data = db.Column(db.LargeBinary)
+    screenshot_mimetype = db.Column(db.String(100))
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)

@@ -25,7 +25,7 @@ from app.services.sh_traders import (
     get_party_balance_totals,
     next_gate_pass_number,
 )
-from app.services.sh_uploads import save_payment_screenshot
+from app.services.sh_uploads import apply_payment_screenshot, resolve_payment_screenshot_file, save_payment_screenshot
 
 sh_main_bp = Blueprint("sh_main", __name__, url_prefix="/sh-traders")
 
@@ -304,6 +304,16 @@ def party_balances():
     )
 
 
+@sh_main_bp.route("/payment-screenshots/<int:record_id>/file")
+@login_required
+def view_payment_screenshot(record_id):
+    record = ShPaymentScreenshot.query.get_or_404(record_id)
+    response = resolve_payment_screenshot_file(record)
+    if response is None:
+        abort(404)
+    return response
+
+
 @sh_main_bp.route("/payment-screenshots", methods=["GET", "POST"])
 @login_required
 def payment_screenshots():
@@ -330,7 +340,7 @@ def payment_screenshots():
             return redirect(url_for("sh_main.payment_screenshots"))
 
         try:
-            filename = save_payment_screenshot(screenshot)
+            prepared = save_payment_screenshot(screenshot)
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("sh_main.payment_screenshots"))
@@ -340,10 +350,10 @@ def payment_screenshots():
             supplier_company_id=supplier_id,
             amount_paid=amount_paid,
             purchase_id=purchase_id,
-            screenshot_filename=filename,
             notes=notes or None,
             created_by_id=current_user.id,
         )
+        apply_payment_screenshot(record, prepared)
         db.session.add(record)
         db.session.flush()
         log_audit(

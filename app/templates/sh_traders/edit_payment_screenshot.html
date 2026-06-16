@@ -34,7 +34,7 @@
         <div class="form-group full-width">
             <label for="screenshot">Replace File (optional)</label>
             <input type="file" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,image/*">
-            <small class="field-note">Leave blank to keep current file. <a href="{{ url_for('static', filename=record.screenshot_filename) }}" target="_blank">View current</a></small>
+            <small class="field-note">Leave blank to keep current file. <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=record.id) }}" target="_blank">View current</a></small>
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>

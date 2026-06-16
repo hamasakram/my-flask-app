@@ -35,7 +35,7 @@ from app.services.companies import (
 )
 from app.services.inventory import get_or_create_ink_type, log_audit
 from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount
-from app.services.sh_uploads import delete_payment_screenshot, save_payment_screenshot
+from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
 stock_edits_bp = Blueprint("stock_edits", __name__, url_prefix="/stock-edit")
@@ -1086,9 +1086,9 @@ def edit_sh_payment_screenshot(record_id):
 
         if screenshot and screenshot.filename:
             try:
-                new_filename = save_payment_screenshot(screenshot)
+                prepared = save_payment_screenshot(screenshot)
                 delete_payment_screenshot(record.screenshot_filename)
-                record.screenshot_filename = new_filename
+                apply_payment_screenshot(record, prepared)
             except ValueError as exc:
                 flash(str(exc), "danger")
                 return redirect(url_for("stock_edits.edit_sh_payment_screenshot", record_id=record_id))
