@@ -1,5 +1,9 @@
 """Module registry and navigation helpers."""
 
+from __future__ import annotations
+
+from typing import Optional
+
 from flask import url_for
 
 MODULE_INK = "ink"
@@ -70,7 +74,7 @@ def module_dashboard_url(module: str) -> str:
     return url_for(endpoint)
 
 
-def all_module_options(current: str | None = None):
+def all_module_options(current: Optional[str] = None):
     return [
         {
             "id": module_id,

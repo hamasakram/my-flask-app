@@ -95,7 +95,7 @@ def create_app(config_class=Config):
         if not get_active_module():
             return redirect(url_for("auth.choose_module"))
 
-        if current_user.is_dashboard_only():
+        if current_user.is_authenticated and current_user.is_dashboard_only():
             if request.endpoint not in dashboard_only_allowed_endpoints():
                 return redirect(module_dashboard_url(get_active_module()))
 

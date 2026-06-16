@@ -27,7 +27,7 @@
         <ul class="nav-links">
             {% if active_module == 'ink' %}
             <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
-            {% if not current_user.is_dashboard_only() %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Inventory</li>
             <li><a href="{{ url_for('inventory.opening_stock') }}">Opening Stock</a></li>
             <li><a href="{{ url_for('inventory.receive_stock') }}">Stock Received</a></li>
@@ -44,7 +44,7 @@
             {% endif %}
             {% elif active_module == 'materials' %}
             <li><a href="{{ url_for('materials_main.dashboard') }}" class="{% if request.endpoint == 'materials_main.dashboard' %}active{% endif %}">Dashboard</a></li>
-            {% if not current_user.is_dashboard_only() %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Materials</li>
             <li><a href="{{ url_for('materials.companies') }}">Companies</a></li>
             <li><a href="{{ url_for('materials.catalog') }}">Materials to Add</a></li>
@@ -63,7 +63,7 @@
             {% endif %}
             {% elif active_module == 'glue' %}
             <li><a href="{{ url_for('glue_main.dashboard') }}" class="{% if request.endpoint == 'glue_main.dashboard' %}active{% endif %}">Dashboard</a></li>
-            {% if not current_user.is_dashboard_only() %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Glue</li>
             <li><a href="{{ url_for('glue.companies') }}">Companies</a></li>
             <li><a href="{{ url_for('glue.catalog') }}">Items to Add</a></li>
@@ -76,7 +76,7 @@
             {% endif %}
             {% elif active_module == 'chemicals' %}
             <li><a href="{{ url_for('chemicals_main.dashboard') }}" class="{% if request.endpoint == 'chemicals_main.dashboard' %}active{% endif %}">Dashboard</a></li>
-            {% if not current_user.is_dashboard_only() %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Chemicals</li>
             <li><a href="{{ url_for('chemicals.companies') }}">Companies</a></li>
             <li><a href="{{ url_for('chemicals.catalog') }}">Items to Add</a></li>
@@ -89,7 +89,7 @@
             {% endif %}
             {% elif active_module == 'sh_traders' %}
             <li><a href="{{ url_for('sh_main.dashboard') }}" class="{% if request.endpoint == 'sh_main.dashboard' %}active{% endif %}">Dashboard</a></li>
-            {% if not current_user.is_dashboard_only() %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">SH Traders</li>
             <li><a href="{{ url_for('sh_main.suppliers') }}">Supplier Companies</a></li>
             <li><a href="{{ url_for('sh_main.clients') }}">Client Companies</a></li>
@@ -103,9 +103,10 @@
             {% endif %}
             {% elif active_module == 'home_ledger' %}
             <li><a href="{{ url_for('home_ledger.dashboard') }}" class="{% if request.endpoint == 'home_ledger.dashboard' %}active{% endif %}">Dashboard</a></li>
-            {% if not current_user.is_dashboard_only() %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Home Ledger</li>
             <li><a href="{{ url_for('home_ledger.parties') }}">Parties</a></li>
+            {% endif %}
             {% endif %}
             {% if current_user.is_admin() %}
             <li class="nav-section">Admin</li>
@@ -133,7 +134,7 @@
                 <option value="{{ mod.url }}" {% if mod.active %}selected{% endif %}>{{ mod.label }}</option>
                 {% endfor %}
             </select>
-            {% if not current_user.is_dashboard_only() and active_module != 'home_ledger' %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() and active_module != 'home_ledger' %}
             <a href="{{ url_for('pdf.builder', module=active_module) }}" class="btn btn-sm btn-primary">Generate PDF</a>
             {% endif %}
         </div>
