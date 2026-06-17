@@ -4,9 +4,10 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, u
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import BankAccount, BankLedgerEntry
+from app.models import BankAccount, BankLedgerEntry, BankTransfer
 from app.services.bank_ledger import (
     bank_account_exists,
+    create_bank_transfer,
     get_bank_balance,
     get_bank_ledger_rows,
     get_dashboard_stats,
@@ -23,6 +24,10 @@ def require_edit_access():
 
 def _parse_date(value: str):
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _all_banks():
+    return BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
 
 
 @bank_ledger_bp.route("/")
@@ -78,7 +83,7 @@ def banks():
         flash(f"Bank '{bank.display_name}' added.", "success")
         return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank.id))
 
-    bank_list = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
+    bank_list = _all_banks()
     summaries = [
         {"bank": b, "balance": get_bank_balance(b), "entry_count": b.entries.count()}
         for b in bank_list
@@ -86,13 +91,126 @@ def banks():
     return render_template("bank_ledger/banks.html", banks=summaries)
 
 
+@bank_ledger_bp.route("/transfers", methods=["GET", "POST"])
+@login_required
+def transfers():
+    all_banks = _all_banks()
+
+    if request.method == "POST":
+        require_edit_access()
+        if len(all_banks) < 2:
+            flash("Add at least two bank accounts before recording transfers.", "danger")
+            return redirect(url_for("bank_ledger.banks"))
+
+        transfer_date = request.form.get("transfer_date")
+        from_bank_id = request.form.get("from_bank_id", type=int)
+        to_bank_id = request.form.get("to_bank_id", type=int)
+        amount = request.form.get("amount", type=float)
+        reference = request.form.get("reference", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not transfer_date or not from_bank_id or not to_bank_id or not amount:
+            flash("Date, from bank, to bank, and amount are required.", "danger")
+            return redirect(url_for("bank_ledger.transfers"))
+
+        try:
+            transfer = create_bank_transfer(
+                from_bank_id=from_bank_id,
+                to_bank_id=to_bank_id,
+                transfer_date=_parse_date(transfer_date),
+                amount=amount,
+                reference=reference or None,
+                notes=notes or None,
+                created_by_id=current_user.id,
+            )
+            db.session.flush()
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "BankTransfer",
+                transfer.id,
+                f"Transfer {amount:,.2f} from #{from_bank_id} to #{to_bank_id}",
+            )
+            db.session.commit()
+            flash(
+                f"Transfer recorded — {transfer.from_bank.display_name} → "
+                f"{transfer.to_bank.display_name} (₨ {amount:,.2f}). Both ledgers updated.",
+                "success",
+            )
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("bank_ledger.transfers"))
+
+        return redirect(url_for("bank_ledger.transfers"))
+
+    transfer_list = (
+        BankTransfer.query.order_by(
+            BankTransfer.transfer_date.desc(), BankTransfer.id.desc()
+        ).all()
+    )
+    return render_template(
+        "bank_ledger/transfers.html",
+        transfers=transfer_list,
+        banks=all_banks,
+    )
+
+
 @bank_ledger_bp.route("/bank/<int:bank_id>", methods=["GET", "POST"])
 @login_required
 def bank_ledger(bank_id):
     bank = BankAccount.query.get_or_404(bank_id)
+    all_banks = _all_banks()
+    other_banks = [b for b in all_banks if b.id != bank.id]
 
     if request.method == "POST":
         require_edit_access()
+        action = request.form.get("action", "entry")
+
+        if action == "transfer":
+            if len(all_banks) < 2:
+                flash("Add another bank account to record cross-bank transfers.", "danger")
+                return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank_id))
+
+            transfer_date = request.form.get("transfer_date")
+            to_bank_id = request.form.get("to_bank_id", type=int)
+            amount = request.form.get("amount", type=float)
+            reference = request.form.get("reference", "").strip()
+            notes = request.form.get("notes", "").strip()
+
+            if not transfer_date or not to_bank_id or not amount:
+                flash("Date, destination bank, and amount are required.", "danger")
+                return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank_id))
+
+            try:
+                transfer = create_bank_transfer(
+                    from_bank_id=bank.id,
+                    to_bank_id=to_bank_id,
+                    transfer_date=_parse_date(transfer_date),
+                    amount=amount,
+                    reference=reference or None,
+                    notes=notes or None,
+                    created_by_id=current_user.id,
+                )
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "BankTransfer",
+                    transfer.id,
+                    f"Transfer from {bank.display_name} to #{to_bank_id}",
+                )
+                db.session.commit()
+                flash(
+                    f"Transfer sent to {transfer.to_bank.display_name} — "
+                    f"both bank balances updated.",
+                    "success",
+                )
+            except ValueError as exc:
+                db.session.rollback()
+                flash(str(exc), "danger")
+            return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank_id))
+
         entry_date = request.form.get("entry_date")
         deposit = request.form.get("deposit", type=float) or 0
         withdrawal = request.form.get("withdrawal", type=float) or 0
@@ -115,6 +233,7 @@ def bank_ledger(bank_id):
             entry_date=_parse_date(entry_date),
             deposit=deposit,
             withdrawal=withdrawal,
+            entry_type=BankLedgerEntry.TYPE_STANDARD,
             notes=notes or None,
             created_by_id=current_user.id,
         )
@@ -138,4 +257,5 @@ def bank_ledger(bank_id):
         bank=bank,
         ledger_rows=ledger_rows,
         current_balance=current_balance,
+        other_banks=other_banks,
     )

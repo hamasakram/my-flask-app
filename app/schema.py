@@ -51,6 +51,10 @@ COLUMN_MIGRATIONS = {
         "client_rate_per_kg": "FLOAT",
         "client_total_amount": "FLOAT",
     },
+    "bank_ledger_entries": {
+        "entry_type": "VARCHAR(20) DEFAULT 'standard'",
+        "transfer_id": "INTEGER",
+    },
 }
 
 

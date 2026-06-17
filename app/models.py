@@ -609,14 +609,69 @@ class BankAccount(db.Model):
 class BankLedgerEntry(db.Model):
     __tablename__ = "bank_ledger_entries"
 
+    TYPE_STANDARD = "standard"
+    TYPE_TRANSFER_IN = "transfer_in"
+    TYPE_TRANSFER_OUT = "transfer_out"
+
     id = db.Column(db.Integer, primary_key=True)
     bank_id = db.Column(db.Integer, db.ForeignKey("bank_accounts.id"), nullable=False)
     entry_date = db.Column(db.Date, nullable=False)
     deposit = db.Column(db.Float, nullable=False, default=0)
     withdrawal = db.Column(db.Float, nullable=False, default=0)
+    entry_type = db.Column(db.String(20), nullable=False, default=TYPE_STANDARD)
+    transfer_id = db.Column(db.Integer, db.ForeignKey("bank_transfers.id", ondelete="CASCADE"))
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     bank = db.relationship("BankAccount", back_populates="entries")
+    transfer = db.relationship("BankTransfer", back_populates="entries")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def is_transfer(self) -> bool:
+        return self.transfer_id is not None
+
+    @property
+    def type_label(self) -> str:
+        if self.entry_type == self.TYPE_TRANSFER_IN:
+            return "Transfer In"
+        if self.entry_type == self.TYPE_TRANSFER_OUT:
+            return "Transfer Out"
+        return "Standard"
+
+    @property
+    def counterparty_bank(self):
+        if not self.transfer:
+            return None
+        if self.entry_type == self.TYPE_TRANSFER_OUT:
+            return self.transfer.to_bank
+        if self.entry_type == self.TYPE_TRANSFER_IN:
+            return self.transfer.from_bank
+        return None
+
+
+class BankTransfer(db.Model):
+    """Cross-bank transfer — creates matching withdrawal and deposit entries."""
+
+    __tablename__ = "bank_transfers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    transfer_date = db.Column(db.Date, nullable=False)
+    from_bank_id = db.Column(db.Integer, db.ForeignKey("bank_accounts.id"), nullable=False)
+    to_bank_id = db.Column(db.Integer, db.ForeignKey("bank_accounts.id"), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    reference = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    from_bank = db.relationship("BankAccount", foreign_keys=[from_bank_id])
+    to_bank = db.relationship("BankAccount", foreign_keys=[to_bank_id])
+    entries = db.relationship(
+        "BankLedgerEntry",
+        back_populates="transfer",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     created_by = db.relationship("User", foreign_keys=[created_by_id])

@@ -18,6 +18,7 @@ from app.models import (
     OpeningStock,
     BankAccount,
     BankLedgerEntry,
+    BankTransfer,
     HomeLedgerEntry,
     HomeParty,
     InventoryTransaction,
@@ -35,7 +36,7 @@ from app.services.companies import (
     get_ink_companies,
     get_material_companies,
 )
-from app.services.bank_ledger import bank_account_exists
+from app.services.bank_ledger import bank_account_exists, update_bank_transfer
 from app.services.inventory import get_or_create_ink_type, log_audit
 from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount
 from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
@@ -1327,6 +1328,10 @@ def edit_bank_account(bank_id):
 def edit_bank_ledger_entry(entry_id):
     entry = BankLedgerEntry.query.get_or_404(entry_id)
 
+    if entry.is_transfer:
+        flash("Edit the full transfer to change both bank ledgers together.", "info")
+        return redirect(url_for("stock_edits.edit_bank_transfer", transfer_id=entry.transfer_id))
+
     if request.method == "POST":
         require_edit_access()
         entry_date = request.form.get("entry_date")
@@ -1365,4 +1370,57 @@ def edit_bank_ledger_entry(entry_id):
         "bank_ledger/edit_entry.html",
         entry=entry,
         cancel_url=url_for("bank_ledger.bank_ledger", bank_id=entry.bank_id),
+    )
+
+
+@stock_edits_bp.route("/bank/transfer/<int:transfer_id>", methods=["GET", "POST"])
+@login_required
+def edit_bank_transfer(transfer_id):
+    transfer = BankTransfer.query.get_or_404(transfer_id)
+    banks = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        transfer_date = request.form.get("transfer_date")
+        from_bank_id = request.form.get("from_bank_id", type=int)
+        to_bank_id = request.form.get("to_bank_id", type=int)
+        amount = request.form.get("amount", type=float)
+        reference = request.form.get("reference", "").strip()
+        notes = request.form.get("notes", "").strip()
+
+        if not transfer_date or not from_bank_id or not to_bank_id or not amount:
+            flash("All transfer fields are required.", "danger")
+            return redirect(url_for("stock_edits.edit_bank_transfer", transfer_id=transfer_id))
+
+        try:
+            update_bank_transfer(
+                transfer,
+                from_bank_id=from_bank_id,
+                to_bank_id=to_bank_id,
+                transfer_date=_parse_date(transfer_date),
+                amount=amount,
+                reference=reference or None,
+                notes=notes or None,
+            )
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "BankTransfer",
+                transfer.id,
+                f"Updated bank transfer #{transfer_id}",
+            )
+            db.session.commit()
+            flash("Transfer updated on both bank ledgers.", "success")
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("stock_edits.edit_bank_transfer", transfer_id=transfer_id))
+
+        return redirect(url_for("bank_ledger.transfers"))
+
+    return render_template(
+        "bank_ledger/edit_transfer.html",
+        transfer=transfer,
+        banks=banks,
+        cancel_url=url_for("bank_ledger.transfers"),
     )

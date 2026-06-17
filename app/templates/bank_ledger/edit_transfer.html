@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Edit Transfer - Bank Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Cross-Bank Transfer</h1>
+    <p class="page-subtitle">Changes apply to both bank ledgers automatically</p>
+</div>
+
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="transfer_date">Transfer Date</label>
+            <input type="date" id="transfer_date" name="transfer_date" value="{{ transfer.transfer_date.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="from_bank_id">From Bank</label>
+            <select id="from_bank_id" name="from_bank_id" required>
+                {% for b in banks %}
+                <option value="{{ b.id }}" {% if b.id == transfer.from_bank_id %}selected{% endif %}>{{ b.display_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="to_bank_id">To Bank</label>
+            <select id="to_bank_id" name="to_bank_id" required>
+                {% for b in banks %}
+                <option value="{{ b.id }}" {% if b.id == transfer.to_bank_id %}selected{% endif %}>{{ b.display_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="amount">Amount</label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0.01" value="{{ transfer.amount }}" required>
+        </div>
+        <div class="form-group">
+            <label for="reference">Reference / IBFT No.</label>
+            <input type="text" id="reference" name="reference" value="{{ transfer.reference or '' }}">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ transfer.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Update Transfer</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const fromSelect = document.getElementById('from_bank_id');
+    const toSelect = document.getElementById('to_bank_id');
+    if (!fromSelect || !toSelect) return;
+    function syncToOptions() {
+        const fromVal = fromSelect.value;
+        Array.from(toSelect.options).forEach(function (opt) {
+            if (!opt.value) return;
+            opt.hidden = opt.value === fromVal;
+        });
+    }
+    fromSelect.addEventListener('change', syncToOptions);
+    syncToOptions();
+})();
+</script>
+{% endblock %}

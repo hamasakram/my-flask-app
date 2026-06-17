@@ -12,6 +12,7 @@
         </p>
     </div>
     <div class="page-header-actions">
+        <a href="{{ url_for('bank_ledger.transfers') }}" class="btn btn-secondary">Transfers</a>
         <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">All Banks</a>
     </div>
 </div>
@@ -20,7 +21,7 @@
     <div class="stat-card accent-green">
         <span class="stat-label">Current Balance</span>
         <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
-        <small class="field-note">Updates when you add deposits or withdrawals</small>
+        <small class="field-note">Includes deposits, withdrawals, and cross-bank transfers</small>
     </div>
 </div>
 
@@ -29,6 +30,7 @@
     <h2>Add Ledger Entry</h2>
     <p class="field-note">Record a <strong>Deposit</strong> when money comes in, or a <strong>Withdrawal</strong> when money goes out.</p>
     <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="entry">
         <div class="form-group">
             <label for="entry_date">Date</label>
             <input type="date" id="entry_date" name="entry_date" required>
@@ -43,13 +45,51 @@
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
-            <textarea id="notes" name="notes" rows="2" placeholder="Cheque no., transfer ref., payee, etc."></textarea>
+            <textarea id="notes" name="notes" rows="2" placeholder="Cheque no., payee, etc."></textarea>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Add Entry</button>
         </div>
     </form>
 </div>
+
+{% if other_banks %}
+<div class="card highlight-card transfer-card">
+    <h2>Transfer to Another Bank</h2>
+    <p class="field-note">Send money from <strong>{{ bank.display_name }}</strong> to another account. This bank is debited and the destination bank is credited automatically.</p>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="transfer">
+        <div class="form-group">
+            <label for="transfer_date">Transfer Date</label>
+            <input type="date" id="transfer_date" name="transfer_date" required>
+        </div>
+        <div class="form-group">
+            <label for="to_bank_id">To Bank (destination)</label>
+            <select id="to_bank_id" name="to_bank_id" required>
+                <option value="">Select destination bank</option>
+                {% for b in other_banks %}
+                <option value="{{ b.id }}">{{ b.display_name }}{% if b.account_title %} — {{ b.account_title }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="transfer_amount">Amount</label>
+            <input type="number" id="transfer_amount" name="amount" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="reference">Reference / IBFT No.</label>
+            <input type="text" id="reference" name="reference" placeholder="Optional">
+        </div>
+        <div class="form-group full-width">
+            <label for="transfer_notes">Notes</label>
+            <textarea id="transfer_notes" name="notes" rows="2" placeholder="Transfer purpose or internal note"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Record Transfer</button>
+        </div>
+    </form>
+</div>
+{% endif %}
 {% endif %}
 
 <div class="card">
@@ -58,10 +98,11 @@
         <thead>
             <tr>
                 <th>Date</th>
+                <th>Type</th>
                 <th>Deposit</th>
                 <th>Withdrawal</th>
                 <th>Balance</th>
-                <th>Notes</th>
+                <th>Details</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
@@ -70,6 +111,7 @@
             {% if row.type == 'opening' %}
             <tr class="row-opening">
                 <td>—</td>
+                <td>Opening</td>
                 <td>—</td>
                 <td>—</td>
                 <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
@@ -79,20 +121,41 @@
             {% else %}
             <tr>
                 <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>
+                    {% if row.entry.entry_type == 'transfer_in' %}
+                    <span class="badge badge-green">Transfer In</span>
+                    {% elif row.entry.entry_type == 'transfer_out' %}
+                    <span class="badge badge-orange">Transfer Out</span>
+                    {% else %}
+                    <span class="badge badge-gray">Standard</span>
+                    {% endif %}
+                </td>
                 <td>{% if row.entry.deposit %}₨ {{ "{:,.2f}".format(row.entry.deposit) }}{% else %}—{% endif %}</td>
                 <td>{% if row.entry.withdrawal %}₨ {{ "{:,.2f}".format(row.entry.withdrawal) }}{% else %}—{% endif %}</td>
                 <td><strong>₨ {{ "{:,.2f}".format(row.balance) }}</strong></td>
-                <td>{{ row.entry.notes or '—' }}</td>
+                <td>
+                    {{ row.entry.notes or '—' }}
+                    {% if row.entry.counterparty_bank %}
+                    · <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=row.entry.counterparty_bank.id) }}">{{ row.entry.counterparty_bank.display_name }}</a>
+                    {% endif %}
+                </td>
                 {% if current_user.can_edit() %}
+                {% if row.entry.is_transfer %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_bank_transfer', transfer_id=row.entry.transfer_id),
+                    url_for('stock_deletes.delete_bank_transfer', transfer_id=row.entry.transfer_id)
+                ) }}
+                {% else %}
                 {{ row_actions(
                     url_for('stock_edits.edit_bank_ledger_entry', entry_id=row.entry.id),
                     url_for('stock_deletes.delete_bank_ledger_entry', entry_id=row.entry.id)
                 ) }}
                 {% endif %}
+                {% endif %}
             </tr>
             {% endif %}
             {% else %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No entries yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No entries yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -102,9 +165,13 @@
 {% block scripts %}
 <script>
 (function () {
-    const dateInput = document.getElementById('entry_date');
-    if (dateInput && !dateInput.value) {
-        dateInput.value = new Date().toISOString().slice(0, 10);
+    const entryDate = document.getElementById('entry_date');
+    if (entryDate && !entryDate.value) {
+        entryDate.value = new Date().toISOString().slice(0, 10);
+    }
+    const transferDate = document.getElementById('transfer_date');
+    if (transferDate && !transferDate.value) {
+        transferDate.value = new Date().toISOString().slice(0, 10);
     }
 })();
 </script>

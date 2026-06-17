@@ -12,6 +12,7 @@ from app.models import (
     GlueTransaction,
     BankAccount,
     BankLedgerEntry,
+    BankTransfer,
     HomeLedgerEntry,
     HomeParty,
     InventoryTransaction,
@@ -37,6 +38,7 @@ from app.services.record_delete import (
     materials_company_in_use,
 )
 from app.services.sh_uploads import delete_payment_screenshot
+from app.services.bank_ledger import bank_has_transfers
 
 stock_deletes_bp = Blueprint("stock_deletes", __name__, url_prefix="/stock-delete")
 
@@ -464,6 +466,9 @@ def delete_home_ledger_entry(entry_id):
 @login_required
 def delete_bank_account(bank_id):
     bank = BankAccount.query.get_or_404(bank_id)
+    if bank_has_transfers(bank_id):
+        flash("Cannot delete — this bank has cross-bank transfer records.", "danger")
+        return redirect(url_for("bank_ledger.banks"))
     return _delete_entity(
         bank,
         "BankAccount",
@@ -476,6 +481,22 @@ def delete_bank_account(bank_id):
 @login_required
 def delete_bank_ledger_entry(entry_id):
     entry = BankLedgerEntry.query.get_or_404(entry_id)
+    if entry.is_transfer:
+        transfer_id = entry.transfer_id
+        transfer = BankTransfer.query.get_or_404(transfer_id)
+        from_bank_id = transfer.from_bank_id
+        db.session.delete(transfer)
+        log_audit(
+            current_user.id,
+            "DELETE",
+            "BankTransfer",
+            transfer_id,
+            f"Deleted bank transfer #{transfer_id}",
+        )
+        db.session.commit()
+        flash("Transfer deleted from both bank ledgers.", "success")
+        return redirect(url_for("bank_ledger.bank_ledger", bank_id=from_bank_id))
+
     bank_id = entry.bank_id
     return _delete_entity(
         entry,
@@ -483,3 +504,21 @@ def delete_bank_ledger_entry(entry_id):
         f"Deleted bank ledger entry #{entry_id}",
         url_for("bank_ledger.bank_ledger", bank_id=bank_id),
     )
+
+
+@stock_deletes_bp.route("/bank/transfer/<int:transfer_id>", methods=["POST"])
+@login_required
+def delete_bank_transfer(transfer_id):
+    transfer = BankTransfer.query.get_or_404(transfer_id)
+    from_bank_id = transfer.from_bank_id
+    db.session.delete(transfer)
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "BankTransfer",
+        transfer_id,
+        f"Deleted bank transfer #{transfer_id}",
+    )
+    db.session.commit()
+    flash("Transfer deleted from both bank ledgers.", "success")
+    return redirect(url_for("bank_ledger.transfers"))

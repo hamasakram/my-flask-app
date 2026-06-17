@@ -112,6 +112,7 @@
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Bank Ledger</li>
             <li><a href="{{ url_for('bank_ledger.banks') }}">Bank Accounts</a></li>
+            <li><a href="{{ url_for('bank_ledger.transfers') }}">Cross-Bank Transfers</a></li>
             {% endif %}
             {% endif %}
             {% if current_user.is_admin() %}

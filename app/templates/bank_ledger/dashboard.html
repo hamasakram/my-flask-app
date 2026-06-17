@@ -18,6 +18,10 @@
         <span class="stat-label">Total Balance (All Banks)</span>
         <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_balance) }}</span>
     </div>
+    <div class="stat-card">
+        <span class="stat-label">Cross-Bank Transfers</span>
+        <span class="stat-value">{{ stats.transfer_count }}</span>
+    </div>
 </div>
 
 <div class="card">
@@ -53,6 +57,35 @@
         </tbody>
     </table>
 </div>
+
+{% if stats.recent_transfers %}
+<div class="card">
+    <h2>Recent Cross-Bank Transfers</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in stats.recent_transfers %}
+            <tr>
+                <td>{{ t.transfer_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ t.from_bank.display_name }}</td>
+                <td>{{ t.to_bank.display_name }}</td>
+                <td>₨ {{ "{:,.2f}".format(t.amount) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="quick-actions">
+        <a href="{{ url_for('bank_ledger.transfers') }}" class="btn btn-secondary">View All Transfers</a>
+    </div>
+</div>
+{% endif %}
 {% else %}
 <div class="stats-grid">
     <div class="stat-card">
@@ -66,6 +99,7 @@
 {% if current_user.can_edit() %}
 <div class="quick-actions">
     <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-primary">+ Add Bank Account</a>
+    <a href="{{ url_for('bank_ledger.transfers') }}" class="btn btn-secondary">Cross-Bank Transfer</a>
 </div>
 {% endif %}
 {% endblock %}

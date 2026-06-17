@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Cross-Bank Transfers - Bank Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Cross-Bank Transfers</h1>
+        <p class="page-subtitle">Move funds between accounts — both bank ledgers update automatically</p>
+    </div>
+</div>
+
+{% if current_user.can_edit() %}
+{% if banks|length < 2 %}
+<div class="flash flash-warning">Add at least <a href="{{ url_for('bank_ledger.banks') }}">two bank accounts</a> before recording transfers.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>New Transfer</h2>
+    <p class="field-note">Withdrawal is posted on the <strong>From</strong> bank and deposit on the <strong>To</strong> bank on the same date.</p>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="transfer_date">Transfer Date</label>
+            <input type="date" id="transfer_date" name="transfer_date" required>
+        </div>
+        <div class="form-group">
+            <label for="from_bank_id">From Bank (money out)</label>
+            <select id="from_bank_id" name="from_bank_id" required>
+                <option value="">Select source bank</option>
+                {% for b in banks %}
+                <option value="{{ b.id }}">{{ b.display_name }}{% if b.account_title %} — {{ b.account_title }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="to_bank_id">To Bank (money in)</label>
+            <select id="to_bank_id" name="to_bank_id" required>
+                <option value="">Select destination bank</option>
+                {% for b in banks %}
+                <option value="{{ b.id }}">{{ b.display_name }}{% if b.account_title %} — {{ b.account_title }}{% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="amount">Amount</label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="reference">Reference / IBFT No.</label>
+            <input type="text" id="reference" name="reference" placeholder="Optional transaction reference">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Purpose, payee, internal note, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Record Transfer</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Transfer History</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>From Bank</th>
+                <th>To Bank</th>
+                <th>Amount</th>
+                <th>Reference</th>
+                <th>Notes</th>
+                <th>Ledgers</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in transfers %}
+            <tr>
+                <td>{{ t.transfer_date.strftime('%d-%m-%Y') }}</td>
+                <td>
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.from_bank_id) }}">{{ t.from_bank.display_name }}</a>
+                </td>
+                <td>
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.to_bank_id) }}">{{ t.to_bank.display_name }}</a>
+                </td>
+                <td><strong>₨ {{ "{:,.2f}".format(t.amount) }}</strong></td>
+                <td>{{ t.reference or '—' }}</td>
+                <td>{{ t.notes or '—' }}</td>
+                <td class="ledger-links">
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.from_bank_id) }}" class="btn btn-sm btn-secondary">From</a>
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.to_bank_id) }}" class="btn btn-sm btn-secondary">To</a>
+                </td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_bank_transfer', transfer_id=t.id),
+                    url_for('stock_deletes.delete_bank_transfer', transfer_id=t.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No cross-bank transfers yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const dateInput = document.getElementById('transfer_date');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+    const fromSelect = document.getElementById('from_bank_id');
+    const toSelect = document.getElementById('to_bank_id');
+    if (!fromSelect || !toSelect) return;
+    function syncToOptions() {
+        const fromVal = fromSelect.value;
+        Array.from(toSelect.options).forEach(function (opt) {
+            if (!opt.value) return;
+            opt.hidden = opt.value === fromVal;
+            if (opt.value === fromVal && toSelect.value === fromVal) {
+                toSelect.value = '';
+            }
+        });
+    }
+    fromSelect.addEventListener('change', syncToOptions);
+    syncToOptions();
+})();
+</script>
+{% endblock %}
