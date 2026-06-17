@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Bank Accounts - Bank Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Bank Accounts</h1>
+    <p class="page-subtitle">Add bank details — each account gets its own ledger page</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Bank Account</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="bank_name">Bank Name</label>
+            <input type="text" id="bank_name" name="bank_name" placeholder="e.g. HBL, Meezan, UBL" required>
+        </div>
+        <div class="form-group">
+            <label for="account_title">Account Title</label>
+            <input type="text" id="account_title" name="account_title" placeholder="Account holder name">
+        </div>
+        <div class="form-group">
+            <label for="account_number">Account Number</label>
+            <input type="text" id="account_number" name="account_number" placeholder="IBAN or account no.">
+        </div>
+        <div class="form-group">
+            <label for="branch">Branch</label>
+            <input type="text" id="branch" name="branch" placeholder="Branch name or city">
+        </div>
+        <div class="form-group">
+            <label for="opening_balance">Opening Balance</label>
+            <input type="number" id="opening_balance" name="opening_balance" step="0.01" value="0" required>
+            <small class="field-note">Starting balance for this bank account</small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save &amp; Open Ledger</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Bank Accounts</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Bank</th>
+                <th>Account Title</th>
+                <th>Branch</th>
+                <th>Opening</th>
+                <th>Balance</th>
+                <th>Entries</th>
+                <th>Ledger</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in banks %}
+            <tr>
+                <td><strong>{{ item.bank.display_name }}</strong></td>
+                <td>{{ item.bank.account_title or '—' }}</td>
+                <td>{{ item.bank.branch or '—' }}</td>
+                <td>₨ {{ "{:,.2f}".format(item.bank.opening_balance) }}</td>
+                <td class="{% if item.balance < 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(item.balance) }}</td>
+                <td>{{ item.entry_count }}</td>
+                <td>
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=item.bank.id) }}" class="btn btn-sm btn-primary">Ledger</a>
+                </td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_bank_account', bank_id=item.bank.id),
+                    url_for('stock_deletes.delete_bank_account', bank_id=item.bank.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No bank accounts yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

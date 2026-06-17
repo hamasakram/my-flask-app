@@ -53,6 +53,13 @@
             <p>Personal party payments — separate ledger per party with auto balance.</p>
             <button type="submit" class="btn btn-primary btn-block">Open</button>
         </form>
+        <form method="POST" class="module-card module-card-bank">
+            <input type="hidden" name="module" value="bank_ledger">
+            <div class="module-card-icon">🏦</div>
+            <h2>Bank Ledger</h2>
+            <p>Add bank accounts — each bank gets its own ledger with deposits & withdrawals.</p>
+            <button type="submit" class="btn btn-primary btn-block">Open</button>
+        </form>
     </div>
 </div>
 {% endblock %}

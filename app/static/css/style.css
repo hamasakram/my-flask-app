@@ -463,6 +463,7 @@ textarea { resize: vertical; min-height: 4rem; }
 .module-card-chemicals { border-top: 4px solid #059669; }
 .module-card-sh { border-top: 4px solid #2563eb; }
 .module-card-home { border-top: 4px solid #7c3aed; }
+.module-card-bank { border-top: 4px solid #0ea5e9; }
 
 .category-options {
     display: flex;

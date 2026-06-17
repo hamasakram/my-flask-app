@@ -10,6 +10,8 @@ from app.models import (
     GlueItem,
     GlueOpeningStock,
     GlueTransaction,
+    BankAccount,
+    BankLedgerEntry,
     HomeLedgerEntry,
     HomeParty,
     InventoryTransaction,
@@ -452,4 +454,32 @@ def delete_home_ledger_entry(entry_id):
         "HomeLedgerEntry",
         f"Deleted home ledger entry #{entry_id}",
         url_for("home_ledger.party_ledger", party_id=party_id),
+    )
+
+
+# --- Bank Ledger ---
+
+
+@stock_deletes_bp.route("/bank/account/<int:bank_id>", methods=["POST"])
+@login_required
+def delete_bank_account(bank_id):
+    bank = BankAccount.query.get_or_404(bank_id)
+    return _delete_entity(
+        bank,
+        "BankAccount",
+        f"Deleted bank account: {bank.display_name}",
+        url_for("bank_ledger.banks"),
+    )
+
+
+@stock_deletes_bp.route("/bank/ledger/<int:entry_id>", methods=["POST"])
+@login_required
+def delete_bank_ledger_entry(entry_id):
+    entry = BankLedgerEntry.query.get_or_404(entry_id)
+    bank_id = entry.bank_id
+    return _delete_entity(
+        entry,
+        "BankLedgerEntry",
+        f"Deleted bank ledger entry #{entry_id}",
+        url_for("bank_ledger.bank_ledger", bank_id=bank_id),
     )

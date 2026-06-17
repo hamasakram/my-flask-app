@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Edit Bank Account - Bank Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Bank Account</h1>
+</div>
+
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="bank_name">Bank Name</label>
+            <input type="text" id="bank_name" name="bank_name" value="{{ bank.bank_name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="account_title">Account Title</label>
+            <input type="text" id="account_title" name="account_title" value="{{ bank.account_title or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="account_number">Account Number</label>
+            <input type="text" id="account_number" name="account_number" value="{{ bank.account_number or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="branch">Branch</label>
+            <input type="text" id="branch" name="branch" value="{{ bank.branch or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="opening_balance">Opening Balance</label>
+            <input type="number" id="opening_balance" name="opening_balance" step="0.01" value="{{ bank.opening_balance }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ bank.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

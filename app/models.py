@@ -577,3 +577,46 @@ class HomeLedgerEntry(db.Model):
 
     party = db.relationship("HomeParty", back_populates="entries")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class BankAccount(db.Model):
+    """Bank account in Bank Ledger — each account gets its own ledger page."""
+
+    __tablename__ = "bank_accounts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_name = db.Column(db.String(150), nullable=False)
+    account_title = db.Column(db.String(150))
+    account_number = db.Column(db.String(50))
+    branch = db.Column(db.String(150))
+    opening_balance = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    entries = db.relationship(
+        "BankLedgerEntry", back_populates="bank", lazy="dynamic", cascade="all, delete-orphan"
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def display_name(self) -> str:
+        if self.account_number:
+            return f"{self.bank_name} — {self.account_number}"
+        return self.bank_name
+
+
+class BankLedgerEntry(db.Model):
+    __tablename__ = "bank_ledger_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("bank_accounts.id"), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    deposit = db.Column(db.Float, nullable=False, default=0)
+    withdrawal = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("BankAccount", back_populates="entries")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])

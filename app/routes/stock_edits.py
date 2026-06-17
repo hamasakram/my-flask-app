@@ -16,6 +16,8 @@ from app.models import (
     MaterialOpeningStock,
     MaterialTransaction,
     OpeningStock,
+    BankAccount,
+    BankLedgerEntry,
     HomeLedgerEntry,
     HomeParty,
     InventoryTransaction,
@@ -33,6 +35,7 @@ from app.services.companies import (
     get_ink_companies,
     get_material_companies,
 )
+from app.services.bank_ledger import bank_account_exists
 from app.services.inventory import get_or_create_ink_type, log_audit
 from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount
 from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
@@ -1273,4 +1276,93 @@ def edit_home_ledger_entry(entry_id):
         "home_ledger/edit_entry.html",
         entry=entry,
         cancel_url=url_for("home_ledger.party_ledger", party_id=entry.party_id),
+    )
+
+
+# --- Bank Ledger ---
+
+
+@stock_edits_bp.route("/bank/account/<int:bank_id>", methods=["GET", "POST"])
+@login_required
+def edit_bank_account(bank_id):
+    bank = BankAccount.query.get_or_404(bank_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        bank_name = request.form.get("bank_name", "").strip()
+        account_title = request.form.get("account_title", "").strip()
+        account_number = request.form.get("account_number", "").strip()
+        branch = request.form.get("branch", "").strip()
+        opening_balance = request.form.get("opening_balance", type=float) or 0
+        notes = request.form.get("notes", "").strip()
+
+        if not bank_name:
+            flash("Bank name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_bank_account", bank_id=bank_id))
+
+        if bank_account_exists(bank_name, account_number or None, exclude_id=bank_id):
+            flash("This bank account already exists.", "danger")
+            return redirect(url_for("stock_edits.edit_bank_account", bank_id=bank_id))
+
+        bank.bank_name = bank_name
+        bank.account_title = account_title or None
+        bank.account_number = account_number or None
+        bank.branch = branch or None
+        bank.opening_balance = opening_balance
+        bank.notes = notes or None
+        log_audit(current_user.id, "UPDATE", "BankAccount", bank.id, f"Updated bank: {bank.display_name}")
+        db.session.commit()
+        flash("Bank account updated.", "success")
+        return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank_id))
+
+    return render_template(
+        "bank_ledger/edit_bank.html",
+        bank=bank,
+        cancel_url=url_for("bank_ledger.bank_ledger", bank_id=bank_id),
+    )
+
+
+@stock_edits_bp.route("/bank/ledger/<int:entry_id>", methods=["GET", "POST"])
+@login_required
+def edit_bank_ledger_entry(entry_id):
+    entry = BankLedgerEntry.query.get_or_404(entry_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        entry_date = request.form.get("entry_date")
+        deposit = request.form.get("deposit", type=float) or 0
+        withdrawal = request.form.get("withdrawal", type=float) or 0
+        notes = request.form.get("notes", "").strip()
+
+        if not entry_date:
+            flash("Entry date is required.", "danger")
+            return redirect(url_for("stock_edits.edit_bank_ledger_entry", entry_id=entry_id))
+
+        if deposit <= 0 and withdrawal <= 0:
+            flash("Enter a deposit or withdrawal amount.", "danger")
+            return redirect(url_for("stock_edits.edit_bank_ledger_entry", entry_id=entry_id))
+
+        if deposit > 0 and withdrawal > 0:
+            flash("Enter either deposit or withdrawal, not both.", "danger")
+            return redirect(url_for("stock_edits.edit_bank_ledger_entry", entry_id=entry_id))
+
+        entry.entry_date = _parse_date(entry_date)
+        entry.deposit = deposit
+        entry.withdrawal = withdrawal
+        entry.notes = notes or None
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "BankLedgerEntry",
+            entry.id,
+            f"Updated bank ledger entry #{entry_id}",
+        )
+        db.session.commit()
+        flash("Ledger entry updated.", "success")
+        return redirect(url_for("bank_ledger.bank_ledger", bank_id=entry.bank_id))
+
+    return render_template(
+        "bank_ledger/edit_entry.html",
+        entry=entry,
+        cancel_url=url_for("bank_ledger.bank_ledger", bank_id=entry.bank_id),
     )

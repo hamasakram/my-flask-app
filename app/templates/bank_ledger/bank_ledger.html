@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}{{ bank.display_name }} - Bank Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>{{ bank.display_name }}</h1>
+        <p class="page-subtitle">
+            {% if bank.account_title %}{{ bank.account_title }}{% endif %}
+            {% if bank.branch %} · {{ bank.branch }}{% endif %}
+            · Opening: ₨ {{ "{:,.2f}".format(bank.opening_balance) }}
+        </p>
+    </div>
+    <div class="page-header-actions">
+        <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">All Banks</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Current Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
+        <small class="field-note">Updates when you add deposits or withdrawals</small>
+    </div>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Ledger Entry</h2>
+    <p class="field-note">Record a <strong>Deposit</strong> when money comes in, or a <strong>Withdrawal</strong> when money goes out.</p>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="entry_date">Date</label>
+            <input type="date" id="entry_date" name="entry_date" required>
+        </div>
+        <div class="form-group">
+            <label for="deposit">Deposit (money in)</label>
+            <input type="number" id="deposit" name="deposit" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="withdrawal">Withdrawal (money out)</label>
+            <input type="number" id="withdrawal" name="withdrawal" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Cheque no., transfer ref., payee, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Entry</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Bank Ledger — {{ bank.display_name }}</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Deposit</th>
+                <th>Withdrawal</th>
+                <th>Balance</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in ledger_rows %}
+            {% if row.type == 'opening' %}
+            <tr class="row-opening">
+                <td>—</td>
+                <td>—</td>
+                <td>—</td>
+                <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
+                <td>Opening balance{% if bank.notes %} — {{ bank.notes }}{% endif %}</td>
+                {% if current_user.can_edit() %}<td>—</td>{% endif %}
+            </tr>
+            {% else %}
+            <tr>
+                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>{% if row.entry.deposit %}₨ {{ "{:,.2f}".format(row.entry.deposit) }}{% else %}—{% endif %}</td>
+                <td>{% if row.entry.withdrawal %}₨ {{ "{:,.2f}".format(row.entry.withdrawal) }}{% else %}—{% endif %}</td>
+                <td><strong>₨ {{ "{:,.2f}".format(row.balance) }}</strong></td>
+                <td>{{ row.entry.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_bank_ledger_entry', entry_id=row.entry.id),
+                    url_for('stock_deletes.delete_bank_ledger_entry', entry_id=row.entry.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% endif %}
+            {% else %}
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No entries yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const dateInput = document.getElementById('entry_date');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+    }
+})();
+</script>
+{% endblock %}

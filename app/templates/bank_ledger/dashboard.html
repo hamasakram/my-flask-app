@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Bank Ledger Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Bank Ledger</h1>
+        <p class="page-subtitle">Separate ledger for each bank account — balance updates automatically</p>
+    </div>
+</div>
+
+{% if current_user.can_view_sensitive() %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Bank Accounts</span>
+        <span class="stat-value">{{ stats.bank_count }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total Balance (All Banks)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_balance) }}</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>All Bank Accounts</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Bank</th>
+                <th>Account Title</th>
+                <th>Branch</th>
+                <th>Opening</th>
+                <th>Current Balance</th>
+                <th>Ledger</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in stats.banks %}
+            <tr>
+                <td><strong>{{ item.bank.display_name }}</strong></td>
+                <td>{{ item.bank.account_title or '—' }}</td>
+                <td>{{ item.bank.branch or '—' }}</td>
+                <td>₨ {{ "{:,.2f}".format(item.bank.opening_balance) }}</td>
+                <td class="{% if item.balance < 0 %}text-danger{% elif item.balance > 0 %}text-success{% endif %}">
+                    <strong>₨ {{ "{:,.2f}".format(item.balance) }}</strong>
+                </td>
+                <td>
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=item.bank.id) }}" class="btn btn-sm btn-primary">Open Ledger</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty">No bank accounts yet — add your first bank</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Bank Accounts</span>
+        <span class="stat-value">{{ stats.bank_count }}</span>
+    </div>
+</div>
+<div class="flash flash-info">View-only access — bank balances and transaction details are hidden.</div>
+{% endif %}
+
+{% if current_user.can_edit() %}
+<div class="quick-actions">
+    <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-primary">+ Add Bank Account</a>
+</div>
+{% endif %}
+{% endblock %}

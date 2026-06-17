@@ -12,6 +12,7 @@ MODULE_GLUE = "glue"
 MODULE_CHEMICALS = "chemicals"
 MODULE_SH_TRADERS = "sh_traders"
 MODULE_HOME_LEDGER = "home_ledger"
+MODULE_BANK_LEDGER = "bank_ledger"
 
 SESSION_KEY = "stock_module"
 
@@ -22,6 +23,7 @@ ALL_MODULES = (
     MODULE_CHEMICALS,
     MODULE_SH_TRADERS,
     MODULE_HOME_LEDGER,
+    MODULE_BANK_LEDGER,
 )
 
 MODULE_LABELS = {
@@ -31,6 +33,7 @@ MODULE_LABELS = {
     MODULE_CHEMICALS: "Chemicals Management",
     MODULE_SH_TRADERS: "SH Traders",
     MODULE_HOME_LEDGER: "Home Ledger",
+    MODULE_BANK_LEDGER: "Bank Ledger",
 }
 
 MODULE_DASHBOARD_ENDPOINTS = {
@@ -40,6 +43,7 @@ MODULE_DASHBOARD_ENDPOINTS = {
     MODULE_CHEMICALS: "chemicals_main.dashboard",
     MODULE_SH_TRADERS: "sh_main.dashboard",
     MODULE_HOME_LEDGER: "home_ledger.dashboard",
+    MODULE_BANK_LEDGER: "bank_ledger.dashboard",
 }
 
 MATERIAL_CATEGORIES = ("PET", "METALIZE", "LD")
