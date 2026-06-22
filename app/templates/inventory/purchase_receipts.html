@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Purchase Receipts - Ink{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Ink Purchase Receipts</h1>
+    <p class="page-subtitle">Upload receipt screenshots for stock purchased — link to stock received when needed</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Upload Purchase Receipt</h2>
+    <form method="POST" enctype="multipart/form-data" class="form-grid">
+        <div class="form-group">
+            <label for="receipt_date">Receipt Date</label>
+            <input type="date" id="receipt_date" name="receipt_date" required>
+        </div>
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for c in companies %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="title">Description</label>
+            <input type="text" id="title" name="title" placeholder="e.g. Cyan ink purchase">
+        </div>
+        <div class="form-group">
+            <label for="amount">Amount (optional)</label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label for="inventory_transaction_id">Link to Stock Received (optional)</label>
+            <select id="inventory_transaction_id" name="inventory_transaction_id">
+                <option value="">None</option>
+                {% for t in received_txns %}
+                <option value="{{ t.id }}">{{ t.transaction_date.strftime('%d-%m-%Y') }} — {{ t.ink_type.name }} ({{ t.quantity }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group full-width">
+            <label for="screenshot">Receipt / Invoice File</label>
+            <input type="file" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,image/*" required>
+            <small class="field-note">PNG, JPG, GIF, WEBP, or PDF — max 10 MB</small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Upload Receipt</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Uploaded Receipts</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Company</th>
+                <th>Description</th>
+                <th>Amount</th>
+                <th>Stock Received</th>
+                <th>File</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.receipt_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ r.company.name }}</td>
+                <td>{{ r.title or '—' }}</td>
+                <td>{% if r.amount %}₨ {{ "{:,.2f}".format(r.amount) }}{% else %}—{% endif %}</td>
+                <td>{% if r.inventory_transaction %}#{{ r.inventory_transaction.id }} — {{ r.inventory_transaction.ink_type.name }}{% else %}—{% endif %}</td>
+                <td>
+                    <a href="{{ url_for('inventory.view_purchase_receipt', record_id=r.id) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
+                </td>
+                <td>{{ r.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_ink_purchase_receipt', record_id=r.id),
+                    url_for('stock_deletes.delete_ink_purchase_receipt', record_id=r.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No purchase receipts uploaded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const d = document.getElementById('receipt_date');
+    if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
+})();
+</script>
+{% endblock %}

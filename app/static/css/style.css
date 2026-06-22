@@ -287,6 +287,7 @@ main.with-sidebar {
 .btn-secondary:hover { background: #cbd5e1; }
 .btn-danger { background: #c62828; color: white; }
 .btn-danger:hover { background: #b71c1c; }
+.danger-card { border-left: 4px solid #c62828; }
 .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.8rem; }
 .table-actions { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
 .inline-action-form { display: inline; margin: 0; }

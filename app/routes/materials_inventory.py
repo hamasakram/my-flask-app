@@ -1,12 +1,14 @@
 from datetime import datetime
+from pathlib import Path
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction
+from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction, StockPurchaseReceipt
 from app.services.companies import get_material_companies
 from app.services.inventory import log_audit
+from app.services.receipt_uploads import apply_receipt_file, resolve_receipt_file, save_receipt_upload
 from app.services.weights import parse_manual_weights
 from app.services.materials_inventory import (
     calculate_live_stock,
@@ -17,6 +19,7 @@ from app.services.materials_inventory import (
 )
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials/inventory")
+MATERIALS_RECEIPT_DIR = Path("uploads") / "materials" / "receipts"
 
 
 def require_edit_access():
@@ -388,4 +391,89 @@ def live_inventory():
         companies=companies,
         selected_company=company_id,
         material_search=request.args.get("material", ""),
+    )
+
+
+@materials_bp.route("/purchase-receipts/<int:record_id>/file")
+@login_required
+def view_purchase_receipt(record_id):
+    record = StockPurchaseReceipt.query.filter_by(
+        id=record_id, module=StockPurchaseReceipt.MODULE_MATERIALS
+    ).first_or_404()
+
+    def backfill(rec, data, mimetype):
+        rec.screenshot_data = data
+        rec.screenshot_mimetype = mimetype
+        db.session.commit()
+
+    return resolve_receipt_file(record, backfill=backfill)
+
+
+@materials_bp.route("/purchase-receipts", methods=["GET", "POST"])
+@login_required
+def purchase_receipts():
+    companies = get_material_companies()
+
+    if request.method == "POST":
+        require_edit_access()
+        receipt_date = request.form.get("receipt_date")
+        company_id = request.form.get("company_id", type=int)
+        transaction_id = request.form.get("material_transaction_id", type=int) or None
+        title = request.form.get("title", "").strip()
+        amount = request.form.get("amount", type=float)
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not receipt_date or not company_id:
+            flash("Receipt date and company are required.", "danger")
+            return redirect(url_for("materials.purchase_receipts"))
+
+        try:
+            prepared = save_receipt_upload(screenshot, MATERIALS_RECEIPT_DIR)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("materials.purchase_receipts"))
+
+        record = StockPurchaseReceipt(
+            module=StockPurchaseReceipt.MODULE_MATERIALS,
+            receipt_date=datetime.strptime(receipt_date, "%Y-%m-%d").date(),
+            company_id=company_id,
+            material_transaction_id=transaction_id,
+            title=title or None,
+            amount=amount,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        apply_receipt_file(record, prepared)
+        db.session.add(record)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "StockPurchaseReceipt",
+            record.id,
+            f"Materials purchase receipt for company #{company_id}",
+        )
+        db.session.commit()
+        flash("Purchase receipt uploaded.", "success")
+        return redirect(url_for("materials.purchase_receipts"))
+
+    records = (
+        StockPurchaseReceipt.query.filter_by(module=StockPurchaseReceipt.MODULE_MATERIALS)
+        .order_by(StockPurchaseReceipt.receipt_date.desc(), StockPurchaseReceipt.id.desc())
+        .all()
+    )
+    received_txns = (
+        MaterialTransaction.query.filter_by(
+            transaction_type=MaterialTransaction.TRANSACTION_RECEIVED
+        )
+        .order_by(MaterialTransaction.transaction_date.desc(), MaterialTransaction.id.desc())
+        .limit(100)
+        .all()
+    )
+    return render_template(
+        "materials/purchase_receipts.html",
+        records=records,
+        companies=companies,
+        received_txns=received_txns,
     )

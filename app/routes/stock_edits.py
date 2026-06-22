@@ -22,6 +22,7 @@ from app.models import (
     HomeLedgerEntry,
     HomeParty,
     InventoryTransaction,
+    StockPurchaseReceipt,
     ShClientCompany,
     ShGatePass,
     ShLedgerEntry,
@@ -38,11 +39,16 @@ from app.services.companies import (
 )
 from app.services.bank_ledger import bank_account_exists, update_bank_transfer
 from app.services.inventory import get_or_create_ink_type, log_audit
+from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount
 from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
+from pathlib import Path
+
 stock_edits_bp = Blueprint("stock_edits", __name__, url_prefix="/stock-edit")
+INK_RECEIPT_DIR = Path("uploads") / "ink" / "receipts"
+MATERIALS_RECEIPT_DIR = Path("uploads") / "materials" / "receipts"
 
 
 def require_edit_access():
@@ -1423,4 +1429,107 @@ def edit_bank_transfer(transfer_id):
         transfer=transfer,
         banks=banks,
         cancel_url=url_for("bank_ledger.transfers"),
+    )
+
+
+# --- Purchase Receipts ---
+
+
+def _edit_purchase_receipt(record_id, module, receipt_dir, redirect_endpoint, template_name):
+    record = StockPurchaseReceipt.query.filter_by(id=record_id, module=module).first_or_404()
+
+    if request.method == "POST":
+        require_edit_access()
+        receipt_date = request.form.get("receipt_date")
+        company_id = request.form.get("company_id", type=int)
+        title = request.form.get("title", "").strip()
+        amount = request.form.get("amount", type=float)
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not receipt_date or not company_id:
+            flash("Receipt date and company are required.", "danger")
+            return redirect(request.url)
+
+        record.receipt_date = _parse_date(receipt_date)
+        record.company_id = company_id
+        record.title = title or None
+        record.amount = amount
+        record.notes = notes or None
+
+        if module == StockPurchaseReceipt.MODULE_INK:
+            record.inventory_transaction_id = (
+                request.form.get("inventory_transaction_id", type=int) or None
+            )
+        else:
+            record.material_transaction_id = (
+                request.form.get("material_transaction_id", type=int) or None
+            )
+
+        if screenshot and screenshot.filename:
+            try:
+                prepared = save_receipt_upload(screenshot, receipt_dir)
+                delete_receipt_file(record.screenshot_filename)
+                apply_receipt_file(record, prepared)
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(request.url)
+
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "StockPurchaseReceipt",
+            record.id,
+            f"Updated purchase receipt #{record_id}",
+        )
+        db.session.commit()
+        flash("Purchase receipt updated.", "success")
+        return redirect(url_for(redirect_endpoint))
+
+    if module == StockPurchaseReceipt.MODULE_INK:
+        companies = get_ink_companies()
+        received_txns = InventoryTransaction.query.filter_by(
+            transaction_type=InventoryTransaction.TRANSACTION_RECEIVED
+        ).order_by(InventoryTransaction.transaction_date.desc()).limit(100).all()
+        cancel_url = url_for("inventory.purchase_receipts")
+        view_url = url_for("inventory.view_purchase_receipt", record_id=record.id)
+    else:
+        companies = get_material_companies()
+        received_txns = MaterialTransaction.query.filter_by(
+            transaction_type=MaterialTransaction.TRANSACTION_RECEIVED
+        ).order_by(MaterialTransaction.transaction_date.desc()).limit(100).all()
+        cancel_url = url_for("materials.purchase_receipts")
+        view_url = url_for("materials.view_purchase_receipt", record_id=record.id)
+
+    return render_template(
+        template_name,
+        record=record,
+        companies=companies,
+        received_txns=received_txns,
+        cancel_url=cancel_url,
+        view_url=view_url,
+    )
+
+
+@stock_edits_bp.route("/ink/purchase-receipt/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_ink_purchase_receipt(record_id):
+    return _edit_purchase_receipt(
+        record_id,
+        StockPurchaseReceipt.MODULE_INK,
+        INK_RECEIPT_DIR,
+        "inventory.purchase_receipts",
+        "inventory/edit_purchase_receipt.html",
+    )
+
+
+@stock_edits_bp.route("/materials/purchase-receipt/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_materials_purchase_receipt(record_id):
+    return _edit_purchase_receipt(
+        record_id,
+        StockPurchaseReceipt.MODULE_MATERIALS,
+        MATERIALS_RECEIPT_DIR,
+        "materials.purchase_receipts",
+        "materials/edit_purchase_receipt.html",
     )

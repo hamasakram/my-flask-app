@@ -308,10 +308,13 @@ def party_balances():
 @login_required
 def view_payment_screenshot(record_id):
     record = ShPaymentScreenshot.query.get_or_404(record_id)
-    response = resolve_payment_screenshot_file(record)
-    if response is None:
-        abort(404)
-    return response
+
+    def backfill(rec, data, mimetype):
+        rec.screenshot_data = data
+        rec.screenshot_mimetype = mimetype
+        db.session.commit()
+
+    return resolve_payment_screenshot_file(record, backfill_fn=backfill)
 
 
 @sh_main_bp.route("/payment-screenshots", methods=["GET", "POST"])

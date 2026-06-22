@@ -1,10 +1,11 @@
 from datetime import datetime
+from pathlib import Path
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Company, InkType, InventoryTransaction, OpeningStock
+from app.models import Company, InkType, InventoryTransaction, OpeningStock, StockPurchaseReceipt
 from app.services.companies import get_ink_companies
 from app.services.inventory import (
     calculate_used_from_left,
@@ -13,9 +14,11 @@ from app.services.inventory import (
     get_stock_usage_records,
     log_audit,
 )
+from app.services.receipt_uploads import apply_receipt_file, resolve_receipt_file, save_receipt_upload
 from app.services.weights import parse_manual_weights
 
 inventory_bp = Blueprint("inventory", __name__, url_prefix="/inventory")
+INK_RECEIPT_DIR = Path("uploads") / "ink" / "receipts"
 
 
 def require_edit_access():
@@ -293,4 +296,89 @@ def live_inventory():
         companies=companies,
         selected_company=company_id,
         ink_search=request.args.get("ink", ""),
+    )
+
+
+@inventory_bp.route("/purchase-receipts/<int:record_id>/file")
+@login_required
+def view_purchase_receipt(record_id):
+    record = StockPurchaseReceipt.query.filter_by(
+        id=record_id, module=StockPurchaseReceipt.MODULE_INK
+    ).first_or_404()
+
+    def backfill(rec, data, mimetype):
+        rec.screenshot_data = data
+        rec.screenshot_mimetype = mimetype
+        db.session.commit()
+
+    return resolve_receipt_file(record, backfill=backfill)
+
+
+@inventory_bp.route("/purchase-receipts", methods=["GET", "POST"])
+@login_required
+def purchase_receipts():
+    companies = get_ink_companies()
+
+    if request.method == "POST":
+        require_edit_access()
+        receipt_date = request.form.get("receipt_date")
+        company_id = request.form.get("company_id", type=int)
+        transaction_id = request.form.get("inventory_transaction_id", type=int) or None
+        title = request.form.get("title", "").strip()
+        amount = request.form.get("amount", type=float)
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not receipt_date or not company_id:
+            flash("Receipt date and company are required.", "danger")
+            return redirect(url_for("inventory.purchase_receipts"))
+
+        try:
+            prepared = save_receipt_upload(screenshot, INK_RECEIPT_DIR)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("inventory.purchase_receipts"))
+
+        record = StockPurchaseReceipt(
+            module=StockPurchaseReceipt.MODULE_INK,
+            receipt_date=datetime.strptime(receipt_date, "%Y-%m-%d").date(),
+            company_id=company_id,
+            inventory_transaction_id=transaction_id,
+            title=title or None,
+            amount=amount,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        apply_receipt_file(record, prepared)
+        db.session.add(record)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "StockPurchaseReceipt",
+            record.id,
+            f"Ink purchase receipt for company #{company_id}",
+        )
+        db.session.commit()
+        flash("Purchase receipt uploaded.", "success")
+        return redirect(url_for("inventory.purchase_receipts"))
+
+    records = (
+        StockPurchaseReceipt.query.filter_by(module=StockPurchaseReceipt.MODULE_INK)
+        .order_by(StockPurchaseReceipt.receipt_date.desc(), StockPurchaseReceipt.id.desc())
+        .all()
+    )
+    received_txns = (
+        InventoryTransaction.query.filter_by(
+            transaction_type=InventoryTransaction.TRANSACTION_RECEIVED
+        )
+        .order_by(InventoryTransaction.transaction_date.desc(), InventoryTransaction.id.desc())
+        .limit(100)
+        .all()
+    )
+    return render_template(
+        "inventory/purchase_receipts.html",
+        records=records,
+        companies=companies,
+        received_txns=received_txns,
     )

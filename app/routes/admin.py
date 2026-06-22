@@ -4,6 +4,7 @@ from flask_login import current_user, login_required
 from app import db
 from app.models import AppSetting, InkType, User
 from app.services.inventory import log_audit
+from app.services.stock_reset import reset_ink_stock_data, reset_materials_stock_data
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -104,3 +105,51 @@ def users():
 
     all_users = User.query.order_by(User.username).all()
     return render_template("users.html", users=all_users, roles=User.ROLES)
+
+
+@admin_bp.route("/reset-ink-stock", methods=["POST"])
+@login_required
+def reset_ink_stock():
+    require_admin()
+    if request.form.get("confirm") != "RESET INK":
+        flash('Type "RESET INK" to confirm clearing all ink stock data.', "danger")
+        return redirect(url_for("admin.settings"))
+
+    counts = reset_ink_stock_data()
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "StockReset",
+        None,
+        f"Ink stock reset: {counts}",
+    )
+    flash(
+        f"Ink stock cleared — {counts['opening']} opening, "
+        f"{counts['transactions']} transactions, {counts['receipts']} receipts removed.",
+        "success",
+    )
+    return redirect(url_for("admin.settings"))
+
+
+@admin_bp.route("/reset-materials-stock", methods=["POST"])
+@login_required
+def reset_materials_stock():
+    require_admin()
+    if request.form.get("confirm") != "RESET MATERIALS":
+        flash('Type "RESET MATERIALS" to confirm clearing all materials stock data.', "danger")
+        return redirect(url_for("admin.settings"))
+
+    counts = reset_materials_stock_data()
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "StockReset",
+        None,
+        f"Materials stock reset: {counts}",
+    )
+    flash(
+        f"Materials stock cleared — {counts['opening']} opening, "
+        f"{counts['transactions']} transactions, {counts['receipts']} receipts removed.",
+        "success",
+    )
+    return redirect(url_for("admin.settings"))

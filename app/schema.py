@@ -145,6 +145,8 @@ def ensure_schema():
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)
     _add_column_if_missing("sh_payment_screenshots", "screenshot_mimetype", "VARCHAR(100)")
+    _add_column_if_missing("stock_purchase_receipts", "screenshot_data", blob_type)
+    _add_column_if_missing("stock_purchase_receipts", "screenshot_mimetype", "VARCHAR(100)")
 
     inspector = inspect(db.engine)
     if inspector.has_table("companies"):

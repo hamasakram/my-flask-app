@@ -37,4 +37,21 @@
         </tbody>
     </table>
 </div>
+
+<div class="card danger-card">
+    <h2>Reset Stock Data (Fresh Start)</h2>
+    <p class="field-note">Clears opening stock, all received/used transactions, and purchase receipts. Companies and item catalogs are kept. Use this before entering official opening stock.</p>
+    <div class="form-grid">
+        <form method="POST" action="{{ url_for('admin.reset_ink_stock') }}" class="form-group">
+            <label for="confirm_ink">Reset Ink Stock</label>
+            <input type="text" id="confirm_ink" name="confirm" placeholder='Type RESET INK to confirm'>
+            <button type="submit" class="btn btn-danger btn-sm" style="margin-top:0.5rem">Clear Ink Stock Data</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin.reset_materials_stock') }}" class="form-group">
+            <label for="confirm_materials">Reset Materials Stock</label>
+            <input type="text" id="confirm_materials" name="confirm" placeholder='Type RESET MATERIALS to confirm'>
+            <button type="submit" class="btn btn-danger btn-sm" style="margin-top:0.5rem">Clear Materials Stock Data</button>
+        </form>
+    </div>
+</div>
 {% endblock %}

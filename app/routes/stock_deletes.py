@@ -20,6 +20,7 @@ from app.models import (
     MaterialOpeningStock,
     MaterialTransaction,
     OpeningStock,
+    StockPurchaseReceipt,
     ShClientCompany,
     ShGatePass,
     ShLedgerEntry,
@@ -37,6 +38,7 @@ from app.services.record_delete import (
     material_in_use,
     materials_company_in_use,
 )
+from app.services.receipt_uploads import delete_receipt_file
 from app.services.sh_uploads import delete_payment_screenshot
 from app.services.bank_ledger import bank_has_transfers
 
@@ -522,3 +524,40 @@ def delete_bank_transfer(transfer_id):
     db.session.commit()
     flash("Transfer deleted from both bank ledgers.", "success")
     return redirect(url_for("bank_ledger.transfers"))
+
+
+# --- Purchase Receipts ---
+
+
+def _delete_purchase_receipt(record_id, module, redirect_endpoint):
+    require_edit_access()
+    record = StockPurchaseReceipt.query.filter_by(id=record_id, module=module).first_or_404()
+    filename = record.screenshot_filename
+    db.session.delete(record)
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "StockPurchaseReceipt",
+        record_id,
+        f"Deleted purchase receipt #{record_id}",
+    )
+    db.session.commit()
+    delete_receipt_file(filename)
+    flash("Purchase receipt deleted.", "success")
+    return redirect(url_for(redirect_endpoint))
+
+
+@stock_deletes_bp.route("/ink/purchase-receipt/<int:record_id>", methods=["POST"])
+@login_required
+def delete_ink_purchase_receipt(record_id):
+    return _delete_purchase_receipt(
+        record_id, StockPurchaseReceipt.MODULE_INK, "inventory.purchase_receipts"
+    )
+
+
+@stock_deletes_bp.route("/materials/purchase-receipt/<int:record_id>", methods=["POST"])
+@login_required
+def delete_materials_purchase_receipt(record_id):
+    return _delete_purchase_receipt(
+        record_id, StockPurchaseReceipt.MODULE_MATERIALS, "materials.purchase_receipts"
+    )

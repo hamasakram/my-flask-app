@@ -195,6 +195,39 @@ class MaterialTransaction(db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
+class StockPurchaseReceipt(db.Model):
+    """Purchase receipt screenshot for ink or materials stock received."""
+
+    __tablename__ = "stock_purchase_receipts"
+
+    MODULE_INK = "ink"
+    MODULE_MATERIALS = "materials"
+
+    id = db.Column(db.Integer, primary_key=True)
+    module = db.Column(db.String(20), nullable=False)
+    receipt_date = db.Column(db.Date, nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    inventory_transaction_id = db.Column(
+        db.Integer, db.ForeignKey("inventory_transactions.id"), nullable=True
+    )
+    material_transaction_id = db.Column(
+        db.Integer, db.ForeignKey("material_transactions.id"), nullable=True
+    )
+    title = db.Column(db.String(200))
+    amount = db.Column(db.Float)
+    screenshot_filename = db.Column(db.String(255), nullable=False)
+    screenshot_data = db.Column(db.LargeBinary)
+    screenshot_mimetype = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    company = db.relationship("Company")
+    inventory_transaction = db.relationship("InventoryTransaction")
+    material_transaction = db.relationship("MaterialTransaction")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
 class GlueItem(db.Model):
     __tablename__ = "glue_items"
 
