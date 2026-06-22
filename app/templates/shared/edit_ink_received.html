@@ -4,12 +4,11 @@
 {% block content %}
 <div class="page-header">
     <h1>Edit Stock Received</h1>
-    <p class="page-subtitle">Update a previously saved receipt record</p>
+    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.ink_type.name }}</p>
 </div>
 
-{% if current_user.can_edit() %}
-<div class="card highlight-card">
-    <form method="POST" class="form-grid" id="receive-form">
+<div class="card">
+    <form method="POST" class="form-grid">
         <div class="form-group">
             <label for="company_id">Company</label>
             <select id="company_id" name="company_id" required>
@@ -19,31 +18,20 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" value="{{ txn.ink_type.name }}" required>
-        </div>
-        <div class="form-group">
-            <label for="color_code">Color Code</label>
-            <input type="text" id="color_code" name="color_code" value="{{ txn.ink_type.color_code or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="unit_type">Unit Type</label>
-            <select id="unit_type" name="unit_type">
-                <option value="">Select unit</option>
-                {% for unit in unit_types %}
-                <option value="{{ unit }}" {% if txn.ink_type.unit_type == unit %}selected{% endif %}>{{ unit }}</option>
-                {% endfor %}
+            <label for="ink_type_id">Ink</label>
+            <select id="ink_type_id" name="ink_type_id" required>
+                <option value="">Loading...</option>
             </select>
         </div>
         <div class="form-group">
-            <label for="quantity">Quantity Received</label>
+            <label for="quantity">Quantity</label>
             <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
         </div>
         {{ manual_weight_fields(
-            gross_value=txn.gross_weight if txn.gross_weight is not none else '',
+            gross_value=txn.gross_weight or '',
             tw_value=txn.tw if txn.tw is not none else '',
-            net_value=txn.net_weight if txn.net_weight is not none else '',
-            wpq_value=txn.weight_per_quantity if txn.weight_per_quantity is not none else ''
+            net_value=txn.net_weight or '',
+            wpq_value=txn.weight_per_quantity or ''
         ) }}
         <div class="form-group">
             <label for="transaction_date">Receipt Date</label>
@@ -59,5 +47,32 @@
         </div>
     </form>
 </div>
-{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const inkSelect = document.getElementById('ink_type_id');
+const selectedInkId = '{{ txn.ink_type_id }}';
+
+async function loadInks(companyId, selectId) {
+    inkSelect.innerHTML = '<option value="">Loading...</option>';
+    const res = await fetch(`/inventory/api/inks/${companyId}`);
+    const inks = await res.json();
+    inkSelect.innerHTML = '<option value="">Select ink</option>';
+    inks.forEach(ink => {
+        const opt = document.createElement('option');
+        opt.value = ink.id;
+        opt.textContent = ink.name + (ink.color_code ? ` (${ink.color_code})` : '');
+        if (String(ink.id) === String(selectId)) opt.selected = true;
+        inkSelect.appendChild(opt);
+    });
+}
+
+companySelect?.addEventListener('change', function() {
+    if (this.value) loadInks(this.value, '');
+});
+
+if (companySelect.value) loadInks(companySelect.value, selectedInkId);
+</script>
 {% endblock %}

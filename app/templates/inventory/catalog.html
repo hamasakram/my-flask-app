@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Inks to Add - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Inks to Add</h1>
+    <p class="page-subtitle">Register inks here first — then use them in opening stock, received, and used entries</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add New Ink</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="company_id">Company</label>
+            <select id="company_id" name="company_id" required>
+                <option value="">Select company</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}">{{ company.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="ink_name">Ink Name</label>
+            <input type="text" id="ink_name" name="ink_name" placeholder="e.g. Cyan Process" required>
+        </div>
+        <div class="form-group">
+            <label for="color_code">Color Code</label>
+            <input type="text" id="color_code" name="color_code" placeholder="e.g. PMS 186 C">
+        </div>
+        <div class="form-group">
+            <label for="unit_type">Unit Type</label>
+            <select id="unit_type" name="unit_type">
+                <option value="">Select unit</option>
+                {% for unit in unit_types %}
+                <option value="{{ unit }}">{{ unit }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Ink</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Inks</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Company</th>
+                <th>Ink</th>
+                <th>Color Code</th>
+                <th>Unit</th>
+                <th>Added</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for ink in inks %}
+            <tr>
+                <td>{{ ink.company.name }}</td>
+                <td><strong>{{ ink.name }}</strong></td>
+                <td>{{ ink.color_code or '—' }}</td>
+                <td>{{ ink.unit_type or '—' }}</td>
+                <td>{{ ink.created_at.strftime('%d-%m-%Y') }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_ink_catalog', ink_id=ink.id),
+                    url_for('stock_deletes.delete_ink_catalog', ink_id=ink.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No inks saved yet — add your first ink above</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

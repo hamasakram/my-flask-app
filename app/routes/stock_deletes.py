@@ -15,6 +15,7 @@ from app.models import (
     BankTransfer,
     HomeLedgerEntry,
     HomeParty,
+    InkType,
     InventoryTransaction,
     Material,
     MaterialOpeningStock,
@@ -35,6 +36,7 @@ from app.services.record_delete import (
     chemicals_company_in_use,
     glue_company_in_use,
     glue_item_in_use,
+    ink_type_in_use,
     material_in_use,
     materials_company_in_use,
 )
@@ -100,6 +102,22 @@ def delete_ink_opening(record_id):
         "OpeningStock",
         f"Deleted opening stock #{record_id}",
         url_for("inventory.opening_stock"),
+    )
+
+
+@stock_deletes_bp.route("/ink/catalog/<int:ink_id>", methods=["POST"])
+@login_required
+def delete_ink_catalog(ink_id):
+    require_edit_access()
+    ink = InkType.query.get_or_404(ink_id)
+    if ink_type_in_use(ink_id):
+        flash("Cannot delete — this ink has opening stock or transaction records.", "danger")
+        return redirect(url_for("inventory.catalog"))
+    return _delete_entity(
+        ink,
+        "InkType",
+        f"Deleted ink: {ink.name}",
+        url_for("inventory.catalog"),
     )
 
 

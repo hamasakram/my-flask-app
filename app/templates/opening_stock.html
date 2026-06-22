@@ -4,17 +4,17 @@
 {% block content %}
 <div class="page-header">
     <h1>Opening Stock</h1>
-    <p class="page-subtitle">Set opening stock after purchase/usage records from 1 June are entered</p>
+    <p class="page-subtitle">Set official opening stock — add inks in <a href="{{ url_for('inventory.catalog') }}">Inks to Add</a> first</p>
 </div>
 
 <div class="card workflow-card">
     <h2>Setup Order</h2>
     <ol class="workflow-list">
-        <li>First enter <strong>Stock Received</strong> and <strong>Stock Used</strong> dated from <strong>1 June</strong> (e.g. through 11 June).</li>
-        <li>Then add opening stock here with the correct <strong>As of Date</strong>.</li>
-        <li>Live stock updates automatically: <strong>Opening + Received − Used</strong>.</li>
+        <li>Add inks in <strong>Inks to Add</strong>.</li>
+        <li>Enter <strong>Stock Received</strong> and <strong>Stock Used</strong> from your official start date.</li>
+        <li>Set opening stock here with the correct <strong>As of Date</strong>.</li>
+        <li>Live stock = <strong>Opening + Received − Used</strong>.</li>
     </ol>
-    <p class="field-note">While opening stock is not set, live stock counts as <strong>0 + Received − Used</strong>.</p>
 </div>
 
 {% if current_user.can_edit() %}
@@ -31,21 +31,9 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" placeholder="Type ink name" required list="ink-suggestions">
-            <datalist id="ink-suggestions"></datalist>
-        </div>
-        <div class="form-group">
-            <label for="color_code">Color Code</label>
-            <input type="text" id="color_code" name="color_code" placeholder="e.g. PMS 186 C">
-        </div>
-        <div class="form-group">
-            <label for="unit_type">Unit Type</label>
-            <select id="unit_type" name="unit_type">
-                <option value="">Select unit</option>
-                {% for unit in unit_types %}
-                <option value="{{ unit }}">{{ unit }}</option>
-                {% endfor %}
+            <label for="ink_type_id">Ink</label>
+            <select id="ink_type_id" name="ink_type_id" required disabled>
+                <option value="">Select company first</option>
             </select>
         </div>
         <div class="form-group">
@@ -64,6 +52,7 @@
             <button type="submit" class="btn btn-primary">Save Opening Stock</button>
         </div>
     </form>
+    <p class="field-note">Add inks in <a href="{{ url_for('inventory.catalog') }}">Inks to Add</a> before recording opening stock.</p>
 </div>
 {% endif %}
 
@@ -96,18 +85,28 @@
 
 {% block scripts %}
 <script>
-document.getElementById('company_id')?.addEventListener('change', async function() {
-    const list = document.getElementById('ink-suggestions');
-    list.innerHTML = '';
-    if (!this.value) return;
+const companySelect = document.getElementById('company_id');
+const inkSelect = document.getElementById('ink_type_id');
+
+companySelect?.addEventListener('change', async function() {
+    inkSelect.innerHTML = '<option value="">Loading...</option>';
+    inkSelect.disabled = true;
+    if (!this.value) {
+        inkSelect.innerHTML = '<option value="">Select company first</option>';
+        return;
+    }
     const res = await fetch(`/inventory/api/inks/${this.value}`);
     const inks = await res.json();
+    inkSelect.innerHTML = '<option value="">Select ink</option>';
     inks.forEach(ink => {
         const opt = document.createElement('option');
-        opt.value = ink.name;
-        list.appendChild(opt);
+        opt.value = ink.id;
+        opt.textContent = ink.name + (ink.color_code ? ` (${ink.color_code})` : '');
+        inkSelect.appendChild(opt);
     });
+    inkSelect.disabled = false;
 });
+
 document.getElementById('as_of_date').valueAsDate = new Date();
 </script>
 {% endblock %}

@@ -125,7 +125,8 @@ def reset_ink_stock():
     )
     flash(
         f"Ink stock cleared — {counts['opening']} opening, "
-        f"{counts['transactions']} transactions, {counts['receipts']} receipts removed.",
+        f"{counts['transactions']} transactions, {counts['receipts']} receipts, "
+        f"{counts['catalog']} catalog inks removed.",
         "success",
     )
     return redirect(url_for("admin.settings"))
@@ -149,7 +150,8 @@ def reset_materials_stock():
     )
     flash(
         f"Materials stock cleared — {counts['opening']} opening, "
-        f"{counts['transactions']} transactions, {counts['receipts']} receipts removed.",
+        f"{counts['transactions']} transactions, {counts['receipts']} receipts, "
+        f"{counts['catalog']} catalog materials removed.",
         "success",
     )
     return redirect(url_for("admin.settings"))

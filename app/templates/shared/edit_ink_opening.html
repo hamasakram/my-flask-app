@@ -6,7 +6,6 @@
     <p class="page-subtitle">{{ record.company.name }} — {{ record.ink_type.name }}</p>
 </div>
 
-{% if current_user.can_edit() %}
 <div class="card">
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -18,20 +17,9 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" value="{{ record.ink_type.name }}" required>
-        </div>
-        <div class="form-group">
-            <label for="color_code">Color Code</label>
-            <input type="text" id="color_code" name="color_code" value="{{ record.ink_type.color_code or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="unit_type">Unit Type</label>
-            <select id="unit_type" name="unit_type">
-                <option value="">Select unit</option>
-                {% for unit in unit_types %}
-                <option value="{{ unit }}" {% if record.ink_type.unit_type == unit %}selected{% endif %}>{{ unit }}</option>
-                {% endfor %}
+            <label for="ink_type_id">Ink</label>
+            <select id="ink_type_id" name="ink_type_id" required>
+                <option value="">Loading...</option>
             </select>
         </div>
         <div class="form-group">
@@ -52,5 +40,32 @@
         </div>
     </form>
 </div>
-{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const companySelect = document.getElementById('company_id');
+const inkSelect = document.getElementById('ink_type_id');
+const selectedInkId = '{{ record.ink_type_id }}';
+
+async function loadInks(companyId, selectId) {
+    inkSelect.innerHTML = '<option value="">Loading...</option>';
+    const res = await fetch(`/inventory/api/inks/${companyId}`);
+    const inks = await res.json();
+    inkSelect.innerHTML = '<option value="">Select ink</option>';
+    inks.forEach(ink => {
+        const opt = document.createElement('option');
+        opt.value = ink.id;
+        opt.textContent = ink.name + (ink.color_code ? ` (${ink.color_code})` : '');
+        if (String(ink.id) === String(selectId)) opt.selected = true;
+        inkSelect.appendChild(opt);
+    });
+}
+
+companySelect?.addEventListener('change', function() {
+    if (this.value) loadInks(this.value, '');
+});
+
+if (companySelect.value) loadInks(companySelect.value, selectedInkId);
+</script>
 {% endblock %}

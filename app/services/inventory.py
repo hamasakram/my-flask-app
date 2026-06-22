@@ -13,6 +13,7 @@ def get_or_create_ink_type(
     color_code: str = "",
     unit_type: str = "",
 ) -> InkType:
+    """Legacy helper — prefer create_ink_type + catalog selection in forms."""
     cleaned = ink_name.strip()
     if not cleaned:
         raise ValueError("Ink name is required.")
@@ -24,6 +25,23 @@ def get_or_create_ink_type(
         if unit_type:
             ink.unit_type = unit_type.strip()
         return ink
+
+    return create_ink_type(company_id, cleaned, color_code=color_code, unit_type=unit_type)
+
+
+def create_ink_type(
+    company_id: int,
+    ink_name: str,
+    color_code: str = "",
+    unit_type: str = "",
+) -> InkType:
+    cleaned = ink_name.strip()
+    if not cleaned:
+        raise ValueError("Ink name is required.")
+
+    existing = InkType.query.filter_by(company_id=company_id, name=cleaned).first()
+    if existing:
+        raise ValueError(f"Ink '{cleaned}' already exists for this company.")
 
     ink = InkType(
         company_id=company_id,

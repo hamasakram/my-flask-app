@@ -9,7 +9,7 @@ from app.models import Company, InkType, InventoryTransaction, OpeningStock, Sto
 from app.services.companies import get_ink_companies
 from app.services.inventory import (
     calculate_used_from_left,
-    get_or_create_ink_type,
+    create_ink_type,
     get_recent_received_records,
     get_stock_usage_records,
     log_audit,
@@ -26,9 +26,9 @@ def require_edit_access():
         abort(403)
 
 
-@inventory_bp.route("/opening-stock", methods=["GET", "POST"])
+@inventory_bp.route("/catalog", methods=["GET", "POST"])
 @login_required
-def opening_stock():
+def catalog():
     companies = get_ink_companies()
 
     if request.method == "POST":
@@ -37,18 +37,66 @@ def opening_stock():
         ink_name = request.form.get("ink_name", "").strip()
         color_code = request.form.get("color_code", "").strip()
         unit_type = request.form.get("unit_type", "").strip()
+
+        if not company_id or not ink_name:
+            flash("Company and ink name are required.", "danger")
+            return redirect(url_for("inventory.catalog"))
+
+        try:
+            ink = create_ink_type(
+                company_id, ink_name, color_code=color_code, unit_type=unit_type
+            )
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "InkType",
+                ink.id,
+                f"Ink added: {ink.name}",
+            )
+            db.session.commit()
+            flash(f"Ink '{ink.name}' added to catalog.", "success")
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+
+        return redirect(url_for("inventory.catalog"))
+
+    inks = (
+        InkType.query.join(Company)
+        .order_by(Company.name, InkType.name)
+        .all()
+    )
+    return render_template(
+        "inventory/catalog.html",
+        companies=companies,
+        inks=inks,
+        unit_types=("Can", "Drum", "Tin"),
+    )
+
+
+@inventory_bp.route("/opening-stock", methods=["GET", "POST"])
+@login_required
+def opening_stock():
+    companies = get_ink_companies()
+
+    if request.method == "POST":
+        require_edit_access()
+        company_id = request.form.get("company_id", type=int)
+        ink_type_id = request.form.get("ink_type_id", type=int)
         quantity = request.form.get("quantity", type=float)
         as_of_date = request.form.get("as_of_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not ink_name or quantity is None or not as_of_date:
-            flash("Company, ink name, quantity, and date are required.", "danger")
+        if not company_id or not ink_type_id or quantity is None or not as_of_date:
+            flash("Company, ink, quantity, and date are required.", "danger")
+            return redirect(url_for("inventory.opening_stock"))
+
+        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        if not ink:
+            flash("Select a valid ink for this company.", "danger")
             return redirect(url_for("inventory.opening_stock"))
 
         try:
-            ink = get_or_create_ink_type(
-                company_id, ink_name, color_code=color_code, unit_type=unit_type
-            )
             parsed_date = datetime.strptime(as_of_date, "%Y-%m-%d").date()
 
             existing = OpeningStock.query.filter_by(
@@ -108,27 +156,27 @@ def opening_stock():
 @inventory_bp.route("/receive", methods=["GET", "POST"])
 @login_required
 def receive_stock():
-    """Stock Received - user types ink name manually; stored in database."""
+    """Stock Received — select ink from catalog."""
     companies = get_ink_companies()
 
     if request.method == "POST":
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
-        ink_name = request.form.get("ink_name", "").strip()
-        color_code = request.form.get("color_code", "").strip()
-        unit_type = request.form.get("unit_type", "").strip()
+        ink_type_id = request.form.get("ink_type_id", type=int)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not ink_name or not quantity or quantity <= 0 or not transaction_date:
-            flash("Company, ink name, valid quantity, and date are required.", "danger")
+        if not company_id or not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
+            flash("Company, ink, valid quantity, and date are required.", "danger")
+            return redirect(url_for("inventory.receive_stock"))
+
+        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        if not ink:
+            flash("Select a valid ink for this company.", "danger")
             return redirect(url_for("inventory.receive_stock"))
 
         try:
-            ink = get_or_create_ink_type(
-                company_id, ink_name, color_code=color_code, unit_type=unit_type
-            )
             parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
             weights = parse_manual_weights(request.form)
 
@@ -274,7 +322,17 @@ def get_company_inks(company_id):
         .order_by(InkType.name)
         .all()
     )
-    return jsonify([{"id": ink.id, "name": ink.name} for ink in inks])
+    return jsonify(
+        [
+            {
+                "id": ink.id,
+                "name": ink.name,
+                "color_code": ink.color_code or "",
+                "unit_type": ink.unit_type or "",
+            }
+            for ink in inks
+        ]
+    )
 
 
 @inventory_bp.route("/live")

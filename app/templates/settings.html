@@ -40,7 +40,7 @@
 
 <div class="card danger-card">
     <h2>Reset Stock Data (Fresh Start)</h2>
-    <p class="field-note">Clears opening stock, all received/used transactions, and purchase receipts. Companies and item catalogs are kept. Use this before entering official opening stock.</p>
+    <p class="field-note">Clears opening stock, transactions, purchase receipts, and all saved inks/materials. Companies are kept. Use before entering official opening stock.</p>
     <div class="form-grid">
         <form method="POST" action="{{ url_for('admin.reset_ink_stock') }}" class="form-group">
             <label for="confirm_ink">Reset Ink Stock</label>

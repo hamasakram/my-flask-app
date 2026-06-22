@@ -118,6 +118,7 @@
 
 {% if current_user.can_edit() %}
 <div class="quick-actions">
+    <a href="{{ url_for('inventory.catalog') }}" class="btn btn-secondary">+ Add Ink</a>
     <a href="{{ url_for('inventory.receive_stock') }}" class="btn btn-primary">+ Stock Received</a>
     <a href="{{ url_for('inventory.use_stock') }}" class="btn btn-secondary">− Stock Used</a>
     <a href="{{ url_for('inventory.opening_stock') }}" class="btn btn-secondary">Opening Stock</a>

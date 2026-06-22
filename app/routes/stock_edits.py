@@ -21,6 +21,7 @@ from app.models import (
     BankTransfer,
     HomeLedgerEntry,
     HomeParty,
+    InkType,
     InventoryTransaction,
     StockPurchaseReceipt,
     ShClientCompany,
@@ -38,7 +39,7 @@ from app.services.companies import (
     get_material_companies,
 )
 from app.services.bank_ledger import bank_account_exists, update_bank_transfer
-from app.services.inventory import get_or_create_ink_type, log_audit
+from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount
 from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
@@ -73,21 +74,21 @@ def edit_ink_received(txn_id):
     if request.method == "POST":
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
-        ink_name = request.form.get("ink_name", "").strip()
-        color_code = request.form.get("color_code", "").strip()
-        unit_type = request.form.get("unit_type", "").strip()
+        ink_type_id = request.form.get("ink_type_id", type=int)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not ink_name or not quantity or quantity <= 0 or not transaction_date:
-            flash("Company, ink name, valid quantity, and date are required.", "danger")
+        if not company_id or not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
+            flash("Company, ink, valid quantity, and date are required.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_received", txn_id=txn_id))
+
+        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        if not ink:
+            flash("Select a valid ink for this company.", "danger")
             return redirect(url_for("stock_edits.edit_ink_received", txn_id=txn_id))
 
         try:
-            ink = get_or_create_ink_type(
-                company_id, ink_name, color_code=color_code, unit_type=unit_type
-            )
             weights = parse_manual_weights(request.form)
             txn.company_id = company_id
             txn.ink_type_id = ink.id
@@ -169,21 +170,21 @@ def edit_ink_opening(record_id):
     if request.method == "POST":
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
-        ink_name = request.form.get("ink_name", "").strip()
-        color_code = request.form.get("color_code", "").strip()
-        unit_type = request.form.get("unit_type", "").strip()
+        ink_type_id = request.form.get("ink_type_id", type=int)
         quantity = request.form.get("quantity", type=float)
         as_of_date = request.form.get("as_of_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not ink_name or quantity is None or not as_of_date:
-            flash("Company, ink name, quantity, and date are required.", "danger")
+        if not company_id or not ink_type_id or quantity is None or not as_of_date:
+            flash("Company, ink, quantity, and date are required.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_opening", record_id=record_id))
+
+        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        if not ink:
+            flash("Select a valid ink for this company.", "danger")
             return redirect(url_for("stock_edits.edit_ink_opening", record_id=record_id))
 
         try:
-            ink = get_or_create_ink_type(
-                company_id, ink_name, color_code=color_code, unit_type=unit_type
-            )
             record.company_id = company_id
             record.ink_type_id = ink.id
             record.quantity = quantity
@@ -660,6 +661,46 @@ def edit_materials_company(company_id):
         company=company,
         module_label="Materials",
         cancel_url=url_for("materials.companies"),
+    )
+
+
+@stock_edits_bp.route("/ink/catalog/<int:ink_id>", methods=["GET", "POST"])
+@login_required
+def edit_ink_catalog(ink_id):
+    ink = InkType.query.get_or_404(ink_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        ink_name = request.form.get("ink_name", "").strip()
+        color_code = request.form.get("color_code", "").strip()
+        unit_type = request.form.get("unit_type", "").strip()
+
+        if not ink_name:
+            flash("Ink name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_catalog", ink_id=ink_id))
+
+        existing = InkType.query.filter(
+            InkType.company_id == ink.company_id,
+            InkType.name == ink_name,
+            InkType.id != ink_id,
+        ).first()
+        if existing:
+            flash("This ink name already exists for this company.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_catalog", ink_id=ink_id))
+
+        ink.name = ink_name
+        ink.color_code = color_code or None
+        ink.unit_type = unit_type or None
+        log_audit(current_user.id, "UPDATE", "InkType", ink.id, f"Updated ink: {ink_name}")
+        db.session.commit()
+        flash("Ink updated.", "success")
+        return redirect(url_for("inventory.catalog"))
+
+    return render_template(
+        "shared/edit_ink_catalog.html",
+        ink=ink,
+        unit_types=("Can", "Drum", "Tin"),
+        cancel_url=url_for("inventory.catalog"),
     )
 
 

@@ -50,6 +50,16 @@ def material_in_use(material_id: int) -> bool:
     return False
 
 
+def ink_type_in_use(ink_type_id: int) -> bool:
+    from app.models import InkType, InventoryTransaction, OpeningStock
+
+    if OpeningStock.query.filter_by(ink_type_id=ink_type_id).count():
+        return True
+    if InventoryTransaction.query.filter_by(ink_type_id=ink_type_id).count():
+        return True
+    return False
+
+
 def glue_item_in_use(item_id: int) -> bool:
     if GlueOpeningStock.query.filter_by(item_id=item_id).count():
         return True
