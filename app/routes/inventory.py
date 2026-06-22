@@ -26,6 +26,46 @@ def require_edit_access():
         abort(403)
 
 
+@inventory_bp.route("/companies", methods=["GET", "POST"])
+@login_required
+def companies():
+    if request.method == "POST":
+        require_edit_access()
+        company_name = request.form.get("company_name", "").strip()
+
+        if not company_name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("inventory.companies"))
+
+        existing = Company.query.filter_by(name=company_name).first()
+        if existing:
+            if existing.scope == Company.SCOPE_INK:
+                flash("This company already exists in Ink Stock.", "warning")
+            else:
+                flash(
+                    "This company name is already used in another module. Choose a different name.",
+                    "danger",
+                )
+            return redirect(url_for("inventory.companies"))
+
+        company = Company(name=company_name, scope=Company.SCOPE_INK)
+        db.session.add(company)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "Company",
+            company.id,
+            f"Ink company added: {company_name}",
+        )
+        db.session.commit()
+        flash(f"Company '{company_name}' added.", "success")
+        return redirect(url_for("inventory.companies"))
+
+    ink_companies = get_ink_companies()
+    return render_template("inventory/companies.html", companies=ink_companies)
+
+
 @inventory_bp.route("/catalog", methods=["GET", "POST"])
 @login_required
 def catalog():

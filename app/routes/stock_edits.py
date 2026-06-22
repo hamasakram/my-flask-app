@@ -664,6 +664,39 @@ def edit_materials_company(company_id):
     )
 
 
+@stock_edits_bp.route("/ink/company/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_ink_company(company_id):
+    company = Company.query.get_or_404(company_id)
+    if company.scope != Company.SCOPE_INK:
+        abort(404)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Company name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_company", company_id=company_id))
+
+        existing = Company.query.filter(Company.name == name, Company.id != company_id).first()
+        if existing:
+            flash("This company name is already in use.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_company", company_id=company_id))
+
+        company.name = name
+        log_audit(current_user.id, "UPDATE", "Company", company.id, f"Renamed ink company to {name}")
+        db.session.commit()
+        flash("Company updated.", "success")
+        return redirect(url_for("inventory.companies"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="Ink Stock",
+        cancel_url=url_for("inventory.companies"),
+    )
+
+
 @stock_edits_bp.route("/ink/catalog/<int:ink_id>", methods=["GET", "POST"])
 @login_required
 def edit_ink_catalog(ink_id):

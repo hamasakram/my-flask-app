@@ -36,6 +36,7 @@ from app.services.record_delete import (
     chemicals_company_in_use,
     glue_company_in_use,
     glue_item_in_use,
+    ink_company_in_use,
     ink_type_in_use,
     material_in_use,
     materials_company_in_use,
@@ -102,6 +103,24 @@ def delete_ink_opening(record_id):
         "OpeningStock",
         f"Deleted opening stock #{record_id}",
         url_for("inventory.opening_stock"),
+    )
+
+
+@stock_deletes_bp.route("/ink/company/<int:company_id>", methods=["POST"])
+@login_required
+def delete_ink_company(company_id):
+    require_edit_access()
+    company = Company.query.get_or_404(company_id)
+    if company.scope != Company.SCOPE_INK:
+        abort(404)
+    if ink_company_in_use(company_id):
+        flash("Cannot delete — this company has inks or stock records.", "danger")
+        return redirect(url_for("inventory.companies"))
+    return _delete_entity(
+        company,
+        "Company",
+        f"Deleted ink company: {company.name}",
+        url_for("inventory.companies"),
     )
 
 

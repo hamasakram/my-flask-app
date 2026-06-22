@@ -6,10 +6,23 @@ from app.models import (
     GlueItem,
     GlueOpeningStock,
     GlueTransaction,
+    InkType,
+    InventoryTransaction,
     Material,
     MaterialOpeningStock,
     MaterialTransaction,
+    OpeningStock,
 )
+
+
+def ink_company_in_use(company_id: int) -> bool:
+    if InkType.query.filter_by(company_id=company_id).count():
+        return True
+    if OpeningStock.query.filter_by(company_id=company_id).count():
+        return True
+    if InventoryTransaction.query.filter_by(company_id=company_id).count():
+        return True
+    return False
 
 
 def materials_company_in_use(company_id: int) -> bool:

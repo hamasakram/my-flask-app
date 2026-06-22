@@ -29,6 +29,7 @@
             <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Inventory</li>
+            <li><a href="{{ url_for('inventory.companies') }}">Companies</a></li>
             <li><a href="{{ url_for('inventory.catalog') }}">Inks to Add</a></li>
             <li><a href="{{ url_for('inventory.opening_stock') }}">Opening Stock</a></li>
             <li><a href="{{ url_for('inventory.receive_stock') }}">Stock Received</a></li>

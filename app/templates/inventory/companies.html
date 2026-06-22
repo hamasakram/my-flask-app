@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Companies - Ink Stock{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Companies</h1>
+    <p class="page-subtitle">Add company names for the Ink Stock module</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Company</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group full-width">
+            <label for="company_name">Company Name</label>
+            <input
+                type="text"
+                id="company_name"
+                name="company_name"
+                placeholder="Enter company / production unit name"
+                required
+            >
+            <small class="field-note">Companies here are used when adding inks and recording stock.</small>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Company</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Companies</h2>
+    <table class="data-table">
+        <thead><tr><th>Company Name</th><th>Added On</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
+        <tbody>
+            {% for company in companies %}
+            <tr>
+                <td>{{ company.name }}</td>
+                <td>{{ company.created_at.strftime('%d-%m-%Y') }}</td>
+                {{ row_actions(
+                    url_for('stock_edits.edit_ink_company', company_id=company.id),
+                    url_for('stock_deletes.delete_ink_company', company_id=company.id)
+                ) }}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 3 if current_user.can_edit() else 2 }}" class="empty">No companies yet — add your first company above</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
