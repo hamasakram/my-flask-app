@@ -4,15 +4,16 @@
 {% block content %}
 <div class="page-header">
     <h1>Opening Stock</h1>
-    <p class="page-subtitle">Set official opening stock — add inks in <a href="{{ url_for('inventory.catalog') }}">Inks to Add</a> first</p>
+    <p class="page-subtitle">Set opening stock for stored backup — add inks in <a href="{{ url_for('inventory.catalog') }}">Inks to Add</a> first</p>
 </div>
 
 <div class="card workflow-card">
     <h2>Setup Order</h2>
     <ol class="workflow-list">
         <li>Add inks in <strong>Inks to Add</strong>.</li>
-        <li>Enter <strong>Stock Received</strong> and <strong>Stock Used</strong> from your official start date.</li>
-        <li>Set opening stock here with the correct <strong>As of Date</strong>.</li>
+        <li>Set <strong>Opening Stock</strong> and record <strong>Stock Received</strong> — both go to stored backup.</li>
+        <li><strong>Issue from Storage</strong> when ink is needed on press.</li>
+        <li>Record <strong>Stock Used</strong> against in-use quantities only.</li>
         <li>Live stock = <strong>Opening + Received − Used</strong>.</li>
     </ol>
 </div>

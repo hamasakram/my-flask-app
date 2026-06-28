@@ -7,11 +7,15 @@
 
 <div class="stats-grid">
     <div class="stat-card accent-green">
-        <span class="stat-label">Total Received</span>
+        <span class="stat-label">Received (Stored)</span>
         <span class="stat-value">{{ "%.1f"|format(received) }}</span>
     </div>
+    <div class="stat-card">
+        <span class="stat-label">Issued to Use</span>
+        <span class="stat-value">{{ "%.1f"|format(issued|default(0)) }}</span>
+    </div>
     <div class="stat-card accent-orange">
-        <span class="stat-label">Total Used</span>
+        <span class="stat-label">Used</span>
         <span class="stat-value">{{ "%.1f"|format(used) }}</span>
     </div>
 </div>
@@ -44,7 +48,15 @@
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ txn.company.name }}</td>
                 <td>{{ txn.ink_type.name }}</td>
-                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
+                <td>
+                    {% if txn.transaction_type == 'Stock Received' %}
+                    <span class="badge badge-green">{{ txn.transaction_type }}</span>
+                    {% elif txn.transaction_type == 'Issued to Use' %}
+                    <span class="badge badge-blue">{{ txn.transaction_type }}</span>
+                    {% else %}
+                    <span class="badge badge-orange">{{ txn.transaction_type }}</span>
+                    {% endif %}
+                </td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
                 <td>{{ txn.notes or '—' }}</td>
             </tr>
@@ -58,13 +70,14 @@
 <div class="card">
     <h2>Current Stock Snapshot</h2>
     <table class="data-table compact">
-        <thead><tr><th>Company</th><th>Ink</th><th>Current Stock</th></tr></thead>
+        <thead><tr><th>Company</th><th>Ink</th><th>Stored</th><th>In Use</th></tr></thead>
         <tbody>
             {% for item in live_rows %}
             <tr>
                 <td>{{ item.company.name }}</td>
                 <td>{{ item.ink_type.name }}</td>
-                <td>{{ "%.1f"|format(item.current) }}</td>
+                <td>{{ "%.1f"|format(item.stored) }}</td>
+                <td>{{ "%.1f"|format(item.active) }}</td>
             </tr>
             {% endfor %}
         </tbody>

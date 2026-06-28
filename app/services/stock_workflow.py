@@ -2,9 +2,11 @@ from app.models import ChemicalOpeningStock, GlueOpeningStock, MaterialOpeningSt
 
 
 WORKFLOW_STEPS = [
-    "Enter stock purchased and used with dates from 1 June onward.",
-    "After purchase/usage records are in, add opening stock.",
-    "Live stock updates automatically: Opening + Purchased − Used.",
+    "Add companies and register inks in the catalog.",
+    "Set opening stock and receive new ink — both go to stored (backup) inventory.",
+    "When ink is needed on press, issue quantity from stored to in-use.",
+    "Record daily usage against in-use stock only.",
+    "Live inventory shows stored backup and in-use quantities; dashboard shows in-use only.",
 ]
 
 

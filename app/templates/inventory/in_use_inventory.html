@@ -1,15 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Live Inventory - RN COLOUR{% endblock %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}In Use - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
     <div>
-        <h1>Live Inventory</h1>
-        <p class="page-subtitle">Stored backup and in-use quantities shown separately</p>
+        <h1>Inks In Use</h1>
+        <p class="page-subtitle">Ink currently at press / in active use — issued from stored backup minus daily usage</p>
     </div>
+    {% if current_user.can_edit() %}
     <div class="header-actions">
-        <a href="{{ url_for('reports.export_inventory', fmt='excel', company_id=selected_company) }}" class="btn btn-secondary">Export Excel</a>
-        <a href="{{ url_for('reports.export_inventory', fmt='pdf', company_id=selected_company) }}" class="btn btn-secondary">Export PDF</a>
+        <a href="{{ url_for('inventory.use_stock') }}" class="btn btn-primary">Record Usage</a>
     </div>
+    {% endif %}
 </div>
 
 <div class="card">
@@ -22,7 +24,7 @@
         </select>
         <input type="text" name="ink" value="{{ ink_search }}" placeholder="Search ink name">
         <button type="submit" class="btn btn-primary">Filter</button>
-        <a href="{{ url_for('inventory.live_inventory') }}" class="btn btn-secondary">Clear</a>
+        <a href="{{ url_for('inventory.in_use_inventory') }}" class="btn btn-secondary">Clear</a>
     </form>
 
     <table class="data-table">
@@ -30,13 +32,11 @@
             <tr>
                 <th>Company</th>
                 <th>Ink Type</th>
-                <th>Stored (Backup)</th>
-                <th>In Use Now</th>
-                <th>Received</th>
-                <th>Issued</th>
+                <th>Issued to Use</th>
                 <th>Used</th>
+                <th>In Use Now</th>
                 <th>Threshold</th>
-                <th>In-Use Status</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
@@ -44,11 +44,9 @@
             <tr class="{% if item.is_low %}row-low{% endif %}">
                 <td>{{ item.company.name }}</td>
                 <td>{{ item.ink_type.name }}</td>
-                <td><strong>{{ "%.1f"|format(item.stored) }}</strong></td>
-                <td><strong>{{ "%.1f"|format(item.active) }}</strong></td>
-                <td>{{ "%.1f"|format(item.received) }}</td>
                 <td>{{ "%.1f"|format(item.issued) }}</td>
                 <td>{{ "%.1f"|format(item.used) }}</td>
+                <td><strong>{{ "%.1f"|format(item.active) }}</strong></td>
                 <td>{{ item.threshold }}</td>
                 <td>
                     {% if item.active <= 0 %}
@@ -61,7 +59,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="9" class="empty">No inventory data. Add opening stock or receive stock to begin.</td></tr>
+            <tr><td colspan="7" class="empty">No in-use ink yet — issue ink from stored backup first.</td></tr>
             {% endfor %}
         </tbody>
     </table>

@@ -47,12 +47,13 @@ def export_inventory_excel(rows, title="Inventory Report"):
     headers = [
         "Company",
         "Ink Type",
-        "Opening Stock",
+        "Stored (Backup)",
+        "In Use Now",
         "Total Received",
+        "Issued to Use",
         "Total Used",
-        "Current Stock",
         "Low Stock Threshold",
-        "Status",
+        "In-Use Status",
     ]
 
     header_row = _add_excel_logo(ws)
@@ -63,10 +64,11 @@ def export_inventory_excel(rows, title="Inventory Report"):
         values = [
             item["company"].name,
             item["ink_type"].name,
-            item["opening"],
+            item["stored"],
+            item["active"],
             item["received"],
+            item["issued"],
             item["used"],
-            item["current"],
             item["threshold"],
             "LOW" if item["is_low"] else "OK",
         ]
@@ -145,10 +147,11 @@ def export_inventory_pdf(rows, title="Inventory Report"):
         [
             "Company",
             "Ink Type",
-            "Opening",
+            "Stored",
+            "In Use",
             "Received",
+            "Issued",
             "Used",
-            "Current",
             "Threshold",
             "Status",
         ]
@@ -158,10 +161,11 @@ def export_inventory_pdf(rows, title="Inventory Report"):
             [
                 item["company"].name,
                 item["ink_type"].name,
-                f"{item['opening']:.1f}",
+                f"{item['stored']:.1f}",
+                f"{item['active']:.1f}",
                 f"{item['received']:.1f}",
+                f"{item['issued']:.1f}",
                 f"{item['used']:.1f}",
-                f"{item['current']:.1f}",
                 str(item["threshold"]),
                 "LOW" if item["is_low"] else "OK",
             ]

@@ -122,6 +122,68 @@ def edit_ink_received(txn_id):
     )
 
 
+@stock_edits_bp.route("/ink/issued/<int:txn_id>", methods=["GET", "POST"])
+@login_required
+def edit_ink_issued(txn_id):
+    from app.services.inventory import get_stored_stock
+
+    txn = InventoryTransaction.query.get_or_404(txn_id)
+    if txn.transaction_type != InventoryTransaction.TRANSACTION_ISSUED:
+        abort(404)
+
+    if request.method == "POST":
+        require_edit_access()
+        company_id = request.form.get("company_id", type=int)
+        ink_type_id = request.form.get("ink_type_id", type=int)
+        quantity = request.form.get("quantity", type=float)
+        transaction_date = request.form.get("transaction_date")
+        notes = request.form.get("notes", "").strip()
+
+        if not company_id or not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
+            flash("Company, ink, valid quantity, and date are required.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_issued", txn_id=txn_id))
+
+        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        if not ink:
+            flash("Select a valid ink for this company.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_issued", txn_id=txn_id))
+
+        if company_id == txn.company_id and ink_type_id == txn.ink_type_id:
+            available = get_stored_stock(company_id, ink_type_id) + txn.quantity
+        else:
+            available = get_stored_stock(company_id, ink_type_id)
+
+        if quantity > available:
+            flash(
+                f"Cannot issue {quantity:.1f} — only {available:.1f} available in stored backup.",
+                "danger",
+            )
+            return redirect(url_for("stock_edits.edit_ink_issued", txn_id=txn_id))
+
+        txn.company_id = company_id
+        txn.ink_type_id = ink.id
+        txn.quantity = quantity
+        txn.transaction_date = _parse_date(transaction_date)
+        txn.notes = notes
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "InventoryTransaction",
+            txn.id,
+            f"Updated issue record: {quantity} of {ink.name}",
+        )
+        db.session.commit()
+        flash("Issue record updated.", "success")
+        return redirect(url_for("inventory.issue_to_use"))
+
+    return render_template(
+        "shared/edit_ink_issued.html",
+        txn=txn,
+        companies=get_ink_companies(),
+        cancel_url=url_for("inventory.issue_to_use"),
+    )
+
+
 @stock_edits_bp.route("/ink/used/<int:txn_id>", methods=["GET", "POST"])
 @login_required
 def edit_ink_used(txn_id):

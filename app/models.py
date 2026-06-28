@@ -92,8 +92,9 @@ class InventoryTransaction(db.Model):
     __tablename__ = "inventory_transactions"
 
     TRANSACTION_RECEIVED = "Stock Received"
+    TRANSACTION_ISSUED = "Issued to Use"
     TRANSACTION_USED = "Stock Used"
-    TRANSACTION_TYPES = (TRANSACTION_RECEIVED, TRANSACTION_USED)
+    TRANSACTION_TYPES = (TRANSACTION_RECEIVED, TRANSACTION_ISSUED, TRANSACTION_USED)
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)

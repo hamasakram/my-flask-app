@@ -80,6 +80,20 @@ def delete_ink_received(txn_id):
     )
 
 
+@stock_deletes_bp.route("/ink/issued/<int:txn_id>", methods=["POST"])
+@login_required
+def delete_ink_issued(txn_id):
+    txn = InventoryTransaction.query.get_or_404(txn_id)
+    if txn.transaction_type != InventoryTransaction.TRANSACTION_ISSUED:
+        abort(404)
+    return _delete_entity(
+        txn,
+        "InventoryTransaction",
+        f"Deleted issue record #{txn_id}",
+        url_for("inventory.issue_to_use"),
+    )
+
+
 @stock_deletes_bp.route("/ink/used/<int:txn_id>", methods=["POST"])
 @login_required
 def delete_ink_used(txn_id):

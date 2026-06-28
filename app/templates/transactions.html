@@ -51,7 +51,15 @@
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ txn.company.name }}</td>
                 <td>{{ txn.ink_type.name }}</td>
-                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
+                <td>
+                    {% if txn.transaction_type == 'Stock Received' %}
+                    <span class="badge badge-green">{{ txn.transaction_type }}</span>
+                    {% elif txn.transaction_type == 'Issued to Use' %}
+                    <span class="badge badge-blue">{{ txn.transaction_type }}</span>
+                    {% else %}
+                    <span class="badge badge-orange">{{ txn.transaction_type }}</span>
+                    {% endif %}
+                </td>
                 <td>{{ "%.1f"|format(txn.quantity) if txn.transaction_type == 'Stock Used' else '—' }}</td>
                 <td>
                     {% if txn.transaction_type == 'Stock Used' %}

@@ -103,6 +103,7 @@ def monthly_report():
     companies = get_ink_companies()
 
     received = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_RECEIVED)
+    issued = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_ISSUED)
     used = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_USED)
 
     return render_template(
@@ -113,6 +114,7 @@ def monthly_report():
         companies=companies,
         selected_company=company_id,
         received=received,
+        issued=issued,
         used=used,
         period_type="monthly",
         month=month,
@@ -137,6 +139,7 @@ def yearly_report():
     companies = get_ink_companies()
 
     received = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_RECEIVED)
+    issued = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_ISSUED)
     used = sum(t.quantity for t in txns if t.transaction_type == InventoryTransaction.TRANSACTION_USED)
 
     return render_template(
@@ -147,6 +150,7 @@ def yearly_report():
         companies=companies,
         selected_company=company_id,
         received=received,
+        issued=issued,
         used=used,
         period_type="yearly",
         year=year,

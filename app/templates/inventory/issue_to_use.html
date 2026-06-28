@@ -1,17 +1,16 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
-{% from "shared/manual_weight_fields.html" import manual_weight_fields %}
-{% block title %}Stock Received - RN COLOUR{% endblock %}
+{% block title %}Issue from Storage - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
-    <h1>Stock Received</h1>
-    <p class="page-subtitle">New ink received goes to stored backup — issue from storage when needed on press</p>
+    <h1>Issue from Storage</h1>
+    <p class="page-subtitle">Move ink from stored backup to in-use — this is recorded as ink being used right now</p>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
-    <h2>Record Stock Received</h2>
-    <form method="POST" class="form-grid" id="receive-form">
+    <h2>Take Ink from Stored Backup</h2>
+    <form method="POST" class="form-grid" id="issue-form">
         <div class="form-group">
             <label for="company_id">Company</label>
             <select id="company_id" name="company_id" required>
@@ -28,64 +27,60 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="quantity">Quantity Received</label>
-            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" required>
+            <label for="stored_stock">Stored (Available)</label>
+            <input type="text" id="stored_stock" readonly placeholder="Select ink first">
         </div>
-        {{ manual_weight_fields() }}
         <div class="form-group">
-            <label for="transaction_date">Receipt Date</label>
+            <label for="quantity">Quantity to Issue</label>
+            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" required disabled>
+        </div>
+        <div class="form-group">
+            <label for="transaction_date">Issue Date</label>
             <input type="date" id="transaction_date" name="transaction_date" required>
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
-            <input type="text" id="notes" name="notes" placeholder="Invoice no., supplier, etc.">
+            <textarea id="notes" name="notes" rows="2" placeholder="Press, machine, job, etc."></textarea>
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Stock Received</button>
+            <button type="submit" class="btn btn-primary">Issue to In-Use</button>
         </div>
     </form>
-    <p class="field-note">Add inks in <a href="{{ url_for('inventory.catalog') }}">Inks to Add</a> before recording receipts.</p>
 </div>
 {% else %}
-<div class="card"><p class="empty-state">You have view-only access. Contact an admin or manager to record stock.</p></div>
+<div class="card"><p class="empty-state">You have view-only access.</p></div>
 {% endif %}
 
 <div class="card">
-    <h2>Recent Stock Received</h2>
+    <h2>Recent Issues from Storage</h2>
     <table class="data-table compact">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Company</th>
                 <th>Ink</th>
-                <th>Qty</th>
-                <th>Wt/Qty</th>
-                <th>Gross</th>
-                <th>TW</th>
-                <th>Net</th>
+                <th>Quantity</th>
                 <th>Notes</th>
+                <th>Entered By</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
-            {% for txn in recent_received %}
+            {% for txn in recent_issued %}
             <tr>
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ txn.company.name }}</td>
                 <td>{{ txn.ink_type.name }}</td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ "%.2f"|format(txn.weight_per_quantity) if txn.weight_per_quantity is not none else '—' }}</td>
-                <td>{{ "%.2f"|format(txn.gross_weight) if txn.gross_weight is not none else '—' }}</td>
-                <td>{{ "%.2f"|format(txn.tw) if txn.tw is not none else '—' }}</td>
-                <td>{{ "%.2f"|format(txn.net_weight) if txn.net_weight is not none else '—' }}</td>
                 <td>{{ txn.notes or '—' }}</td>
+                <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
                 {{ row_actions(
-                    url_for('stock_edits.edit_ink_received', txn_id=txn.id),
-                    url_for('stock_deletes.delete_ink_received', txn_id=txn.id)
+                    url_for('stock_edits.edit_ink_issued', txn_id=txn.id),
+                    url_for('stock_deletes.delete_ink_issued', txn_id=txn.id)
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No receipts yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No issues from storage yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -96,26 +91,60 @@
 <script>
 const companySelect = document.getElementById('company_id');
 const inkSelect = document.getElementById('ink_type_id');
+const storedStockInput = document.getElementById('stored_stock');
+const quantityInput = document.getElementById('quantity');
+
+let storedStock = null;
+
+function resetStockFields() {
+    storedStock = null;
+    storedStockInput.value = '';
+    quantityInput.value = '';
+    quantityInput.disabled = true;
+}
+
+async function loadStoredStock() {
+    resetStockFields();
+    if (!companySelect.value || !inkSelect.value) {
+        return;
+    }
+
+    const res = await fetch(`/inventory/api/stock/${companySelect.value}/${inkSelect.value}?pool=stored`);
+    if (!res.ok) {
+        storedStockInput.value = 'Unavailable';
+        return;
+    }
+
+    const data = await res.json();
+    storedStock = data.current_stock;
+    storedStockInput.value = storedStock.toFixed(1);
+    quantityInput.disabled = storedStock <= 0;
+    quantityInput.max = storedStock > 0 ? storedStock : '';
+}
 
 companySelect?.addEventListener('change', async function() {
     inkSelect.innerHTML = '<option value="">Loading...</option>';
     inkSelect.disabled = true;
+    resetStockFields();
+
     if (!this.value) {
         inkSelect.innerHTML = '<option value="">Select company first</option>';
         return;
     }
+
     const res = await fetch(`/inventory/api/inks/${this.value}`);
     const inks = await res.json();
     inkSelect.innerHTML = '<option value="">Select ink</option>';
     inks.forEach(ink => {
         const opt = document.createElement('option');
         opt.value = ink.id;
-        opt.textContent = ink.name + (ink.color_code ? ` (${ink.color_code})` : '');
+        opt.textContent = ink.name;
         inkSelect.appendChild(opt);
     });
     inkSelect.disabled = false;
 });
 
+inkSelect?.addEventListener('change', loadStoredStock);
 document.getElementById('transaction_date').valueAsDate = new Date();
 </script>
 {% endblock %}

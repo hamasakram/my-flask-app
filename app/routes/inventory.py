@@ -10,7 +10,9 @@ from app.services.companies import get_ink_companies
 from app.services.inventory import (
     calculate_used_from_left,
     create_ink_type,
+    get_recent_issued_records,
     get_recent_received_records,
+    get_stored_stock,
     get_stock_usage_records,
     log_audit,
 )
@@ -64,6 +66,120 @@ def companies():
 
     ink_companies = get_ink_companies()
     return render_template("inventory/companies.html", companies=ink_companies)
+
+
+@inventory_bp.route("/stored")
+@login_required
+def stored_inventory():
+    from app.services.inventory import calculate_live_stock
+
+    company_id = request.args.get("company_id", type=int)
+    ink_search = request.args.get("ink", "").strip().lower()
+
+    rows = calculate_live_stock(company_id=company_id)
+    if ink_search:
+        rows = [r for r in rows if ink_search in r["ink_type"].name.lower()]
+
+    companies = get_ink_companies()
+    return render_template(
+        "inventory/stored_inventory.html",
+        rows=rows,
+        companies=companies,
+        selected_company=company_id,
+        ink_search=request.args.get("ink", ""),
+    )
+
+
+@inventory_bp.route("/issue-to-use", methods=["GET", "POST"])
+@login_required
+def issue_to_use():
+    companies = get_ink_companies()
+
+    if request.method == "POST":
+        require_edit_access()
+        company_id = request.form.get("company_id", type=int)
+        ink_type_id = request.form.get("ink_type_id", type=int)
+        quantity = request.form.get("quantity", type=float)
+        transaction_date = request.form.get("transaction_date")
+        notes = request.form.get("notes", "").strip()
+
+        if not company_id or not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
+            flash("Company, ink, valid quantity, and date are required.", "danger")
+            return redirect(url_for("inventory.issue_to_use"))
+
+        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        if not ink:
+            flash("Select a valid ink for this company.", "danger")
+            return redirect(url_for("inventory.issue_to_use"))
+
+        stored = get_stored_stock(company_id, ink_type_id)
+        if quantity > stored:
+            flash(
+                f"Cannot issue {quantity:.1f} — only {stored:.1f} available in stored backup.",
+                "danger",
+            )
+            return redirect(url_for("inventory.issue_to_use"))
+
+        try:
+            parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
+            txn = InventoryTransaction(
+                company_id=company_id,
+                ink_type_id=ink.id,
+                transaction_type=InventoryTransaction.TRANSACTION_ISSUED,
+                quantity=quantity,
+                transaction_date=parsed_date,
+                notes=notes,
+                created_by_id=current_user.id,
+            )
+            db.session.add(txn)
+            db.session.flush()
+
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "InventoryTransaction",
+                txn.id,
+                f"Issued {quantity} of {ink.name} from stored to in-use",
+            )
+            db.session.commit()
+            flash(
+                f"Issued {quantity:.1f} units of '{ink.name}' from stored backup to in-use.",
+                "success",
+            )
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+
+        return redirect(url_for("inventory.issue_to_use"))
+
+    recent_issued = get_recent_issued_records()
+    return render_template(
+        "inventory/issue_to_use.html",
+        companies=companies,
+        recent_issued=recent_issued,
+    )
+
+
+@inventory_bp.route("/in-use")
+@login_required
+def in_use_inventory():
+    from app.services.inventory import calculate_live_stock
+
+    company_id = request.args.get("company_id", type=int)
+    ink_search = request.args.get("ink", "").strip().lower()
+
+    rows = calculate_live_stock(company_id=company_id)
+    if ink_search:
+        rows = [r for r in rows if ink_search in r["ink_type"].name.lower()]
+
+    companies = get_ink_companies()
+    return render_template(
+        "inventory/in_use_inventory.html",
+        rows=rows,
+        companies=companies,
+        selected_company=company_id,
+        ink_search=request.args.get("ink", ""),
+    )
 
 
 @inventory_bp.route("/catalog", methods=["GET", "POST"])
@@ -342,14 +458,25 @@ def use_stock():
 def get_ink_stock(company_id, ink_type_id):
     from flask import jsonify
 
-    from app.services.inventory import get_current_stock
+    from app.services.inventory import get_active_stock, get_stored_stock
 
     ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
     if not ink:
         return jsonify({"error": "Ink not found"}), 404
 
-    current = get_current_stock(company_id, ink_type_id)
-    return jsonify({"current_stock": current, "ink_name": ink.name})
+    pool = request.args.get("pool", "active")
+    if pool == "stored":
+        current = get_stored_stock(company_id, ink_type_id)
+    else:
+        current = get_active_stock(company_id, ink_type_id)
+
+    return jsonify({
+        "current_stock": current,
+        "stored_stock": get_stored_stock(company_id, ink_type_id),
+        "active_stock": get_active_stock(company_id, ink_type_id),
+        "ink_name": ink.name,
+        "pool": pool,
+    })
 
 
 @inventory_bp.route("/api/inks/<int:company_id>")

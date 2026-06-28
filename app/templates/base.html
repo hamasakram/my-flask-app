@@ -28,12 +28,17 @@
             {% if active_module == 'ink' %}
             <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
-            <li class="nav-section">Inventory</li>
+            <li class="nav-section">Setup</li>
             <li><a href="{{ url_for('inventory.companies') }}">Companies</a></li>
             <li><a href="{{ url_for('inventory.catalog') }}">Inks to Add</a></li>
+            <li class="nav-section">Stored Inks</li>
+            <li><a href="{{ url_for('inventory.stored_inventory') }}">Stored Inventory</a></li>
             <li><a href="{{ url_for('inventory.opening_stock') }}">Opening Stock</a></li>
             <li><a href="{{ url_for('inventory.receive_stock') }}">Stock Received</a></li>
             <li><a href="{{ url_for('inventory.purchase_receipts') }}">Purchase Receipts</a></li>
+            <li class="nav-section">In Use</li>
+            <li><a href="{{ url_for('inventory.in_use_inventory') }}">In Use Inventory</a></li>
+            <li><a href="{{ url_for('inventory.issue_to_use') }}">Issue from Storage</a></li>
             <li><a href="{{ url_for('inventory.use_stock') }}">Stock Used</a></li>
             <li><a href="{{ url_for('inventory.live_inventory') }}">Live Inventory</a></li>
             <li class="nav-section">Reports</li>
