@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script %}
+{% block title %}Edit Sale Invoice - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Edit Sale Invoice', invoice.invoice_number) }}
+<div class="card">
+    <form method="POST" class="form-grid" id="sale-invoice-form">
+        <div class="form-group">
+            <label for="invoice_date">Date</label>
+            <input type="date" id="invoice_date" name="invoice_date" value="{{ invoice.invoice_date.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="invoice_number">Invoice #</label>
+            <input type="text" id="invoice_number" name="invoice_number" value="{{ invoice.invoice_number }}" required>
+        </div>
+        <div class="form-group">
+            <label for="factory_challan_no">Factory Challan No</label>
+            <input type="text" id="factory_challan_no" name="factory_challan_no" value="{{ invoice.factory_challan_no or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="location">Location</label>
+            <input type="text" id="location" name="location" value="{{ invoice.location or 'MULTAN' }}">
+        </div>
+        <div class="form-group">
+            <label for="sold_to_client_id">Sold To</label>
+            <select id="sold_to_client_id" name="sold_to_client_id" required>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if c.id == invoice.sold_to_client_id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="previous_balance">Previous Balance</label>
+            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="{{ invoice.previous_balance|int }}">
+        </div>
+        <div class="form-group">
+            <label for="previous_balance_type">Previous Balance Type</label>
+            <select id="previous_balance_type" name="previous_balance_type">
+                <option value="DR" {% if invoice.previous_balance_type == 'DR' %}selected{% endif %}>DR</option>
+                <option value="CR" {% if invoice.previous_balance_type == 'CR' %}selected{% endif %}>CR</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="current_balance">Current Balance</label>
+            <input type="number" id="current_balance" name="current_balance" step="1" min="0" value="{{ invoice.current_balance|int }}">
+            <small class="field-note"><label><input type="checkbox" id="auto_current_balance"> Auto = Previous + Invoice Total</label></small>
+        </div>
+        <div class="form-group">
+            <label for="current_balance_type">Current Balance Type</label>
+            <select id="current_balance_type" name="current_balance_type">
+                <option value="DR" {% if invoice.current_balance_type == 'DR' %}selected{% endif %}>DR</option>
+                <option value="CR" {% if invoice.current_balance_type == 'CR' %}selected{% endif %}>CR</option>
+            </select>
+        </div>
+
+        <div class="form-group full-width">
+            <h3>Invoice Line Items</h3>
+            <div id="invoice-lines-container">
+                {% for line in invoice.lines %}
+                {{ invoice_line_row(line) }}
+                {% else %}
+                {{ invoice_line_row() }}
+                {% endfor %}
+            </div>
+            <template id="invoice-line-template">
+                {{ invoice_line_row() }}
+            </template>
+            <div class="form-actions rolls-entry-actions">
+                <button type="button" id="add-line-btn" class="btn btn-secondary">+ Add Line Item</button>
+                <button type="button" id="remove-line-btn" class="btn btn-secondary">Remove Last Line</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="invoice_total_display">Invoice Total (auto)</label>
+            <input type="text" id="invoice_total_display" readonly class="readonly-field" value="Rs {{ '{:,.0f}'.format(invoice.total_amount) }}">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ invoice.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ url_for('sh_main.sale_invoice_pdf', invoice_id=invoice.id) }}" target="_blank" class="btn btn-secondary">Print PDF</a>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ invoice_line_script() }}
+{% endblock %}

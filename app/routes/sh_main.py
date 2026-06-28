@@ -6,28 +6,28 @@ from flask_login import current_user, login_required
 from app import db
 from app.models import (
     ShClientCompany,
-    ShGatePass,
     ShLedgerEntry,
     ShOpeningBalance,
     ShPaymentScreenshot,
     ShPurchase,
+    ShSaleInvoice,
     ShSupplierCompany,
 )
 from app.services.inventory import log_audit
-from app.services.sh_gate_pass_pdf import generate_gate_pass_pdf
+from app.services.sh_sale_invoice import (
+    compute_current_balance,
+    next_sale_invoice_number,
+    parse_invoice_lines,
+    save_invoice_lines,
+)
+from app.services.sh_sale_invoice_pdf import generate_sale_invoice_pdf
 from app.services.sh_traders import (
-    calculate_gate_pass_total,
     calculate_total_amount,
-    compute_gate_pass_weights,
     get_current_ledger_balance,
     get_dashboard_stats,
     get_ledger_rows,
     get_opening_balance,
     get_party_balance_totals,
-    next_gate_pass_number,
-    parse_issued_datetime,
-    parse_roll_gross_weights,
-    save_gate_pass_rolls,
 )
 from app.services.sh_uploads import apply_payment_screenshot, resolve_payment_screenshot_file, save_payment_screenshot
 
@@ -387,107 +387,99 @@ def payment_screenshots():
     )
 
 
-@sh_main_bp.route("/gate-passes", methods=["GET", "POST"])
+@sh_main_bp.route("/gate-passes")
 @login_required
-def gate_passes():
-    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+def gate_passes_redirect():
+    return redirect(url_for("sh_main.sale_invoices"))
+
+
+@sh_main_bp.route("/sale-invoices", methods=["GET", "POST"])
+@login_required
+def sale_invoices():
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
-    purchases = (
-        ShPurchase.query.order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc()).all()
-    )
 
     if request.method == "POST":
         require_edit_access()
-        if not suppliers or not clients:
-            flash("Add supplier and client companies first.", "danger")
-            return redirect(url_for("sh_main.gate_passes"))
+        if not clients:
+            flash("Add client companies first.", "danger")
+            return redirect(url_for("sh_main.sale_invoices"))
 
-        issued_date = request.form.get("issued_date")
-        issued_time = request.form.get("issued_time")
+        invoice_date = request.form.get("invoice_date")
+        invoice_number = request.form.get("invoice_number", "").strip()
+        factory_challan_no = request.form.get("factory_challan_no", "").strip()
         sold_to_id = request.form.get("sold_to_client_id", type=int)
-        supplier_id = request.form.get("supplier_company_id", type=int)
-        purchase_id = request.form.get("purchase_id", type=int) or None
-        material_name = request.form.get("material_name", "").strip()
-        size = request.form.get("size", "").strip()
-        micron = request.form.get("micron", "").strip()
-        cone_weight_per_roll = request.form.get("cone_weight_per_roll", type=float) or 0.0
-        amount_per_kg = request.form.get("amount_per_kg", type=float)
+        location = request.form.get("location", "MULTAN").strip() or "MULTAN"
+        previous_balance = request.form.get("previous_balance", type=float) or 0.0
+        previous_balance_type = request.form.get("previous_balance_type", "DR").strip() or "DR"
+        current_balance_override = request.form.get("current_balance", type=float)
+        current_balance_type = request.form.get("current_balance_type", "DR").strip() or "DR"
         notes = request.form.get("notes", "").strip()
 
-        if (
-            not issued_date
-            or not issued_time
-            or not sold_to_id
-            or not supplier_id
-            or not material_name
-            or not amount_per_kg
-            or amount_per_kg <= 0
-        ):
-            flash("Date, time, sold to, supplier, material, and amount per KG are required.", "danger")
-            return redirect(url_for("sh_main.gate_passes"))
+        if not invoice_date or not sold_to_id:
+            flash("Invoice date and sold to client are required.", "danger")
+            return redirect(url_for("sh_main.sale_invoices"))
 
         try:
-            gross_weights = parse_roll_gross_weights(request.form)
-            weights = compute_gate_pass_weights(gross_weights, cone_weight_per_roll)
-            issued_at = parse_issued_datetime(issued_date, issued_time)
+            parsed_date = datetime.strptime(invoice_date, "%Y-%m-%d").date()
+            lines = parse_invoice_lines(request.form)
         except ValueError as exc:
             flash(str(exc), "danger")
-            return redirect(url_for("sh_main.gate_passes"))
+            return redirect(url_for("sh_main.sale_invoices"))
 
-        total_amount = calculate_gate_pass_total(weights["net_weight"], amount_per_kg)
-
-        gate_pass = ShGatePass(
-            gate_pass_number=next_gate_pass_number(),
-            issued_at=issued_at,
+        invoice = ShSaleInvoice(
+            invoice_number=invoice_number or next_sale_invoice_number(),
+            invoice_date=parsed_date,
+            factory_challan_no=factory_challan_no or None,
             sold_to_client_id=sold_to_id,
-            supplier_company_id=supplier_id,
-            purchase_id=purchase_id,
-            material_name=material_name,
-            size=size,
-            micron=micron or None,
-            rolls=weights["rolls"],
-            cone_weight_per_roll=cone_weight_per_roll or None,
-            gross_weight_per_roll=weights["gross_weight_per_roll"],
-            net_weight_per_roll=weights["net_weight_per_roll"],
-            gross_weight=weights["gross_weight"],
-            net_weight=weights["net_weight"],
-            amount_per_kg=amount_per_kg,
-            total_amount=total_amount,
+            location=location,
+            previous_balance=previous_balance,
+            previous_balance_type=previous_balance_type,
+            current_balance_type=current_balance_type,
             notes=notes or None,
             created_by_id=current_user.id,
         )
-        db.session.add(gate_pass)
+        db.session.add(invoice)
         db.session.flush()
-        save_gate_pass_rolls(gate_pass, gross_weights)
+
+        total_amount = save_invoice_lines(invoice, lines)
+        invoice.total_amount = total_amount
+        if current_balance_override is not None:
+            invoice.current_balance = current_balance_override
+        else:
+            current, balance_type = compute_current_balance(
+                previous_balance, total_amount, previous_balance_type
+            )
+            invoice.current_balance = current
+            invoice.current_balance_type = balance_type
+
         log_audit(
             current_user.id,
             "CREATE",
-            "ShGatePass",
-            gate_pass.id,
-            f"Gate pass {gate_pass.gate_pass_number}",
+            "ShSaleInvoice",
+            invoice.id,
+            f"Sale invoice {invoice.invoice_number}",
         )
         db.session.commit()
-        flash(f"Gate pass {gate_pass.gate_pass_number} created.", "success")
-        return redirect(url_for("sh_main.gate_pass_pdf", gate_pass_id=gate_pass.id))
+        flash(f"Sale invoice {invoice.invoice_number} created.", "success")
+        return redirect(url_for("sh_main.sale_invoice_pdf", invoice_id=invoice.id))
 
-    gate_pass_list = (
-        ShGatePass.query.order_by(ShGatePass.issued_at.desc(), ShGatePass.id.desc()).all()
+    invoice_list = (
+        ShSaleInvoice.query.order_by(ShSaleInvoice.invoice_date.desc(), ShSaleInvoice.id.desc()).all()
     )
     return render_template(
-        "sh_traders/gate_passes.html",
-        gate_passes=gate_pass_list,
-        suppliers=suppliers,
+        "sh_traders/sale_invoices.html",
+        invoices=invoice_list,
         clients=clients,
-        purchases=purchases,
+        next_invoice_number=next_sale_invoice_number(),
     )
 
 
-@sh_main_bp.route("/gate-passes/<int:gate_pass_id>/pdf")
+@sh_main_bp.route("/sale-invoices/<int:invoice_id>/pdf")
 @login_required
-def gate_pass_pdf(gate_pass_id):
-    gate_pass = ShGatePass.query.get_or_404(gate_pass_id)
-    output = generate_gate_pass_pdf(gate_pass)
-    filename = f"gate_pass_{gate_pass.gate_pass_number}.pdf"
+def sale_invoice_pdf(invoice_id):
+    invoice = ShSaleInvoice.query.get_or_404(invoice_id)
+    output = generate_sale_invoice_pdf(invoice)
+    filename = f"sale_invoice_{invoice.invoice_number}.pdf"
     return send_file(
         output,
         as_attachment=False,

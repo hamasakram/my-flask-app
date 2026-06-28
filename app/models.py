@@ -596,6 +596,63 @@ class ShGatePassRoll(db.Model):
     )
 
 
+class ShSaleInvoice(db.Model):
+    __tablename__ = "sh_sale_invoices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_number = db.Column(db.String(30), unique=True, nullable=False)
+    invoice_date = db.Column(db.Date, nullable=False)
+    factory_challan_no = db.Column(db.String(50))
+    sold_to_client_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    location = db.Column(db.String(100), nullable=False, default="MULTAN")
+    previous_balance = db.Column(db.Float, nullable=False, default=0)
+    previous_balance_type = db.Column(db.String(2), nullable=False, default="DR")
+    current_balance = db.Column(db.Float, nullable=False, default=0)
+    current_balance_type = db.Column(db.String(2), nullable=False, default="DR")
+    total_amount = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    sold_to = db.relationship("ShClientCompany")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    lines = db.relationship(
+        "ShSaleInvoiceLine",
+        back_populates="invoice",
+        lazy="joined",
+        cascade="all, delete-orphan",
+        order_by="ShSaleInvoiceLine.line_number",
+    )
+
+
+class ShSaleInvoiceLine(db.Model):
+    __tablename__ = "sh_sale_invoice_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    invoice_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sh_sale_invoices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    line_number = db.Column(db.Integer, nullable=False)
+    item_name = db.Column(db.String(200), nullable=False)
+    size = db.Column(db.String(100), default="")
+    qty = db.Column(db.Float, nullable=False, default=0)
+    qty_unit = db.Column(db.String(30), nullable=False, default="Roll/Reel")
+    gross_weight = db.Column(db.Float, nullable=False, default=0)
+    net_weight = db.Column(db.Float, nullable=False, default=0)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    line_total = db.Column(db.Float, nullable=False, default=0)
+
+    invoice = db.relationship("ShSaleInvoice", back_populates="lines")
+
+    __table_args__ = (
+        db.UniqueConstraint("invoice_id", "line_number", name="uq_sale_invoice_line"),
+    )
+
+
 class HomeParty(db.Model):
     """Party in Home Ledger — person or entity for payments to give or receive."""
 

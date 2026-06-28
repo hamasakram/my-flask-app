@@ -25,7 +25,7 @@ from app.models import (
     InventoryTransaction,
     StockPurchaseReceipt,
     ShClientCompany,
-    ShGatePass,
+    ShSaleInvoice,
     ShLedgerEntry,
     ShOpeningBalance,
     ShPaymentScreenshot,
@@ -41,7 +41,7 @@ from app.services.companies import (
 from app.services.bank_ledger import bank_account_exists, update_bank_transfer
 from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
-from app.services.sh_traders import calculate_gate_pass_total, calculate_total_amount, compute_gate_pass_weights, parse_issued_datetime, parse_roll_gross_weights, save_gate_pass_rolls
+from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
 from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
@@ -1259,78 +1259,72 @@ def edit_sh_payment_screenshot(record_id):
     )
 
 
-@stock_edits_bp.route("/sh/gate-pass/<int:gate_pass_id>", methods=["GET", "POST"])
+@stock_edits_bp.route("/sh/sale-invoice/<int:invoice_id>", methods=["GET", "POST"])
 @login_required
-def edit_sh_gate_pass(gate_pass_id):
-    gate_pass = ShGatePass.query.get_or_404(gate_pass_id)
-    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+def edit_sh_sale_invoice(invoice_id):
+    invoice = ShSaleInvoice.query.get_or_404(invoice_id)
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
 
     if request.method == "POST":
         require_edit_access()
-        issued_date = request.form.get("issued_date")
-        issued_time = request.form.get("issued_time")
+        invoice_date = request.form.get("invoice_date")
+        invoice_number = request.form.get("invoice_number", "").strip()
+        factory_challan_no = request.form.get("factory_challan_no", "").strip()
         sold_to_id = request.form.get("sold_to_client_id", type=int)
-        supplier_id = request.form.get("supplier_company_id", type=int)
-        material_name = request.form.get("material_name", "").strip()
-        size = request.form.get("size", "").strip()
-        micron = request.form.get("micron", "").strip()
-        cone_weight_per_roll = request.form.get("cone_weight_per_roll", type=float) or 0.0
-        amount_per_kg = request.form.get("amount_per_kg", type=float)
+        location = request.form.get("location", "MULTAN").strip() or "MULTAN"
+        previous_balance = request.form.get("previous_balance", type=float) or 0.0
+        previous_balance_type = request.form.get("previous_balance_type", "DR").strip() or "DR"
+        current_balance_override = request.form.get("current_balance", type=float)
+        current_balance_type = request.form.get("current_balance_type", "DR").strip() or "DR"
         notes = request.form.get("notes", "").strip()
 
-        if (
-            not issued_date
-            or not issued_time
-            or not sold_to_id
-            or not supplier_id
-            or not material_name
-            or not amount_per_kg
-            or amount_per_kg <= 0
-        ):
-            flash("All required fields must be filled.", "danger")
-            return redirect(url_for("stock_edits.edit_sh_gate_pass", gate_pass_id=gate_pass_id))
+        if not invoice_date or not sold_to_id or not invoice_number:
+            flash("Invoice date, number, and sold to client are required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_sale_invoice", invoice_id=invoice_id))
 
         try:
-            gross_weights = parse_roll_gross_weights(request.form)
-            weights = compute_gate_pass_weights(gross_weights, cone_weight_per_roll)
-            gate_pass.issued_at = parse_issued_datetime(issued_date, issued_time)
+            invoice.invoice_date = datetime.strptime(invoice_date, "%Y-%m-%d").date()
+            lines = parse_invoice_lines(request.form)
         except ValueError as exc:
             flash(str(exc), "danger")
-            return redirect(url_for("stock_edits.edit_sh_gate_pass", gate_pass_id=gate_pass_id))
+            return redirect(url_for("stock_edits.edit_sh_sale_invoice", invoice_id=invoice_id))
 
-        gate_pass.sold_to_client_id = sold_to_id
-        gate_pass.supplier_company_id = supplier_id
-        gate_pass.material_name = material_name
-        gate_pass.size = size
-        gate_pass.micron = micron or None
-        gate_pass.rolls = weights["rolls"]
-        gate_pass.cone_weight_per_roll = cone_weight_per_roll or None
-        gate_pass.gross_weight_per_roll = weights["gross_weight_per_roll"]
-        gate_pass.net_weight_per_roll = weights["net_weight_per_roll"]
-        gate_pass.gross_weight = weights["gross_weight"]
-        gate_pass.net_weight = weights["net_weight"]
-        gate_pass.amount_per_kg = amount_per_kg
-        gate_pass.total_amount = calculate_gate_pass_total(weights["net_weight"], amount_per_kg)
-        gate_pass.notes = notes or None
-        save_gate_pass_rolls(gate_pass, gross_weights)
+        invoice.invoice_number = invoice_number
+        invoice.factory_challan_no = factory_challan_no or None
+        invoice.sold_to_client_id = sold_to_id
+        invoice.location = location
+        invoice.previous_balance = previous_balance
+        invoice.previous_balance_type = previous_balance_type
+        invoice.current_balance_type = current_balance_type
+        invoice.notes = notes or None
+
+        total_amount = save_invoice_lines(invoice, lines)
+        invoice.total_amount = total_amount
+        if current_balance_override is not None and not request.form.get("auto_current_balance"):
+            invoice.current_balance = current_balance_override
+        else:
+            current, balance_type = compute_current_balance(
+                previous_balance, total_amount, previous_balance_type
+            )
+            invoice.current_balance = current
+            invoice.current_balance_type = balance_type
+
         log_audit(
             current_user.id,
             "UPDATE",
-            "ShGatePass",
-            gate_pass.id,
-            f"Updated gate pass {gate_pass.gate_pass_number}",
+            "ShSaleInvoice",
+            invoice.id,
+            f"Updated sale invoice {invoice.invoice_number}",
         )
         db.session.commit()
-        flash("Gate pass updated.", "success")
-        return redirect(url_for("sh_main.gate_passes"))
+        flash("Sale invoice updated.", "success")
+        return redirect(url_for("sh_main.sale_invoices"))
 
     return render_template(
-        "sh_traders/edit_gate_pass.html",
-        gate_pass=gate_pass,
-        suppliers=suppliers,
+        "sh_traders/edit_sale_invoice.html",
+        invoice=invoice,
         clients=clients,
-        cancel_url=url_for("sh_main.gate_passes"),
+        cancel_url=url_for("sh_main.sale_invoices"),
     )
 
 

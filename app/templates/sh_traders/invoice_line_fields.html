@@ -1,0 +1,129 @@
+{% macro invoice_line_row(line=None) %}
+<div class="invoice-line-row form-grid">
+    <div class="form-group full-width">
+        <label class="line-label">Item</label>
+        <input type="text" name="line_item" value="{{ line.item_name if line else '' }}" placeholder="e.g. Banana Wafer (PET + OPP METALIZE 20 MICRON)" required>
+    </div>
+    <div class="form-group">
+        <label>Size</label>
+        <input type="text" name="line_size" value="{{ line.size if line else '' }}" placeholder="199">
+    </div>
+    <div class="form-group">
+        <label>Qty</label>
+        <input type="number" name="line_qty" step="0.01" min="0" value="{{ line.qty if line else '' }}" placeholder="72">
+    </div>
+    <div class="form-group">
+        <label>Unit</label>
+        <input type="text" name="line_qty_unit" value="{{ line.qty_unit if line else 'Roll/Reel' }}" placeholder="Roll/Reel">
+    </div>
+    <div class="form-group">
+        <label>Gross Weight (KG)</label>
+        <input type="number" name="line_gross_weight" step="0.001" min="0" class="line-gross" value="{{ line.gross_weight if line else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>Net Weight (KG)</label>
+        <input type="number" name="line_net_weight" step="0.001" min="0.01" class="line-net" value="{{ line.net_weight if line else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>Unit Price (Rs)</label>
+        <input type="number" name="line_unit_price" step="0.01" min="0.01" class="line-price" value="{{ line.unit_price if line else '' }}" required>
+    </div>
+    <div class="form-group">
+        <label>Line Total</label>
+        <input type="text" class="line-total-display readonly-field" readonly value="{% if line %}Rs {{ '{:,.0f}'.format(line.line_total) }}{% endif %}">
+    </div>
+</div>
+{% endmacro %}
+
+{% macro invoice_line_script() %}
+<script>
+(function () {
+    const container = document.getElementById('invoice-lines-container');
+    const addBtn = document.getElementById('add-line-btn');
+    const removeBtn = document.getElementById('remove-line-btn');
+    const invoiceTotalDisplay = document.getElementById('invoice_total_display');
+    const previousBalanceInput = document.getElementById('previous_balance');
+    const currentBalanceInput = document.getElementById('current_balance');
+    const autoCurrentBalance = document.getElementById('auto_current_balance');
+
+    if (!container) return;
+
+    function formatMoney(value) {
+        return Number(value || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+        });
+    }
+
+    function bindLineRow(row) {
+        const netInput = row.querySelector('.line-net');
+        const priceInput = row.querySelector('.line-price');
+        const totalDisplay = row.querySelector('.line-total-display');
+        function updateLineTotal() {
+            const total = (parseFloat(netInput?.value) || 0) * (parseFloat(priceInput?.value) || 0);
+            if (totalDisplay) {
+                totalDisplay.value = total > 0 ? 'Rs ' + formatMoney(total) : '';
+            }
+            updateInvoiceTotal();
+        }
+        netInput?.addEventListener('input', updateLineTotal);
+        priceInput?.addEventListener('input', updateLineTotal);
+        updateLineTotal();
+    }
+
+    function updateInvoiceTotal() {
+        let total = 0;
+        container.querySelectorAll('.invoice-line-row').forEach(function (row) {
+            const net = parseFloat(row.querySelector('.line-net')?.value) || 0;
+            const price = parseFloat(row.querySelector('.line-price')?.value) || 0;
+            total += net * price;
+        });
+        if (invoiceTotalDisplay) {
+            invoiceTotalDisplay.value = 'Rs ' + formatMoney(total);
+        }
+        if (autoCurrentBalance?.checked && currentBalanceInput) {
+            const previous = parseFloat(previousBalanceInput?.value) || 0;
+            currentBalanceInput.value = Math.round(previous + total);
+        }
+    }
+
+    function renumberLines() {
+        container.querySelectorAll('.invoice-line-row').forEach(function (row, index) {
+            const label = row.querySelector('.line-label');
+            if (label) label.textContent = 'Item — Line ' + (index + 1);
+        });
+    }
+
+    function addLineFromTemplate() {
+        const template = document.getElementById('invoice-line-template');
+        if (!template) return;
+        const clone = template.content.cloneNode(true);
+        const row = clone.querySelector('.invoice-line-row');
+        container.appendChild(clone);
+        bindLineRow(container.lastElementChild);
+        renumberLines();
+    }
+
+    container.querySelectorAll('.invoice-line-row').forEach(bindLineRow);
+    renumberLines();
+
+    addBtn?.addEventListener('click', addLineFromTemplate);
+    removeBtn?.addEventListener('click', function () {
+        const rows = container.querySelectorAll('.invoice-line-row');
+        if (rows.length <= 1) return;
+        rows[rows.length - 1].remove();
+        renumberLines();
+        updateInvoiceTotal();
+    });
+
+    previousBalanceInput?.addEventListener('input', updateInvoiceTotal);
+    autoCurrentBalance?.addEventListener('change', function () {
+        if (currentBalanceInput) {
+            currentBalanceInput.readOnly = this.checked;
+            updateInvoiceTotal();
+        }
+    });
+    updateInvoiceTotal();
+})();
+</script>
+{% endmacro %}

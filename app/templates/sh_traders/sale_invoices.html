@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script %}
+{% block title %}Sale Invoices - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Sale Invoices', 'Create printable sale invoices — add line items manually') }}
+
+{% if current_user.can_edit() %}
+{% if not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Create Sale Invoice</h2>
+    <form method="POST" class="form-grid" id="sale-invoice-form">
+        <div class="form-group">
+            <label for="invoice_date">Date</label>
+            <input type="date" id="invoice_date" name="invoice_date" required>
+        </div>
+        <div class="form-group">
+            <label for="invoice_number">Invoice #</label>
+            <input type="text" id="invoice_number" name="invoice_number" value="{{ next_invoice_number }}" placeholder="Auto if blank">
+        </div>
+        <div class="form-group">
+            <label for="factory_challan_no">Factory Challan No</label>
+            <input type="text" id="factory_challan_no" name="factory_challan_no">
+        </div>
+        <div class="form-group">
+            <label for="location">Location</label>
+            <input type="text" id="location" name="location" value="MULTAN">
+        </div>
+        <div class="form-group">
+            <label for="sold_to_client_id">Sold To</label>
+            <select id="sold_to_client_id" name="sold_to_client_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="previous_balance">Previous Balance</label>
+            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="previous_balance_type">Previous Balance Type</label>
+            <select id="previous_balance_type" name="previous_balance_type">
+                <option value="DR">DR</option>
+                <option value="CR">CR</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="current_balance">Current Balance</label>
+            <input type="number" id="current_balance" name="current_balance" step="1" min="0" readonly>
+            <small class="field-note"><label><input type="checkbox" id="auto_current_balance" checked> Auto = Previous + Invoice Total</label></small>
+        </div>
+        <div class="form-group">
+            <label for="current_balance_type">Current Balance Type</label>
+            <select id="current_balance_type" name="current_balance_type">
+                <option value="DR">DR</option>
+                <option value="CR">CR</option>
+            </select>
+        </div>
+
+        <div class="form-group full-width">
+            <h3>Invoice Line Items</h3>
+            <div id="invoice-lines-container">
+                {{ invoice_line_row() }}
+            </div>
+            <template id="invoice-line-template">
+                {{ invoice_line_row() }}
+            </template>
+            <div class="form-actions rolls-entry-actions">
+                <button type="button" id="add-line-btn" class="btn btn-secondary">+ Add Line Item</button>
+                <button type="button" id="remove-line-btn" class="btn btn-secondary">Remove Last Line</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="invoice_total_display">Invoice Total (auto)</label>
+            <input type="text" id="invoice_total_display" readonly class="readonly-field" value="Rs 0">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create &amp; Print Sale Invoice</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Sale Invoice Records</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Invoice #</th>
+                <th>Date</th>
+                <th>Sold To</th>
+                <th>Challan No</th>
+                <th>Lines</th>
+                <th>Total</th>
+                <th>PDF</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in invoices %}
+            <tr>
+                <td><strong>{{ inv.invoice_number }}</strong></td>
+                <td>{{ inv.invoice_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ inv.sold_to.name }}</td>
+                <td>{{ inv.factory_challan_no or '—' }}</td>
+                <td>{{ inv.lines|length }}</td>
+                <td>₨ {{ "{:,.0f}".format(inv.total_amount) }}</td>
+                <td>
+                    <a href="{{ url_for('sh_main.sale_invoice_pdf', invoice_id=inv.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                </td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_sale_invoice', invoice_id=inv.id),
+                    url_for('stock_deletes.delete_sh_sale_invoice', invoice_id=inv.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No sale invoices created yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('invoice_date').valueAsDate = new Date();
+</script>
+{{ invoice_line_script() }}
+{% endblock %}

@@ -24,6 +24,7 @@ from app.models import (
     StockPurchaseReceipt,
     ShClientCompany,
     ShGatePass,
+    ShSaleInvoice,
     ShLedgerEntry,
     ShOpeningBalance,
     ShPaymentScreenshot,
@@ -470,6 +471,18 @@ def delete_sh_payment_screenshot(record_id):
     delete_payment_screenshot(filename)
     flash("Payment screenshot deleted.", "success")
     return redirect(url_for("sh_main.payment_screenshots"))
+
+
+@stock_deletes_bp.route("/sh/sale-invoice/<int:invoice_id>", methods=["POST"])
+@login_required
+def delete_sh_sale_invoice(invoice_id):
+    invoice = ShSaleInvoice.query.get_or_404(invoice_id)
+    return _delete_entity(
+        invoice,
+        "ShSaleInvoice",
+        f"Deleted sale invoice {invoice.invoice_number}",
+        url_for("sh_main.sale_invoices"),
+    )
 
 
 @stock_deletes_bp.route("/sh/gate-pass/<int:gate_pass_id>", methods=["POST"])
