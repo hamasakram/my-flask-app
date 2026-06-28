@@ -79,10 +79,18 @@ def compute_gate_pass_weights(
 def save_gate_pass_rolls(gate_pass, gross_weights: list[float]) -> None:
     from app.models import ShGatePassRoll
 
-    gate_pass.roll_items = [
-        ShGatePassRoll(roll_number=index, gross_weight=weight)
-        for index, weight in enumerate(gross_weights, start=1)
-    ]
+    for roll in list(gate_pass.roll_items):
+        db.session.delete(roll)
+    db.session.flush()
+
+    for index, weight in enumerate(gross_weights, start=1):
+        db.session.add(
+            ShGatePassRoll(
+                gate_pass_id=gate_pass.id,
+                roll_number=index,
+                gross_weight=weight,
+            )
+        )
 
 
 def next_gate_pass_number() -> str:
