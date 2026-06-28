@@ -3,6 +3,7 @@ from io import BytesIO
 from pathlib import Path
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -40,64 +41,111 @@ def generate_sale_invoice_pdf(invoice: ShSaleInvoice) -> BytesIO:
     styles = getSampleStyleSheet()
     elements = []
 
-    header_left = Table(
-        [
-            [
-                Paragraph(
-                    '<font size="22" color="#6B7280"><b>SALE INVOICE</b></font>',
-                    styles["Normal"],
-                ),
-                "",
-            ],
-            [
-                Paragraph(
-                    '<font size="20" color="#6B7280"><b>SAMI HAMAS TRADERS</b></font>',
-                    styles["Normal"],
-                ),
-                "",
-            ],
-            [
-                Paragraph(
-                    f'<font size="14" color="#6B7280"><b>{invoice.location or "MULTAN"}</b></font>',
-                    styles["Normal"],
-                ),
-                "",
-            ],
-        ],
-        colWidths=[3.8 * inch, 3.0 * inch],
+    title_style = ParagraphStyle(
+        "InvoiceTitle",
+        parent=styles["Normal"],
+        fontSize=13,
+        textColor=GREY_TEXT,
+        fontName="Helvetica-Bold",
+        leading=15,
+        spaceAfter=2,
+    )
+    company_style = ParagraphStyle(
+        "CompanyName",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=GREY_TEXT,
+        fontName="Helvetica-Bold",
+        leading=13,
+        spaceAfter=2,
+    )
+    location_style = ParagraphStyle(
+        "Location",
+        parent=styles["Normal"],
+        fontSize=10,
+        textColor=GREY_TEXT,
+        fontName="Helvetica-Bold",
+        leading=12,
+    )
+    meta_style = ParagraphStyle(
+        "InvoiceMeta",
+        parent=styles["Normal"],
+        fontSize=9,
+        fontName="Helvetica-Bold",
+        leading=12,
+        alignment=TA_RIGHT,
     )
 
+    header_left = Table(
+        [
+            [Paragraph("SALE INVOICE", title_style)],
+            [Paragraph("SAMI HAMAS TRADERS", company_style)],
+            [Paragraph(invoice.location or "MULTAN", location_style)],
+        ],
+        colWidths=[4.6 * inch],
+    )
+    header_left.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+            ]
+        )
+    )
+
+    logo_width = 1.55 * inch
+    right_col_width = logo_width
     logo_cell = ""
     if SH_LOGO_PATH.exists():
-        logo_cell = Image(str(SH_LOGO_PATH), width=1.8 * inch, height=0.85 * inch, kind="proportional")
+        logo_cell = Image(str(SH_LOGO_PATH), width=logo_width, height=0.72 * inch, kind="proportional")
 
     header_right = Table(
         [
             [logo_cell],
-            [Paragraph(f"<b>Date:</b> {invoice.invoice_date.strftime('%d-%b-%Y').upper()}", styles["Normal"])],
-            [Paragraph(f"<b>Invoice:</b> {invoice.invoice_number}", styles["Normal"])],
+            [Paragraph(f"Date: {invoice.invoice_date.strftime('%d-%b-%Y').upper()}", meta_style)],
+            [Paragraph(f"Invoice: {invoice.invoice_number}", meta_style)],
             [
                 Paragraph(
-                    f"<b>Factory Challan No:</b> {invoice.factory_challan_no or '—'}",
-                    styles["Normal"],
+                    f"Factory Challan No: {invoice.factory_challan_no or '—'}",
+                    meta_style,
                 )
             ],
         ],
-        colWidths=[3.0 * inch],
+        colWidths=[right_col_width],
     )
     header_right.setStyle(
         TableStyle(
             [
                 ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 1), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (0, 0), 0),
+                ("TOPPADDING", (0, 1), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
             ]
         )
     )
 
-    top_table = Table([[header_left, header_right]], colWidths=[3.8 * inch, 3.0 * inch])
-    top_table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    top_table = Table(
+        [[header_left, header_right]],
+        colWidths=[4.6 * inch, 2.2 * inch],
+        hAlign="LEFT",
+    )
+    top_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
     elements.append(top_table)
     elements.append(Spacer(1, 0.18 * inch))
 
