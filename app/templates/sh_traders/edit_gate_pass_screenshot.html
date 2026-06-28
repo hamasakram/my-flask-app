@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Edit Gate Pass Screenshot - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Edit Gate Pass Screenshot') }}
+
+<div class="card">
+    <form method="POST" enctype="multipart/form-data" class="form-grid">
+        <div class="form-group">
+            <label for="gate_pass_date">Gate Pass Date</label>
+            <input type="date" id="gate_pass_date" name="gate_pass_date" value="{{ record.gate_pass_date.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_to_client_id">Sold To</label>
+            <select id="sold_to_client_id" name="sold_to_client_id">
+                <option value="">None</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if record.sold_to_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="sale_invoice_id">Link to Sale Invoice</label>
+            <select id="sale_invoice_id" name="sale_invoice_id">
+                <option value="">None</option>
+                {% for inv in invoices %}
+                <option value="{{ inv.id }}" {% if record.sale_invoice_id == inv.id %}selected{% endif %}>
+                    {{ inv.invoice_date.strftime('%d-%m-%Y') }} — {{ inv.invoice_number }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="title">Title / Description</label>
+            <input type="text" id="title" name="title" value="{{ record.title or '' }}">
+        </div>
+        <div class="form-group full-width">
+            <label for="screenshot">Replace File (optional)</label>
+            <input type="file" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,image/*">
+            <small class="field-note">Leave blank to keep current file. <a href="{{ url_for('sh_main.view_gate_pass_screenshot', record_id=record.id) }}" target="_blank">View current</a></small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ record.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

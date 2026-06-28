@@ -536,6 +536,28 @@ class ShPaymentScreenshot(db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
+class ShGatePassScreenshot(db.Model):
+    """Gate pass photo/screenshot uploaded for a specific day."""
+
+    __tablename__ = "sh_gate_pass_screenshots"
+
+    id = db.Column(db.Integer, primary_key=True)
+    gate_pass_date = db.Column(db.Date, nullable=False)
+    sold_to_client_id = db.Column(db.Integer, db.ForeignKey("sh_client_companies.id"))
+    sale_invoice_id = db.Column(db.Integer, db.ForeignKey("sh_sale_invoices.id"))
+    title = db.Column(db.String(150))
+    screenshot_filename = db.Column(db.String(255), nullable=False)
+    screenshot_data = db.Column(db.LargeBinary)
+    screenshot_mimetype = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    sold_to = db.relationship("ShClientCompany")
+    sale_invoice = db.relationship("ShSaleInvoice")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
 class ShGatePass(db.Model):
     __tablename__ = "sh_gate_passes"
 

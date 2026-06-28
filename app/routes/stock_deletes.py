@@ -27,6 +27,7 @@ from app.models import (
     ShSaleInvoice,
     ShLedgerEntry,
     ShOpeningBalance,
+    ShGatePassScreenshot,
     ShPaymentScreenshot,
     ShPurchase,
     ShSupplierCompany,
@@ -43,7 +44,7 @@ from app.services.record_delete import (
     materials_company_in_use,
 )
 from app.services.receipt_uploads import delete_receipt_file
-from app.services.sh_uploads import delete_payment_screenshot
+from app.services.sh_uploads import delete_gate_pass_screenshot, delete_payment_screenshot
 from app.services.bank_ledger import bank_has_transfers
 
 stock_deletes_bp = Blueprint("stock_deletes", __name__, url_prefix="/stock-delete")
@@ -471,6 +472,26 @@ def delete_sh_payment_screenshot(record_id):
     delete_payment_screenshot(filename)
     flash("Payment screenshot deleted.", "success")
     return redirect(url_for("sh_main.payment_screenshots"))
+
+
+@stock_deletes_bp.route("/sh/gate-pass-screenshot/<int:record_id>", methods=["POST"])
+@login_required
+def delete_sh_gate_pass_screenshot(record_id):
+    require_edit_access()
+    record = ShGatePassScreenshot.query.get_or_404(record_id)
+    filename = record.screenshot_filename
+    db.session.delete(record)
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "ShGatePassScreenshot",
+        record_id,
+        f"Deleted gate pass screenshot #{record_id}",
+    )
+    db.session.commit()
+    delete_gate_pass_screenshot(filename)
+    flash("Gate pass screenshot deleted.", "success")
+    return redirect(url_for("sh_main.gate_pass_screenshots"))
 
 
 @stock_deletes_bp.route("/sh/sale-invoice/<int:invoice_id>", methods=["POST"])

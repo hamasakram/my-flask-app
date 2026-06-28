@@ -14,12 +14,22 @@ from app.services.receipt_uploads import (
     save_receipt_upload,
 )
 
+GATE_PASS_UPLOAD_SUBDIR = Path("uploads") / "sh_traders" / "gate_passes"
 UPLOAD_SUBDIR = Path("uploads") / "sh_traders" / "payments"
 
 prepare_payment_screenshot = lambda f: prepare_receipt_upload(f, UPLOAD_SUBDIR)
 save_payment_screenshot = lambda f: save_receipt_upload(f, UPLOAD_SUBDIR)
 apply_payment_screenshot = apply_receipt_file
 delete_payment_screenshot = delete_receipt_file
+
+prepare_gate_pass_screenshot = lambda f: prepare_receipt_upload(f, GATE_PASS_UPLOAD_SUBDIR)
+save_gate_pass_screenshot = lambda f: save_receipt_upload(f, GATE_PASS_UPLOAD_SUBDIR)
+apply_gate_pass_screenshot = apply_receipt_file
+delete_gate_pass_screenshot = delete_receipt_file
+
+
+def resolve_gate_pass_screenshot_file(record, backfill_fn=None):
+    return resolve_receipt_file(record, backfill=backfill_fn)
 
 
 def payment_screenshot_view_url(record_id: int) -> str:

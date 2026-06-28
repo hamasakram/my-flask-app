@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Gate Pass Screenshots - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Gate Pass Screenshots', 'Upload gate pass photos for a specific day') }}
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Upload Gate Pass Screenshot</h2>
+    <form method="POST" enctype="multipart/form-data" class="form-grid">
+        <div class="form-group">
+            <label for="gate_pass_date">Gate Pass Date</label>
+            <input type="date" id="gate_pass_date" name="gate_pass_date" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_to_client_id">Sold To (optional)</label>
+            <select id="sold_to_client_id" name="sold_to_client_id">
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="sale_invoice_id">Link to Sale Invoice (optional)</label>
+            <select id="sale_invoice_id" name="sale_invoice_id">
+                <option value="">None</option>
+                {% for inv in invoices %}
+                <option value="{{ inv.id }}" data-client="{{ inv.sold_to_client_id }}">
+                    {{ inv.invoice_date.strftime('%d-%m-%Y') }} — {{ inv.invoice_number }} ({{ inv.sold_to.name }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="title">Title / Description (optional)</label>
+            <input type="text" id="title" name="title" placeholder="e.g. Morning dispatch gate pass">
+        </div>
+        <div class="form-group full-width">
+            <label for="screenshot">Gate Pass Screenshot</label>
+            <input type="file" id="screenshot" name="screenshot" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,image/*" required>
+            <small class="field-note">PNG, JPG, GIF, WEBP, or PDF — max 10 MB</small>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Upload Screenshot</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Uploaded Gate Pass Screenshots</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Sold To</th>
+                <th>Title</th>
+                <th>Sale Invoice</th>
+                <th>File</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td>{{ r.gate_pass_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ r.sold_to.name if r.sold_to else '—' }}</td>
+                <td>{{ r.title or '—' }}</td>
+                <td>{% if r.sale_invoice %}{{ r.sale_invoice.invoice_number }}{% else %}—{% endif %}</td>
+                <td>
+                    <a href="{{ url_for('sh_main.view_gate_pass_screenshot', record_id=r.id) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
+                </td>
+                <td>{{ r.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_gate_pass_screenshot', record_id=r.id),
+                    url_for('stock_deletes.delete_sh_gate_pass_screenshot', record_id=r.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No gate pass screenshots uploaded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const invoiceSelect = document.getElementById('sale_invoice_id');
+    const clientSelect = document.getElementById('sold_to_client_id');
+    const dateInput = document.getElementById('gate_pass_date');
+
+    if (dateInput && !dateInput.value) {
+        dateInput.valueAsDate = new Date();
+    }
+
+    invoiceSelect?.addEventListener('change', function () {
+        const opt = this.options[this.selectedIndex];
+        if (!opt || !opt.value || !clientSelect) return;
+        clientSelect.value = opt.dataset.client || '';
+        if (dateInput && opt.textContent) {
+            const match = opt.textContent.trim().match(/^(\d{2})-(\d{2})-(\d{4})/);
+            if (match) {
+                dateInput.value = `${match[3]}-${match[2]}-${match[1]}`;
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from app import db
 from app.models import (
     ShClientCompany,
+    ShGatePassScreenshot,
     ShLedgerEntry,
     ShOpeningBalance,
     ShPaymentScreenshot,
@@ -29,7 +30,14 @@ from app.services.sh_traders import (
     get_opening_balance,
     get_party_balance_totals,
 )
-from app.services.sh_uploads import apply_payment_screenshot, resolve_payment_screenshot_file, save_payment_screenshot
+from app.services.sh_uploads import (
+    apply_gate_pass_screenshot,
+    apply_payment_screenshot,
+    resolve_gate_pass_screenshot_file,
+    resolve_payment_screenshot_file,
+    save_gate_pass_screenshot,
+    save_payment_screenshot,
+)
 
 sh_main_bp = Blueprint("sh_main", __name__, url_prefix="/sh-traders")
 
@@ -384,6 +392,82 @@ def payment_screenshots():
         records=records,
         suppliers=suppliers,
         purchases=purchases,
+    )
+
+
+@sh_main_bp.route("/gate-pass-screenshots/<int:record_id>/file")
+@login_required
+def view_gate_pass_screenshot(record_id):
+    record = ShGatePassScreenshot.query.get_or_404(record_id)
+
+    def backfill(rec, data, mimetype):
+        rec.screenshot_data = data
+        rec.screenshot_mimetype = mimetype
+        db.session.commit()
+
+    return resolve_gate_pass_screenshot_file(record, backfill_fn=backfill)
+
+
+@sh_main_bp.route("/gate-pass-screenshots", methods=["GET", "POST"])
+@login_required
+def gate_pass_screenshots():
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    invoices = (
+        ShSaleInvoice.query.order_by(ShSaleInvoice.invoice_date.desc(), ShSaleInvoice.id.desc()).all()
+    )
+
+    if request.method == "POST":
+        require_edit_access()
+        gate_pass_date = request.form.get("gate_pass_date")
+        sold_to_id = request.form.get("sold_to_client_id", type=int) or None
+        sale_invoice_id = request.form.get("sale_invoice_id", type=int) or None
+        title = request.form.get("title", "").strip()
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not gate_pass_date:
+            flash("Gate pass date is required.", "danger")
+            return redirect(url_for("sh_main.gate_pass_screenshots"))
+
+        try:
+            prepared = save_gate_pass_screenshot(screenshot)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.gate_pass_screenshots"))
+
+        record = ShGatePassScreenshot(
+            gate_pass_date=_parse_date(gate_pass_date),
+            sold_to_client_id=sold_to_id,
+            sale_invoice_id=sale_invoice_id,
+            title=title or None,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        apply_gate_pass_screenshot(record, prepared)
+        db.session.add(record)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShGatePassScreenshot",
+            record.id,
+            f"Gate pass screenshot for {gate_pass_date}",
+        )
+        db.session.commit()
+        flash("Gate pass screenshot uploaded.", "success")
+        return redirect(url_for("sh_main.gate_pass_screenshots"))
+
+    records = (
+        ShGatePassScreenshot.query.order_by(
+            ShGatePassScreenshot.gate_pass_date.desc(),
+            ShGatePassScreenshot.id.desc(),
+        ).all()
+    )
+    return render_template(
+        "sh_traders/gate_pass_screenshots.html",
+        records=records,
+        clients=clients,
+        invoices=invoices,
     )
 
 

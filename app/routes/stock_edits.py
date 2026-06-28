@@ -28,6 +28,7 @@ from app.models import (
     ShSaleInvoice,
     ShLedgerEntry,
     ShOpeningBalance,
+    ShGatePassScreenshot,
     ShPaymentScreenshot,
     ShPurchase,
     ShSupplierCompany,
@@ -42,7 +43,7 @@ from app.services.bank_ledger import bank_account_exists, update_bank_transfer
 from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
-from app.services.sh_uploads import apply_payment_screenshot, delete_payment_screenshot, save_payment_screenshot
+from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
 from pathlib import Path
@@ -1256,6 +1257,61 @@ def edit_sh_payment_screenshot(record_id):
         suppliers=suppliers,
         purchases=purchases,
         cancel_url=url_for("sh_main.payment_screenshots"),
+    )
+
+
+@stock_edits_bp.route("/sh/gate-pass-screenshot/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_gate_pass_screenshot(record_id):
+    record = ShGatePassScreenshot.query.get_or_404(record_id)
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    invoices = ShSaleInvoice.query.order_by(ShSaleInvoice.invoice_date.desc()).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        gate_pass_date = request.form.get("gate_pass_date")
+        sold_to_id = request.form.get("sold_to_client_id", type=int) or None
+        sale_invoice_id = request.form.get("sale_invoice_id", type=int) or None
+        title = request.form.get("title", "").strip()
+        notes = request.form.get("notes", "").strip()
+        screenshot = request.files.get("screenshot")
+
+        if not gate_pass_date:
+            flash("Gate pass date is required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_gate_pass_screenshot", record_id=record_id))
+
+        record.gate_pass_date = _parse_date(gate_pass_date)
+        record.sold_to_client_id = sold_to_id
+        record.sale_invoice_id = sale_invoice_id
+        record.title = title or None
+        record.notes = notes or None
+
+        if screenshot and screenshot.filename:
+            try:
+                prepared = save_gate_pass_screenshot(screenshot)
+                delete_gate_pass_screenshot(record.screenshot_filename)
+                apply_gate_pass_screenshot(record, prepared)
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(url_for("stock_edits.edit_sh_gate_pass_screenshot", record_id=record_id))
+
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShGatePassScreenshot",
+            record.id,
+            f"Updated gate pass screenshot #{record_id}",
+        )
+        db.session.commit()
+        flash("Gate pass screenshot updated.", "success")
+        return redirect(url_for("sh_main.gate_pass_screenshots"))
+
+    return render_template(
+        "sh_traders/edit_gate_pass_screenshot.html",
+        record=record,
+        clients=clients,
+        invoices=invoices,
+        cancel_url=url_for("sh_main.gate_pass_screenshots"),
     )
 
 
