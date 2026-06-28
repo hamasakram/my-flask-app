@@ -3,7 +3,7 @@ from io import BytesIO
 from pathlib import Path
 
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.enums import TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -13,6 +13,7 @@ from app.models import ShSaleInvoice
 
 SH_LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "images" / "sh-traders-logo.png"
 GREY_TEXT = colors.HexColor("#6B7280")
+BRAND_RED = colors.HexColor("#A31F1F")
 BRAND_BLACK = colors.HexColor("#1A1A1A")
 HEADER_BG = colors.HexColor("#E5E7EB")
 BORDER_GREY = colors.HexColor("#D1D5DB")
@@ -54,7 +55,7 @@ def generate_sale_invoice_pdf(invoice: ShSaleInvoice) -> BytesIO:
         "CompanyName",
         parent=styles["Normal"],
         fontSize=11,
-        textColor=GREY_TEXT,
+        textColor=BRAND_RED,
         fontName="Helvetica-Bold",
         leading=13,
         spaceAfter=2,
@@ -223,32 +224,74 @@ def generate_sale_invoice_pdf(invoice: ShSaleInvoice) -> BytesIO:
     elements.append(items_table)
     elements.append(Spacer(1, 0.12 * inch))
 
+    totals_label_style = ParagraphStyle(
+        "TotalsLabel",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        leading=11,
+        alignment=TA_LEFT,
+    )
+    totals_value_style = ParagraphStyle(
+        "TotalsValue",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        leading=11,
+        alignment=TA_RIGHT,
+    )
     totals_data = [
-        ["TOTAL", f"Rs {_format_money(invoice.total_amount)}"],
+        ["", "", "", Paragraph("TOTAL", totals_label_style), "", "", Paragraph(f"Rs {_format_money(invoice.total_amount)}", totals_value_style)],
         [
-            "PREVIOUS BALANCE",
-            _format_balance(invoice.previous_balance, invoice.previous_balance_type),
+            "",
+            "",
+            "",
+            Paragraph("PREVIOUS BALANCE", totals_label_style),
+            "",
+            "",
+            Paragraph(
+                _format_balance(invoice.previous_balance, invoice.previous_balance_type),
+                totals_value_style,
+            ),
         ],
         [
-            "CURRENT BALANCE",
-            _format_balance(invoice.current_balance, invoice.current_balance_type),
+            "",
+            "",
+            "",
+            Paragraph("CURRENT BALANCE", totals_label_style),
+            "",
+            "",
+            Paragraph(
+                _format_balance(invoice.current_balance, invoice.current_balance_type),
+                totals_value_style,
+            ),
         ],
     ]
-    totals_table = Table(totals_data, colWidths=[1.5 * inch, 1.35 * inch], hAlign="RIGHT")
+    totals_table = Table(totals_data, colWidths=col_widths, hAlign="LEFT")
     totals_table.setStyle(
         TableStyle(
             [
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTNAME", (1, 0), (1, -1), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 10),
-                ("BOX", (0, 0), (-1, -1), 0.8, BORDER_GREY),
-                ("INNERGRID", (0, 0), (-1, -1), 0.4, BORDER_GREY),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.white),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("ALIGN", (1, 0), (1, -1), "RIGHT"),
+                ("SPAN", (3, 0), (5, 0)),
+                ("SPAN", (3, 1), (5, 1)),
+                ("SPAN", (3, 2), (5, 2)),
+                ("FONTNAME", (3, 0), (6, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (3, 0), (6, -1), 9),
+                ("TEXTCOLOR", (3, 0), (6, -1), BRAND_BLACK),
+                ("BOX", (3, 0), (6, -1), 0.8, BORDER_GREY),
+                ("INNERGRID", (3, 0), (6, -1), 0.4, BORDER_GREY),
+                ("VALIGN", (3, 0), (6, -1), "MIDDLE"),
+                ("ALIGN", (3, 0), (5, -1), "LEFT"),
+                ("ALIGN", (6, 0), (6, -1), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (2, -1), 0),
+                ("RIGHTPADDING", (0, 0), (2, -1), 0),
+                ("TOPPADDING", (0, 0), (2, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (2, -1), 0),
+                ("LEFTPADDING", (3, 0), (5, -1), 6),
+                ("RIGHTPADDING", (3, 0), (5, -1), 4),
+                ("LEFTPADDING", (6, 0), (6, -1), 4),
+                ("RIGHTPADDING", (6, 0), (6, -1), 6),
+                ("TOPPADDING", (3, 0), (6, -1), 6),
+                ("BOTTOMPADDING", (3, 0), (6, -1), 6),
             ]
         )
     )
