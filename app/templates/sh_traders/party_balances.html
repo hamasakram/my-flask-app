@@ -22,6 +22,7 @@
 
 <p class="field-note balance-note">
     Balances update automatically when you add or edit <strong>Advance Stock Purchased</strong>,
+    create or change <strong>Sale Invoices</strong> for a client,
     record <strong>Paid to the Company</strong> on purchases, or add ledger entries linked to a supplier or client in
     <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a>.
 </p>
@@ -63,6 +64,8 @@
             <thead>
                 <tr>
                     <th>Client</th>
+                    <th>Purchases Billed</th>
+                    <th>Invoices Billed</th>
                     <th>Total Billed</th>
                     <th>Received (Ledger)</th>
                     <th>Balance To Receive</th>
@@ -72,14 +75,16 @@
                 {% for row in party_totals.client_rows %}
                 <tr>
                     <td><strong>{{ row.party.name }}</strong></td>
-                    <td>₨ {{ "{:,.2f}".format(row.total_billed) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.purchase_billed) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.invoice_billed) }}{% if row.invoice_count %} <small class="field-note">({{ row.invoice_count }})</small>{% endif %}</td>
+                    <td><strong>₨ {{ "{:,.2f}".format(row.total_billed) }}</strong></td>
                     <td>₨ {{ "{:,.2f}".format(row.ledger_received) }}</td>
                     <td class="{% if row.balance_to_receive > 0 %}text-success{% endif %}">
                         <strong>₨ {{ "{:,.2f}".format(row.balance_to_receive) }}</strong>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="empty">No clients yet</td></tr>
+                <tr><td colspan="6" class="empty">No clients yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -89,5 +94,6 @@
 <div class="quick-actions">
     <a href="{{ url_for('sh_main.payments') }}" class="btn btn-primary">Payments &amp; Ledger</a>
     <a href="{{ url_for('sh_main.purchases') }}" class="btn btn-secondary">Advance Stock Purchased</a>
+    <a href="{{ url_for('sh_main.sale_invoices') }}" class="btn btn-secondary">Sale Invoices</a>
 </div>
 {% endblock %}

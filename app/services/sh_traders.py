@@ -10,6 +10,7 @@ from app.models import (
     ShOpeningBalance,
     ShPaymentScreenshot,
     ShPurchase,
+    ShSaleInvoice,
     ShSupplierCompany,
 )
 
@@ -178,12 +179,22 @@ def get_supplier_party_balances() -> list[dict]:
 
 
 def get_client_party_balances() -> list[dict]:
-    """Amount to receive from each client — auto from purchases minus ledger receipts."""
+    """Amount to receive from each client — purchases, sale invoices, minus ledger receipts."""
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
     rows = []
     for client in clients:
         purchases = ShPurchase.query.filter_by(client_company_id=client.id).all()
-        total_billed = sum(float(p.client_total_amount or 0) for p in purchases)
+        purchase_billed = sum(float(p.client_total_amount or 0) for p in purchases)
+
+        invoice_billed = (
+            db.session.query(func.coalesce(func.sum(ShSaleInvoice.total_amount), 0))
+            .filter(ShSaleInvoice.sold_to_client_id == client.id)
+            .scalar()
+            or 0
+        )
+        invoice_count = ShSaleInvoice.query.filter_by(sold_to_client_id=client.id).count()
+
+        total_billed = float(purchase_billed) + float(invoice_billed)
 
         ledger_received = (
             db.session.query(func.coalesce(func.sum(ShLedgerEntry.credit), 0))
@@ -197,10 +208,13 @@ def get_client_party_balances() -> list[dict]:
         rows.append(
             {
                 "party": client,
+                "purchase_billed": float(purchase_billed),
+                "invoice_billed": float(invoice_billed),
                 "total_billed": float(total_billed),
                 "ledger_received": float(ledger_received),
                 "balance_to_receive": float(balance_to_receive),
                 "purchase_count": len(purchases),
+                "invoice_count": invoice_count,
             }
         )
     return rows
