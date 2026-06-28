@@ -43,6 +43,7 @@ from app.services.bank_ledger import bank_account_exists, update_bank_transfer
 from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
+from app.services.sh_traders import calculate_total_amount
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
