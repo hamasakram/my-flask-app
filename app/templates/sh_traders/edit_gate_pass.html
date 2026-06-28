@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/gate_pass_roll_fields.html" import gate_pass_roll_fields, gate_pass_roll_script %}
 {% block title %}Edit Gate Pass - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Edit Gate Pass', gate_pass.gate_pass_number) }}
-
 <div class="card">
     <form method="POST" class="form-grid" id="gate-pass-form">
         <div class="form-group">
-            <label>Gate Pass Number</label>
+            <label>Gate Pass #</label>
             <input type="text" readonly class="readonly-field" value="{{ gate_pass.gate_pass_number }}">
         </div>
         <div class="form-group">
@@ -46,33 +46,17 @@
             <label for="micron">Micron</label>
             <input type="text" id="micron" name="micron" value="{{ gate_pass.micron or '' }}">
         </div>
-        <div class="form-group">
-            <label for="rolls">Rolls</label>
-            <input type="number" id="rolls" name="rolls" step="1" min="0" value="{{ gate_pass.rolls or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="gross_weight_per_roll">Gross Weight / Roll (KG)</label>
-            <input type="number" id="gross_weight_per_roll" name="gross_weight_per_roll" step="0.01" min="0" value="{{ gate_pass.gross_weight_per_roll or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="net_weight_per_roll">Net Weight / Roll (KG)</label>
-            <input type="number" id="net_weight_per_roll" name="net_weight_per_roll" step="0.01" min="0" value="{{ gate_pass.net_weight_per_roll or '' }}">
-        </div>
-        <div class="form-group">
-            <label for="gross_weight">Total Gross Weight (KG)</label>
-            <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0.01" value="{{ gate_pass.gross_weight }}" required>
-        </div>
-        <div class="form-group">
-            <label for="net_weight">Total Net Weight (KG)</label>
-            <input type="number" id="net_weight" name="net_weight" step="0.01" min="0.01" value="{{ gate_pass.net_weight }}" required>
-        </div>
+
+        {% set initial_rolls = gate_pass.roll_items | map(attribute='gross_weight') | list %}
+        {{ gate_pass_roll_fields(initial_rolls, gate_pass.cone_weight_per_roll or '') }}
+
         <div class="form-group">
             <label for="amount_per_kg">Amount Per KG</label>
             <input type="number" id="amount_per_kg" name="amount_per_kg" step="0.01" min="0.01" value="{{ gate_pass.amount_per_kg }}" required>
         </div>
         <div class="form-group">
             <label for="total_amount_display">Total Amount (auto)</label>
-            <input type="text" id="total_amount_display" readonly class="readonly-field">
+            <input type="text" id="total_amount_display" readonly class="readonly-field" value="{{ '{:,.2f}'.format(gate_pass.total_amount) }}">
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
@@ -88,41 +72,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-(function () {
-    const rollsInput = document.getElementById('rolls');
-    const grossPerRollInput = document.getElementById('gross_weight_per_roll');
-    const netPerRollInput = document.getElementById('net_weight_per_roll');
-    const grossInput = document.getElementById('gross_weight');
-    const netInput = document.getElementById('net_weight');
-    const rateInput = document.getElementById('amount_per_kg');
-    const totalDisplay = document.getElementById('total_amount_display');
-
-    function updateRollTotals() {
-        const rolls = parseFloat(rollsInput?.value) || 0;
-        const grossPerRoll = parseFloat(grossPerRollInput?.value) || 0;
-        const netPerRoll = parseFloat(netPerRollInput?.value) || 0;
-        if (rolls > 0 && grossPerRoll > 0 && grossInput) {
-            grossInput.value = (rolls * grossPerRoll).toFixed(2);
-        }
-        if (rolls > 0 && netPerRoll > 0 && netInput) {
-            netInput.value = (rolls * netPerRoll).toFixed(2);
-        }
-        updateTotal();
-    }
-
-    function updateTotal() {
-        const net = parseFloat(netInput.value) || 0;
-        const rate = parseFloat(rateInput.value) || 0;
-        totalDisplay.value = (net * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    [rollsInput, grossPerRollInput, netPerRollInput].forEach(function (el) {
-        if (el) el.addEventListener('input', updateRollTotals);
-    });
-    netInput.addEventListener('input', updateTotal);
-    rateInput.addEventListener('input', updateTotal);
-    updateTotal();
-})();
-</script>
+{% set initial_rolls = gate_pass.roll_items | map(attribute='gross_weight') | list %}
+{{ gate_pass_roll_script(initial_rolls if initial_rolls else [gate_pass.gross_weight_per_roll or '']) }}
 {% endblock %}

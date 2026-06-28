@@ -18,12 +18,16 @@ from app.services.sh_gate_pass_pdf import generate_gate_pass_pdf
 from app.services.sh_traders import (
     calculate_gate_pass_total,
     calculate_total_amount,
+    compute_gate_pass_weights,
     get_current_ledger_balance,
     get_dashboard_stats,
     get_ledger_rows,
     get_opening_balance,
     get_party_balance_totals,
     next_gate_pass_number,
+    parse_issued_datetime,
+    parse_roll_gross_weights,
+    save_gate_pass_rolls,
 )
 from app.services.sh_uploads import apply_payment_screenshot, resolve_payment_screenshot_file, save_payment_screenshot
 
@@ -406,11 +410,7 @@ def gate_passes():
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
-        rolls = request.form.get("rolls", type=float)
-        gross_weight_per_roll = request.form.get("gross_weight_per_roll", type=float)
-        net_weight_per_roll = request.form.get("net_weight_per_roll", type=float)
-        gross_weight = request.form.get("gross_weight", type=float)
-        net_weight = request.form.get("net_weight", type=float)
+        cone_weight_per_roll = request.form.get("cone_weight_per_roll", type=float) or 0.0
         amount_per_kg = request.form.get("amount_per_kg", type=float)
         notes = request.form.get("notes", "").strip()
 
@@ -420,18 +420,21 @@ def gate_passes():
             or not sold_to_id
             or not supplier_id
             or not material_name
-            or not gross_weight
-            or gross_weight <= 0
-            or not net_weight
-            or net_weight <= 0
             or not amount_per_kg
             or amount_per_kg <= 0
         ):
-            flash("Date, time, sold to, supplier, material, weights, and amount per KG are required.", "danger")
+            flash("Date, time, sold to, supplier, material, and amount per KG are required.", "danger")
             return redirect(url_for("sh_main.gate_passes"))
 
-        issued_at = datetime.strptime(f"{issued_date} {issued_time}", "%Y-%m-%d %H:%M")
-        total_amount = calculate_gate_pass_total(net_weight, amount_per_kg)
+        try:
+            gross_weights = parse_roll_gross_weights(request.form)
+            weights = compute_gate_pass_weights(gross_weights, cone_weight_per_roll)
+            issued_at = parse_issued_datetime(issued_date, issued_time)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.gate_passes"))
+
+        total_amount = calculate_gate_pass_total(weights["net_weight"], amount_per_kg)
 
         gate_pass = ShGatePass(
             gate_pass_number=next_gate_pass_number(),
@@ -442,11 +445,12 @@ def gate_passes():
             material_name=material_name,
             size=size,
             micron=micron or None,
-            rolls=rolls,
-            gross_weight_per_roll=gross_weight_per_roll,
-            net_weight_per_roll=net_weight_per_roll,
-            gross_weight=gross_weight,
-            net_weight=net_weight,
+            rolls=weights["rolls"],
+            cone_weight_per_roll=cone_weight_per_roll or None,
+            gross_weight_per_roll=weights["gross_weight_per_roll"],
+            net_weight_per_roll=weights["net_weight_per_roll"],
+            gross_weight=weights["gross_weight"],
+            net_weight=weights["net_weight"],
             amount_per_kg=amount_per_kg,
             total_amount=total_amount,
             notes=notes or None,
@@ -454,6 +458,7 @@ def gate_passes():
         )
         db.session.add(gate_pass)
         db.session.flush()
+        save_gate_pass_rolls(gate_pass, gross_weights)
         log_audit(
             current_user.id,
             "CREATE",

@@ -1,0 +1,135 @@
+{% macro gate_pass_roll_fields(initial_rolls=[], cone_weight='') %}
+<div class="form-group">
+    <label for="cone_weight_per_roll">Cone Weight / Roll (KG)</label>
+    <input
+        type="number"
+        id="cone_weight_per_roll"
+        name="cone_weight_per_roll"
+        step="0.001"
+        min="0"
+        value="{{ cone_weight }}"
+        placeholder="e.g. 1.089"
+    >
+    <small class="field-note">Tare weight per roll — subtracted from gross to get net weight</small>
+</div>
+
+<div class="form-group full-width">
+    <label>Rolls — enter gross weight for each roll one by one</label>
+    <div id="rolls-container" class="rolls-entry-list"></div>
+    <div class="form-actions rolls-entry-actions">
+        <button type="button" id="add-roll-btn" class="btn btn-secondary">+ Add Roll</button>
+        <button type="button" id="remove-roll-btn" class="btn btn-secondary">Remove Last Roll</button>
+    </div>
+</div>
+
+<div class="form-group">
+    <label>Total Rolls</label>
+    <input type="text" id="rolls_count_display" readonly class="readonly-field" value="0">
+</div>
+<div class="form-group">
+    <label>Total Gross Weight (KG)</label>
+    <input type="text" id="gross_total_display" readonly class="readonly-field" value="0.000">
+</div>
+<div class="form-group">
+    <label>Total Cone Weight (KG)</label>
+    <input type="text" id="cone_total_display" readonly class="readonly-field" value="0.000">
+</div>
+<div class="form-group">
+    <label>Total Net Weight (KG)</label>
+    <input type="text" id="net_total_display" readonly class="readonly-field" value="0.000">
+</div>
+{% endmacro %}
+
+{% macro gate_pass_roll_script(initial_rolls=[]) %}
+<script>
+(function () {
+    const container = document.getElementById('rolls-container');
+    const addBtn = document.getElementById('add-roll-btn');
+    const removeBtn = document.getElementById('remove-roll-btn');
+    const coneInput = document.getElementById('cone_weight_per_roll');
+    const rollsCountDisplay = document.getElementById('rolls_count_display');
+    const grossTotalDisplay = document.getElementById('gross_total_display');
+    const coneTotalDisplay = document.getElementById('cone_total_display');
+    const netTotalDisplay = document.getElementById('net_total_display');
+    const rateInput = document.getElementById('amount_per_kg');
+    const totalDisplay = document.getElementById('total_amount_display');
+    const initialRolls = {{ initial_rolls | tojson }};
+
+    if (!container) return;
+
+    function formatWeight(value) {
+        return Number(value || 0).toLocaleString(undefined, {
+            minimumFractionDigits: 3,
+            maximumFractionDigits: 3,
+        });
+    }
+
+    function renumberRolls() {
+        const rows = container.querySelectorAll('.roll-entry-row');
+        rows.forEach(function (row, index) {
+            row.querySelector('.roll-entry-label').textContent = 'Roll ' + (index + 1);
+        });
+    }
+
+    function addRoll(value) {
+        const row = document.createElement('div');
+        row.className = 'roll-entry-row form-grid';
+        row.innerHTML =
+            '<div class="form-group">' +
+                '<label class="roll-entry-label">Roll</label>' +
+                '<input type="number" name="roll_gross_weight" step="0.001" min="0.001" class="roll-weight-input" required placeholder="Gross weight KG">' +
+            '</div>';
+        container.appendChild(row);
+        const input = row.querySelector('.roll-weight-input');
+        if (value !== undefined && value !== null && value !== '') {
+            input.value = value;
+        }
+        input.addEventListener('input', updateTotals);
+        renumberRolls();
+        updateTotals();
+        input.focus();
+    }
+
+    function updateTotals() {
+        const weights = Array.from(container.querySelectorAll('.roll-weight-input'))
+            .map(function (input) { return parseFloat(input.value) || 0; })
+            .filter(function (value) { return value > 0; });
+        const conePerRoll = parseFloat(coneInput?.value) || 0;
+        const rollCount = weights.length;
+        const grossTotal = weights.reduce(function (sum, value) { return sum + value; }, 0);
+        const coneTotal = conePerRoll * rollCount;
+        const netTotal = grossTotal - coneTotal;
+
+        if (rollsCountDisplay) rollsCountDisplay.value = String(rollCount);
+        if (grossTotalDisplay) grossTotalDisplay.value = formatWeight(grossTotal);
+        if (coneTotalDisplay) coneTotalDisplay.value = formatWeight(coneTotal);
+        if (netTotalDisplay) netTotalDisplay.value = formatWeight(netTotal);
+
+        if (totalDisplay && rateInput) {
+            const rate = parseFloat(rateInput.value) || 0;
+            totalDisplay.value = (netTotal * rate).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            });
+        }
+    }
+
+    addBtn?.addEventListener('click', function () { addRoll(''); });
+    removeBtn?.addEventListener('click', function () {
+        const rows = container.querySelectorAll('.roll-entry-row');
+        if (!rows.length) return;
+        rows[rows.length - 1].remove();
+        renumberRolls();
+        updateTotals();
+    });
+    coneInput?.addEventListener('input', updateTotals);
+    rateInput?.addEventListener('input', updateTotals);
+
+    if (initialRolls.length) {
+        initialRolls.forEach(function (weight) { addRoll(weight); });
+    } else {
+        addRoll('');
+    }
+})();
+</script>
+{% endmacro %}

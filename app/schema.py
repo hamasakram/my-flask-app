@@ -42,6 +42,7 @@ COLUMN_MIGRATIONS = {
         "rolls": "FLOAT",
         "gross_weight_per_roll": "FLOAT",
         "net_weight_per_roll": "FLOAT",
+        "cone_weight_per_roll": "FLOAT",
     },
     "sh_ledger_entries": {
         "supplier_company_id": "INTEGER",

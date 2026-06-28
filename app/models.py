@@ -555,6 +555,7 @@ class ShGatePass(db.Model):
     rolls = db.Column(db.Float)
     gross_weight_per_roll = db.Column(db.Float)
     net_weight_per_roll = db.Column(db.Float)
+    cone_weight_per_roll = db.Column(db.Float)
     gross_weight = db.Column(db.Float, nullable=False)
     net_weight = db.Column(db.Float, nullable=False)
     amount_per_kg = db.Column(db.Float, nullable=False)
@@ -567,6 +568,32 @@ class ShGatePass(db.Model):
     supplier = db.relationship("ShSupplierCompany")
     purchase = db.relationship("ShPurchase")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+    roll_items = db.relationship(
+        "ShGatePassRoll",
+        back_populates="gate_pass",
+        lazy="joined",
+        cascade="all, delete-orphan",
+        order_by="ShGatePassRoll.roll_number",
+    )
+
+
+class ShGatePassRoll(db.Model):
+    __tablename__ = "sh_gate_pass_rolls"
+
+    id = db.Column(db.Integer, primary_key=True)
+    gate_pass_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sh_gate_passes.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    roll_number = db.Column(db.Integer, nullable=False)
+    gross_weight = db.Column(db.Float, nullable=False)
+
+    gate_pass = db.relationship("ShGatePass", back_populates="roll_items")
+
+    __table_args__ = (
+        db.UniqueConstraint("gate_pass_id", "roll_number", name="uq_gate_pass_roll"),
+    )
 
 
 class HomeParty(db.Model):

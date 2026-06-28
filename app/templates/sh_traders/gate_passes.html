@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
 {% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/gate_pass_roll_fields.html" import gate_pass_roll_fields, gate_pass_roll_script %}
 {% block title %}Gate Passes - SH Traders{% endblock %}
 {% block content %}
-{{ sh_page_header('Gate Passes', 'Create printable gate passes when stock arrives') }}
+{{ sh_page_header('Gate Passes', 'Add rolls one by one — printable gate pass with gross, cone, and net totals') }}
 
 {% if current_user.can_edit() %}
 {% if not suppliers or not clients %}
@@ -57,38 +58,19 @@
         </div>
         <div class="form-group">
             <label for="material_name">Material Name</label>
-            <input type="text" id="material_name" name="material_name" required>
+            <input type="text" id="material_name" name="material_name" required placeholder="e.g. OPP Heatsealable">
         </div>
         <div class="form-group">
             <label for="size">Size</label>
-            <input type="text" id="size" name="size">
+            <input type="text" id="size" name="size" placeholder="e.g. 660 mm">
         </div>
         <div class="form-group">
             <label for="micron">Micron</label>
-            <input type="text" id="micron" name="micron">
+            <input type="text" id="micron" name="micron" placeholder="e.g. 20">
         </div>
-        <div class="form-group">
-            <label for="rolls">Rolls</label>
-            <input type="number" id="rolls" name="rolls" step="1" min="0">
-        </div>
-        <div class="form-group">
-            <label for="gross_weight_per_roll">Gross Weight / Roll (KG)</label>
-            <input type="number" id="gross_weight_per_roll" name="gross_weight_per_roll" step="0.01" min="0">
-        </div>
-        <div class="form-group">
-            <label for="net_weight_per_roll">Net Weight / Roll (KG)</label>
-            <input type="number" id="net_weight_per_roll" name="net_weight_per_roll" step="0.01" min="0">
-        </div>
-        <div class="form-group">
-            <label for="gross_weight">Total Gross Weight (KG)</label>
-            <input type="number" id="gross_weight" name="gross_weight" step="0.01" min="0.01" required>
-            <small class="field-note">Auto: Rolls × Gross Weight / Roll</small>
-        </div>
-        <div class="form-group">
-            <label for="net_weight">Total Net Weight (KG)</label>
-            <input type="number" id="net_weight" name="net_weight" step="0.01" min="0.01" required>
-            <small class="field-note">Auto: Rolls × Net Weight / Roll</small>
-        </div>
+
+        {{ gate_pass_roll_fields() }}
+
         <div class="form-group">
             <label for="amount_per_kg">Amount Per KG</label>
             <input type="number" id="amount_per_kg" name="amount_per_kg" step="0.01" min="0.01" required>
@@ -135,8 +117,8 @@
                 <td>{{ g.sold_to.name }}</td>
                 <td>{{ g.material_name }}</td>
                 <td>{% if g.rolls %}{{ "{:,.0f}".format(g.rolls) }}{% else %}—{% endif %}</td>
-                <td>{{ "{:,.2f}".format(g.gross_weight) }}</td>
-                <td>{{ "{:,.2f}".format(g.net_weight) }}</td>
+                <td>{{ "{:,.3f}".format(g.gross_weight) }}</td>
+                <td>{{ "{:,.3f}".format(g.net_weight) }}</td>
                 <td>₨ {{ "{:,.2f}".format(g.total_amount) }}</td>
                 <td>
                     <a href="{{ url_for('sh_main.gate_pass_pdf', gate_pass_id=g.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
@@ -165,13 +147,6 @@
     const materialInput = document.getElementById('material_name');
     const sizeInput = document.getElementById('size');
     const micronInput = document.getElementById('micron');
-    const rollsInput = document.getElementById('rolls');
-    const grossPerRollInput = document.getElementById('gross_weight_per_roll');
-    const netPerRollInput = document.getElementById('net_weight_per_roll');
-    const grossInput = document.getElementById('gross_weight');
-    const netInput = document.getElementById('net_weight');
-    const rateInput = document.getElementById('amount_per_kg');
-    const totalDisplay = document.getElementById('total_amount_display');
     const dateInput = document.getElementById('issued_date');
     const timeInput = document.getElementById('issued_time');
 
@@ -192,32 +167,7 @@
             if (micronInput) micronInput.value = opt.dataset.micron || '';
         });
     }
-
-    function updateRollTotals() {
-        const rolls = parseFloat(rollsInput?.value) || 0;
-        const grossPerRoll = parseFloat(grossPerRollInput?.value) || 0;
-        const netPerRoll = parseFloat(netPerRollInput?.value) || 0;
-        if (rolls > 0 && grossPerRoll > 0 && grossInput) {
-            grossInput.value = (rolls * grossPerRoll).toFixed(2);
-        }
-        if (rolls > 0 && netPerRoll > 0 && netInput) {
-            netInput.value = (rolls * netPerRoll).toFixed(2);
-        }
-        updateTotal();
-    }
-
-    function updateTotal() {
-        if (!netInput || !rateInput || !totalDisplay) return;
-        const net = parseFloat(netInput.value) || 0;
-        const rate = parseFloat(rateInput.value) || 0;
-        totalDisplay.value = (net * rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    [rollsInput, grossPerRollInput, netPerRollInput].forEach(function (el) {
-        if (el) el.addEventListener('input', updateRollTotals);
-    });
-    if (netInput) netInput.addEventListener('input', updateTotal);
-    if (rateInput) rateInput.addEventListener('input', updateTotal);
 })();
 </script>
+{{ gate_pass_roll_script([]) }}
 {% endblock %}

@@ -28,6 +28,63 @@ def calculate_gate_pass_total(net_weight: float, amount_per_kg: float) -> float:
     return float(net_weight) * float(amount_per_kg)
 
 
+def parse_issued_datetime(date_str: str, time_str: str) -> datetime:
+    """Accept HH:MM or HH:MM:SS from browser time inputs."""
+    cleaned_time = (time_str or "").strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(f"{date_str} {cleaned_time}", fmt)
+        except ValueError:
+            continue
+    raise ValueError("Invalid date or time.")
+
+
+def parse_roll_gross_weights(form) -> list[float]:
+    weights = []
+    for raw in form.getlist("roll_gross_weight"):
+        if raw in (None, ""):
+            continue
+        value = float(raw)
+        if value <= 0:
+            raise ValueError("Each roll must have a gross weight greater than zero.")
+        weights.append(value)
+    return weights
+
+
+def compute_gate_pass_weights(
+    gross_weights: list[float],
+    cone_weight_per_roll: float = 0.0,
+) -> dict:
+    if not gross_weights:
+        raise ValueError("Add at least one roll with its gross weight.")
+
+    cone_per_roll = float(cone_weight_per_roll or 0)
+    roll_count = len(gross_weights)
+    gross_total = sum(gross_weights)
+    cone_total = cone_per_roll * roll_count
+    net_total = gross_total - cone_total
+    if net_total <= 0:
+        raise ValueError("Total net weight must be greater than zero.")
+
+    return {
+        "rolls": roll_count,
+        "gross_weight": gross_total,
+        "cone_total": cone_total,
+        "net_weight": net_total,
+        "gross_weight_per_roll": gross_total / roll_count if roll_count else None,
+        "net_weight_per_roll": net_total / roll_count if roll_count else None,
+    }
+
+
+def save_gate_pass_rolls(gate_pass, gross_weights: list[float]) -> None:
+    from app.models import ShGatePassRoll
+
+    gate_pass.roll_items = [
+        ShGatePassRoll(roll_number=index, gross_weight=weight)
+        for index, weight in enumerate(gross_weights, start=1)
+    ]
+
+
 def next_gate_pass_number() -> str:
     from app.models import ShGatePass
 
