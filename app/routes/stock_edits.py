@@ -388,14 +388,24 @@ def edit_materials_opening(record_id):
 
     if request.method == "POST":
         require_edit_access()
+        material_name = request.form.get("material_name", "").strip()
         quantity = request.form.get("quantity", type=float)
         as_of_date = request.form.get("as_of_date")
         notes = request.form.get("notes", "").strip()
 
-        if quantity is None or not as_of_date:
-            flash("Quantity and date are required.", "danger")
+        if not material_name or quantity is None or not as_of_date:
+            flash("Material, quantity, and date are required.", "danger")
             return redirect(url_for("stock_edits.edit_materials_opening", record_id=record_id))
 
+        duplicate = MaterialOpeningStock.query.filter(
+            db.func.lower(MaterialOpeningStock.material_name) == material_name.lower(),
+            MaterialOpeningStock.id != record.id,
+        ).first()
+        if duplicate:
+            flash("Opening stock for this material already exists.", "danger")
+            return redirect(url_for("stock_edits.edit_materials_opening", record_id=record_id))
+
+        record.material_name = material_name
         record.quantity = quantity
         record.as_of_date = _parse_date(as_of_date)
         record.notes = notes
@@ -405,7 +415,7 @@ def edit_materials_opening(record_id):
             "UPDATE",
             "MaterialOpeningStock",
             record.id,
-            f"Updated opening stock: {record.material.display_name} = {quantity}",
+            f"Updated opening stock: {material_name} = {quantity}",
         )
         db.session.commit()
         flash("Opening stock updated.", "success")

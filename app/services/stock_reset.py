@@ -54,9 +54,7 @@ def reset_materials_stock_data() -> dict:
     txns = MaterialTransaction.query.filter(
         MaterialTransaction.company_id.in_(company_ids)
     ).delete(synchronize_session=False)
-    opening = MaterialOpeningStock.query.filter(
-        MaterialOpeningStock.company_id.in_(company_ids)
-    ).delete(synchronize_session=False)
+    opening = MaterialOpeningStock.query.delete(synchronize_session=False)
     catalog = Material.query.filter(Material.company_id.in_(company_ids)).delete(
         synchronize_session=False
     )

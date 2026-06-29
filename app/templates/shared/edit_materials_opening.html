@@ -3,12 +3,16 @@
 {% block content %}
 <div class="page-header">
     <h1>Edit Opening Stock</h1>
-    <p class="page-subtitle">{{ record.company.name }} — {{ record.material.display_name }}</p>
+    <p class="page-subtitle">{{ record.material_name }}</p>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="card">
     <form method="POST" class="form-grid">
+        <div class="form-group full-width">
+            <label for="material_name">Material</label>
+            <input type="text" id="material_name" name="material_name" value="{{ record.material_name }}" required>
+        </div>
         <div class="form-group">
             <label for="quantity">Quantity (kg)</label>
             <input type="number" id="quantity" name="quantity" step="0.1" min="0" value="{{ record.quantity }}" required>

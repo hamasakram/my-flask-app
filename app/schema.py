@@ -18,6 +18,9 @@ COLUMN_MIGRATIONS = {
         "net_weight": "FLOAT",
         "micron": "VARCHAR(50)",
     },
+    "material_opening_stock": {
+        "material_name": "VARCHAR(255)",
+    },
     "companies": {
         "scope": "VARCHAR(20) DEFAULT 'ink'",
     },
@@ -136,12 +139,113 @@ def _drop_materials_unique_constraint():
             conn.execute(text("ALTER TABLE materials_new RENAME TO materials"))
 
 
+def _migrate_material_opening_stock():
+    """Move material opening stock to manual material names without company."""
+    inspector = inspect(db.engine)
+    table = "material_opening_stock"
+    if not inspector.has_table(table):
+        return
+
+    columns = {col["name"] for col in inspector.get_columns(table)}
+    if "material_name" not in columns:
+        _add_column_if_missing(table, "material_name", "VARCHAR(255)")
+        columns.add("material_name")
+
+    if "material_id" in columns:
+        from app.models import Material
+
+        rows = db.session.execute(
+            text(
+                """
+                SELECT id, material_id
+                FROM material_opening_stock
+                WHERE material_name IS NULL OR TRIM(material_name) = ''
+                """
+            )
+        ).fetchall()
+        for row_id, material_id in rows:
+            material = Material.query.get(material_id)
+            if material:
+                db.session.execute(
+                    text(
+                        "UPDATE material_opening_stock SET material_name = :name WHERE id = :id"
+                    ),
+                    {"name": material.display_name, "id": row_id},
+                )
+        db.session.commit()
+
+    if "material_name" in columns:
+        with db.engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE material_opening_stock
+                    SET material_name = 'Unknown'
+                    WHERE material_name IS NULL OR TRIM(material_name) = ''
+                    """
+                )
+            )
+
+    dialect = db.engine.dialect.name
+    if dialect == "postgresql":
+        with db.engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'material_opening_stock'
+                      AND c.conname = 'uq_material_opening_stock'
+                    """
+                )
+            ).fetchone()
+            if exists:
+                conn.execute(
+                    text(
+                        "ALTER TABLE material_opening_stock "
+                        "DROP CONSTRAINT uq_material_opening_stock"
+                    )
+                )
+
+            columns = {col["name"] for col in inspector.get_columns(table)}
+            if "company_id" in columns:
+                conn.execute(
+                    text("ALTER TABLE material_opening_stock DROP COLUMN company_id")
+                )
+            if "material_id" in columns:
+                conn.execute(
+                    text("ALTER TABLE material_opening_stock DROP COLUMN material_id")
+                )
+
+            name_unique = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'material_opening_stock'
+                      AND c.conname = 'uq_material_opening_stock_name'
+                    """
+                )
+            ).fetchone()
+            if not name_unique:
+                conn.execute(
+                    text(
+                        "ALTER TABLE material_opening_stock "
+                        "ADD CONSTRAINT uq_material_opening_stock_name "
+                        "UNIQUE (material_name)"
+                    )
+                )
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
             _add_column_if_missing(table, column, col_type)
 
     _drop_materials_unique_constraint()
+    _migrate_material_opening_stock()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

@@ -9,7 +9,6 @@ from app.models import (
     InkType,
     InventoryTransaction,
     Material,
-    MaterialOpeningStock,
     MaterialTransaction,
     OpeningStock,
 )
@@ -27,8 +26,6 @@ def ink_company_in_use(company_id: int) -> bool:
 
 def materials_company_in_use(company_id: int) -> bool:
     if Material.query.filter_by(company_id=company_id).count():
-        return True
-    if MaterialOpeningStock.query.filter_by(company_id=company_id).count():
         return True
     if MaterialTransaction.query.filter_by(company_id=company_id).count():
         return True
@@ -56,8 +53,6 @@ def chemicals_company_in_use(company_id: int) -> bool:
 
 
 def material_in_use(material_id: int) -> bool:
-    if MaterialOpeningStock.query.filter_by(material_id=material_id).count():
-        return True
     if MaterialTransaction.query.filter_by(material_id=material_id).count():
         return True
     return False

@@ -119,31 +119,24 @@ def catalog():
 @materials_bp.route("/opening-stock", methods=["GET", "POST"])
 @login_required
 def opening_stock():
-    companies = get_material_companies()
-
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
-        material_id = request.form.get("material_id", type=int)
+        material_name = request.form.get("material_name", "").strip()
         quantity = request.form.get("quantity", type=float)
         as_of_date = request.form.get("as_of_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not material_id or quantity is None or not as_of_date:
-            flash("Company, material, quantity (kg), and date are required.", "danger")
-            return redirect(url_for("materials.opening_stock"))
-
-        material = Material.query.filter_by(id=material_id, company_id=company_id).first()
-        if not material:
-            flash("Invalid material for this company.", "danger")
+        if not material_name or quantity is None or not as_of_date:
+            flash("Material, quantity (kg), and date are required.", "danger")
             return redirect(url_for("materials.opening_stock"))
 
         parsed_date = datetime.strptime(as_of_date, "%Y-%m-%d").date()
-        existing = MaterialOpeningStock.query.filter_by(
-            company_id=company_id, material_id=material_id
+        existing = MaterialOpeningStock.query.filter(
+            db.func.lower(MaterialOpeningStock.material_name) == material_name.lower()
         ).first()
 
         if existing:
+            existing.material_name = material_name
             existing.quantity = quantity
             existing.as_of_date = parsed_date
             existing.notes = notes
@@ -152,8 +145,7 @@ def opening_stock():
             entity_id = existing.id
         else:
             record = MaterialOpeningStock(
-                company_id=company_id,
-                material_id=material_id,
+                material_name=material_name,
                 quantity=quantity,
                 as_of_date=parsed_date,
                 notes=notes,
@@ -169,21 +161,15 @@ def opening_stock():
             action,
             "MaterialOpeningStock",
             entity_id,
-            f"{material.display_name}: opening stock set to {quantity} kg",
+            f"{material_name}: opening stock set to {quantity} kg",
         )
         db.session.commit()
         flash("Opening stock saved successfully.", "success")
         return redirect(url_for("materials.opening_stock"))
 
-    records = (
-        MaterialOpeningStock.query.join(Company)
-        .join(Material)
-        .order_by(Company.name, Material.name)
-        .all()
-    )
+    records = MaterialOpeningStock.query.order_by(MaterialOpeningStock.material_name).all()
     return render_template(
         "materials/opening_stock.html",
-        companies=companies,
         records=records,
     )
 

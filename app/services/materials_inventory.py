@@ -57,9 +57,9 @@ def get_low_stock_threshold(material: Material) -> int:
     return 50
 
 
-def get_opening_quantity(company_id: int, material_id: int) -> float:
-    opening = MaterialOpeningStock.query.filter_by(
-        company_id=company_id, material_id=material_id
+def get_opening_quantity(material: Material) -> float:
+    opening = MaterialOpeningStock.query.filter(
+        func.lower(MaterialOpeningStock.material_name) == material.display_name.lower()
     ).first()
     return opening.quantity if opening else 0.0
 
@@ -78,7 +78,7 @@ def calculate_live_stock(
     results = []
 
     for material in materials:
-        opening = get_opening_quantity(material.company_id, material.id)
+        opening = get_opening_quantity(material)
         received = (
             db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
             .filter_by(
