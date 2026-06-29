@@ -99,6 +99,7 @@
 {% if current_user.can_edit() %}
 <div class="quick-actions">
     <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-primary">+ Add Bank Account</a>
+    <a href="{{ url_for('bank_ledger.rokar') }}" class="btn btn-primary">Daily Rokar Roznamcha</a>
     <a href="{{ url_for('bank_ledger.transfers') }}" class="btn btn-secondary">Cross-Bank Transfer</a>
 </div>
 {% endif %}

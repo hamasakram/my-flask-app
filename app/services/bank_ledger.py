@@ -4,6 +4,97 @@ from app import db
 from app.models import BankAccount, BankLedgerEntry, BankTransfer
 
 
+def _format_money(value: float) -> str:
+    return f"{value:,.2f}"
+
+
+def format_entry_particulars(entry: BankLedgerEntry) -> str:
+    if entry.entry_type == BankLedgerEntry.TYPE_TRANSFER_OUT and entry.counterparty_bank:
+        parts = [f"Transfer to {entry.counterparty_bank.display_name}"]
+    elif entry.entry_type == BankLedgerEntry.TYPE_TRANSFER_IN and entry.counterparty_bank:
+        parts = [f"Transfer from {entry.counterparty_bank.display_name}"]
+    else:
+        parts = []
+    if entry.notes:
+        parts.append(entry.notes)
+    if entry.transfer and entry.transfer.reference:
+        parts.append(f"Ref: {entry.transfer.reference}")
+    return " · ".join(parts) if parts else "—"
+
+
+def get_bank_balance_as_of(bank: BankAccount, as_of_date: date) -> float:
+    balance = float(bank.opening_balance or 0)
+    entries = (
+        bank.entries.filter(BankLedgerEntry.entry_date <= as_of_date)
+        .order_by(BankLedgerEntry.entry_date.asc(), BankLedgerEntry.id.asc())
+        .all()
+    )
+    for entry in entries:
+        balance += float(entry.deposit or 0) - float(entry.withdrawal or 0)
+    return balance
+
+
+def get_rokar_day_data(entry_date: date) -> dict:
+    entries = (
+        BankLedgerEntry.query.join(BankAccount)
+        .filter(BankLedgerEntry.entry_date == entry_date)
+        .order_by(BankLedgerEntry.id.asc())
+        .all()
+    )
+    banks = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
+
+    transactions = []
+    total_deposits = 0.0
+    total_withdrawals = 0.0
+    for entry in entries:
+        deposit = float(entry.deposit or 0)
+        withdrawal = float(entry.withdrawal or 0)
+        total_deposits += deposit
+        total_withdrawals += withdrawal
+        transactions.append(
+            {
+                "entry": entry,
+                "bank": entry.bank,
+                "particulars": format_entry_particulars(entry),
+                "deposit": deposit,
+                "withdrawal": withdrawal,
+                "type_label": entry.type_label,
+            }
+        )
+
+    bank_balances = []
+    total_closing = 0.0
+    total_opening_today = 0.0
+    for bank in banks:
+        closing = get_bank_balance_as_of(bank, entry_date)
+        day_entries = [e for e in entries if e.bank_id == bank.id]
+        day_deposits = sum(float(e.deposit or 0) for e in day_entries)
+        day_withdrawals = sum(float(e.withdrawal or 0) for e in day_entries)
+        opening_today = closing - day_deposits + day_withdrawals
+        bank_balances.append(
+            {
+                "bank": bank,
+                "opening_today": opening_today,
+                "day_deposits": day_deposits,
+                "day_withdrawals": day_withdrawals,
+                "closing_balance": closing,
+            }
+        )
+        total_closing += closing
+        total_opening_today += opening_today
+
+    return {
+        "entry_date": entry_date,
+        "transactions": transactions,
+        "bank_balances": bank_balances,
+        "total_opening_today": total_opening_today,
+        "total_deposits": total_deposits,
+        "total_withdrawals": total_withdrawals,
+        "total_closing": total_closing,
+        "transaction_count": len(transactions),
+    }
+
+
 def get_bank_balance(bank: BankAccount) -> float:
     """Current balance after opening and all ledger entries."""
     balance = float(bank.opening_balance or 0)

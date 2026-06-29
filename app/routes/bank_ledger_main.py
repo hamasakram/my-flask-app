@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app import db
@@ -11,7 +11,9 @@ from app.services.bank_ledger import (
     get_bank_balance,
     get_bank_ledger_rows,
     get_dashboard_stats,
+    get_rokar_day_data,
 )
+from app.services.bank_rokar_pdf import generate_rokar_pdf
 from app.services.inventory import log_audit
 
 bank_ledger_bp = Blueprint("bank_ledger", __name__, url_prefix="/bank-ledger")
@@ -258,4 +260,139 @@ def bank_ledger(bank_id):
         ledger_rows=ledger_rows,
         current_balance=current_balance,
         other_banks=other_banks,
+    )
+
+
+@bank_ledger_bp.route("/rokar", methods=["GET", "POST"])
+@login_required
+def rokar():
+    all_banks = _all_banks()
+    entry_date_raw = request.args.get("date") or request.form.get("entry_date")
+    if entry_date_raw:
+        try:
+            selected_date = _parse_date(entry_date_raw)
+        except ValueError:
+            flash("Invalid date.", "danger")
+            selected_date = date.today()
+    else:
+        selected_date = date.today()
+
+    if request.method == "POST":
+        require_edit_access()
+        action = request.form.get("action", "entry")
+
+        if action == "transfer":
+            if len(all_banks) < 2:
+                flash("Add at least two bank accounts before recording transfers.", "danger")
+                return redirect(url_for("bank_ledger.rokar", date=selected_date.isoformat()))
+
+            transfer_date = request.form.get("transfer_date")
+            from_bank_id = request.form.get("from_bank_id", type=int)
+            to_bank_id = request.form.get("to_bank_id", type=int)
+            amount = request.form.get("amount", type=float)
+            reference = request.form.get("reference", "").strip()
+            notes = request.form.get("notes", "").strip()
+
+            if not transfer_date or not from_bank_id or not to_bank_id or not amount:
+                flash("Date, from bank, to bank, and amount are required.", "danger")
+                return redirect(url_for("bank_ledger.rokar", date=selected_date.isoformat()))
+
+            try:
+                transfer = create_bank_transfer(
+                    from_bank_id=from_bank_id,
+                    to_bank_id=to_bank_id,
+                    transfer_date=_parse_date(transfer_date),
+                    amount=amount,
+                    reference=reference or None,
+                    notes=notes or None,
+                    created_by_id=current_user.id,
+                )
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "BankTransfer",
+                    transfer.id,
+                    f"Rokar transfer {amount:,.2f} from #{from_bank_id} to #{to_bank_id}",
+                )
+                db.session.commit()
+                flash("Cross-bank transfer recorded in daily rokar.", "success")
+            except ValueError as exc:
+                db.session.rollback()
+                flash(str(exc), "danger")
+            return redirect(url_for("bank_ledger.rokar", date=_parse_date(transfer_date).isoformat()))
+
+        bank_id = request.form.get("bank_id", type=int)
+        entry_date = request.form.get("entry_date")
+        deposit = request.form.get("deposit", type=float) or 0
+        withdrawal = request.form.get("withdrawal", type=float) or 0
+        notes = request.form.get("notes", "").strip()
+
+        if not bank_id or not entry_date:
+            flash("Bank and date are required.", "danger")
+            return redirect(url_for("bank_ledger.rokar", date=selected_date.isoformat()))
+
+        if deposit <= 0 and withdrawal <= 0:
+            flash("Enter a deposit or withdrawal amount.", "danger")
+            return redirect(url_for("bank_ledger.rokar", date=selected_date.isoformat()))
+
+        if deposit > 0 and withdrawal > 0:
+            flash("Enter either deposit or withdrawal, not both.", "danger")
+            return redirect(url_for("bank_ledger.rokar", date=selected_date.isoformat()))
+
+        bank = BankAccount.query.get(bank_id)
+        if not bank:
+            flash("Invalid bank account.", "danger")
+            return redirect(url_for("bank_ledger.rokar", date=selected_date.isoformat()))
+
+        parsed_date = _parse_date(entry_date)
+        entry = BankLedgerEntry(
+            bank_id=bank.id,
+            entry_date=parsed_date,
+            deposit=deposit,
+            withdrawal=withdrawal,
+            entry_type=BankLedgerEntry.TYPE_STANDARD,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        db.session.add(entry)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "BankLedgerEntry",
+            entry.id,
+            f"Rokar entry for {bank.display_name}",
+        )
+        db.session.commit()
+        flash("Daily rokar entry added.", "success")
+        return redirect(url_for("bank_ledger.rokar", date=parsed_date.isoformat()))
+
+    rokar_data = get_rokar_day_data(selected_date)
+    return render_template(
+        "bank_ledger/rokar.html",
+        banks=all_banks,
+        rokar=rokar_data,
+        selected_date=selected_date,
+    )
+
+
+@bank_ledger_bp.route("/rokar/pdf")
+@login_required
+def rokar_pdf():
+    entry_date_raw = request.args.get("date")
+    if not entry_date_raw:
+        abort(400)
+    try:
+        entry_date = _parse_date(entry_date_raw)
+    except ValueError:
+        abort(400)
+
+    output = generate_rokar_pdf(entry_date)
+    filename = f"rokar_roznamcha_{entry_date.strftime('%Y%m%d')}.pdf"
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=filename,
+        mimetype="application/pdf",
     )
