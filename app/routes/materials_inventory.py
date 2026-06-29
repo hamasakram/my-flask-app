@@ -14,8 +14,11 @@ from app.services.materials_inventory import (
     calculate_live_stock,
     calculate_used_from_left,
     create_material,
+    get_company_material_options,
     get_current_stock,
     get_stock_usage_records,
+    material_matches_opening_stock,
+    resolve_material_selection,
 )
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials/inventory")
@@ -182,7 +185,7 @@ def receive_stock():
     if request.method == "POST":
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
-        material_id = request.form.get("material_id", type=int)
+        material_ref = request.form.get("material_id", "").strip()
         quantity = request.form.get("quantity", type=float)
         weights = parse_manual_weights(request.form)
         transaction_date = request.form.get("transaction_date")
@@ -190,7 +193,7 @@ def receive_stock():
 
         if (
             not company_id
-            or not material_id
+            or not material_ref
             or not quantity
             or quantity <= 0
             or not transaction_date
@@ -198,7 +201,7 @@ def receive_stock():
             flash("Company, material, quantity, and date are required.", "danger")
             return redirect(url_for("materials.receive_stock"))
 
-        material = Material.query.filter_by(id=material_id, company_id=company_id).first()
+        material = resolve_material_selection(company_id, material_ref)
         if not material:
             flash("Invalid material selection.", "danger")
             return redirect(url_for("materials.receive_stock"))
@@ -206,7 +209,7 @@ def receive_stock():
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = MaterialTransaction(
             company_id=company_id,
-            material_id=material_id,
+            material_id=material.id,
             transaction_type=MaterialTransaction.TRANSACTION_RECEIVED,
             quantity=quantity,
             weight_per_quantity=weights["weight_per_quantity"],
@@ -257,14 +260,14 @@ def use_stock():
     if request.method == "POST":
         require_edit_access()
         company_id = request.form.get("company_id", type=int)
-        material_id = request.form.get("material_id", type=int)
+        material_ref = request.form.get("material_id", "").strip()
         quantity_left = request.form.get("quantity_left", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
         if (
             not company_id
-            or not material_id
+            or not material_ref
             or quantity_left is None
             or quantity_left < 0
             or not transaction_date
@@ -272,10 +275,12 @@ def use_stock():
             flash("Company, material, quantity left (kg), and date are required.", "danger")
             return redirect(url_for("materials.use_stock"))
 
-        material = Material.query.filter_by(id=material_id, company_id=company_id).first()
-        if not material:
-            flash("Invalid material selection.", "danger")
+        material = resolve_material_selection(company_id, material_ref)
+        if not material or not material_matches_opening_stock(material):
+            flash("Invalid material selection. Only opening stock materials can be used here.", "danger")
             return redirect(url_for("materials.use_stock"))
+
+        material_id = material.id
 
         try:
             quantity_used = calculate_used_from_left(company_id, material_id, quantity_left)
@@ -328,21 +333,10 @@ def use_stock():
 @materials_bp.route("/api/materials/<int:company_id>")
 @login_required
 def get_company_materials(company_id):
-    materials = (
-        Material.query.filter_by(company_id=company_id)
-        .order_by(Material.name, Material.size)
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": m.id,
-                "name": f"{m.display_name} (#{m.id})",
-                "size": m.size or "",
-            }
-            for m in materials
-        ]
-    )
+    context = request.args.get("context", "receive")
+    if context not in {"receive", "use"}:
+        return jsonify({"error": "Invalid context"}), 400
+    return jsonify(get_company_material_options(company_id, context=context))
 
 
 @materials_bp.route("/api/stock/<int:company_id>/<int:material_id>")

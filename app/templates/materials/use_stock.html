@@ -12,7 +12,7 @@
     <h2>Record Daily Material Usage</h2>
     <p class="field-note usage-hint">
         Enter how much material is <strong>left (kg)</strong>. Used = current stock − left.
-        Note which production used the material.
+        Only materials added in <a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a> appear here.
     </p>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -135,9 +135,14 @@ companySelect?.addEventListener('change', async function() {
     materialSelect.disabled = true;
     resetStockFields();
     if (!this.value) { materialSelect.innerHTML = '<option value="">Select company first</option>'; return; }
-    const res = await fetch(`/materials/inventory/api/materials/${this.value}`);
+    const res = await fetch(`/materials/inventory/api/materials/${this.value}?context=use`);
     const materials = await res.json();
     materialSelect.innerHTML = '<option value="">Select material</option>';
+    if (!materials.length) {
+        materialSelect.innerHTML = '<option value="">No opening stock materials for this company</option>';
+        materialSelect.disabled = true;
+        return;
+    }
     materials.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m.id;

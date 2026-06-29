@@ -64,6 +64,133 @@ def get_opening_quantity(material: Material) -> float:
     return opening.quantity if opening else 0.0
 
 
+def get_opening_stock_names() -> set[str]:
+    names = {
+        (name or "").strip().lower()
+        for (name,) in db.session.query(MaterialOpeningStock.material_name).all()
+        if name and name.strip()
+    }
+    return names
+
+
+def material_matches_opening_stock(material: Material, opening_names: set[str] | None = None) -> bool:
+    if opening_names is None:
+        opening_names = get_opening_stock_names()
+    return material.display_name.strip().lower() in opening_names
+
+
+def parse_opening_material_name(text: str) -> dict:
+    parts = [part.strip() for part in text.split("·") if part.strip()]
+    if not parts:
+        raise ValueError("Material name is required.")
+    if len(parts) == 1:
+        return {"category": "PET", "name": parts[0], "size": "", "micron": ""}
+
+    category = parts[0].upper()
+    name = parts[1]
+    size = parts[2] if len(parts) > 2 else ""
+    micron = parts[3].replace("μ", "").strip() if len(parts) > 3 else ""
+    return {
+        "category": category,
+        "name": name,
+        "size": size,
+        "micron": micron,
+    }
+
+
+def find_material_for_opening_name(company_id: int, opening_name: str) -> Material | None:
+    target = opening_name.strip().lower()
+    materials = Material.query.filter_by(company_id=company_id).all()
+    for material in materials:
+        if material.display_name.strip().lower() == target:
+            return material
+    return None
+
+
+def find_or_create_material_for_opening_name(company_id: int, opening_name: str) -> Material:
+    existing = find_material_for_opening_name(company_id, opening_name)
+    if existing:
+        return existing
+
+    parsed = parse_opening_material_name(opening_name)
+    return create_material(
+        company_id=company_id,
+        name=parsed["name"],
+        size=parsed["size"],
+        category=parsed["category"],
+        micron=parsed["micron"],
+    )
+
+
+def get_company_material_options(company_id: int, *, context: str = "receive") -> list[dict]:
+    """Build material dropdown options for purchase or usage forms."""
+    materials = (
+        Material.query.filter_by(company_id=company_id)
+        .order_by(Material.category, Material.name, Material.size)
+        .all()
+    )
+    opening_names = get_opening_stock_names()
+    options: list[dict] = []
+    seen_material_ids: set[int] = set()
+
+    def add_material_option(material: Material, *, in_opening_stock: bool):
+        if material.id in seen_material_ids:
+            return
+        seen_material_ids.add(material.id)
+        label = material.display_name
+        if in_opening_stock:
+            label = f"{label} (Opening Stock)"
+        options.append(
+            {
+                "id": material.id,
+                "name": label,
+                "in_opening_stock": in_opening_stock,
+            }
+        )
+
+    if context == "use":
+        for material in materials:
+            if material_matches_opening_stock(material, opening_names):
+                add_material_option(material, in_opening_stock=True)
+        return options
+
+    opening_records = MaterialOpeningStock.query.order_by(MaterialOpeningStock.material_name).all()
+    for record in opening_records:
+        material = find_material_for_opening_name(company_id, record.material_name)
+        if material:
+            add_material_option(material, in_opening_stock=True)
+        else:
+            options.append(
+                {
+                    "id": f"opening:{record.id}",
+                    "name": f"{record.material_name} (Opening Stock)",
+                    "in_opening_stock": True,
+                }
+            )
+
+    for material in materials:
+        add_material_option(
+            material,
+            in_opening_stock=material_matches_opening_stock(material, opening_names),
+        )
+
+    return options
+
+
+def resolve_material_selection(company_id: int, material_ref: str) -> Material | None:
+    if not material_ref:
+        return None
+    if material_ref.startswith("opening:"):
+        opening_id = int(material_ref.split(":", 1)[1])
+        opening = MaterialOpeningStock.query.get(opening_id)
+        if not opening:
+            return None
+        return find_or_create_material_for_opening_name(company_id, opening.material_name)
+
+    material_id = int(material_ref)
+    return Material.query.filter_by(id=material_id, company_id=company_id).first()
+
+
 def calculate_live_stock(
     company_id: Optional[int] = None,
     material_id: Optional[int] = None,

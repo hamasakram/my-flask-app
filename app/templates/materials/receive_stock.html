@@ -11,6 +11,7 @@
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
     <h2>Record Stock Purchased</h2>
+    <p class="field-note">Materials from <a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a> are listed first, along with other company materials.</p>
     <form method="POST" class="form-grid" id="purchase-form">
         <div class="form-group">
             <label for="company_id">Company</label>
@@ -93,7 +94,7 @@ companySelect?.addEventListener('change', async function() {
         materialSelect.innerHTML = '<option value="">Select company first</option>';
         return;
     }
-    const res = await fetch(`/materials/inventory/api/materials/${this.value}`);
+    const res = await fetch(`/materials/inventory/api/materials/${this.value}?context=receive`);
     const materials = await res.json();
     materialSelect.innerHTML = '<option value="">Select material</option>';
     materials.forEach(m => {
