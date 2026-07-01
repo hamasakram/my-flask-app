@@ -21,10 +21,9 @@
 </div>
 
 <p class="field-note balance-note">
-    Balances update automatically when you add or edit <strong>Advance Stock Purchased</strong>,
-    create or change <strong>Sale Invoices</strong> for a client,
-    record <strong>Paid to the Company</strong> on purchases, or add ledger entries linked to a supplier or client in
-    <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a>.
+    Client balance to receive is based on <strong>Advance Stock Purchased</strong> (client totals).
+    <strong>Sale Invoices</strong> are listed separately for reference — they are not added again to avoid double counting.
+    Ledger receipts in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> reduce the balance.
 </p>
 
 <div class="grid-2">

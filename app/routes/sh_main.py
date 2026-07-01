@@ -29,6 +29,7 @@ from app.services.sh_traders import (
     get_ledger_rows,
     get_opening_balance,
     get_party_balance_totals,
+    parse_multi_purchase_lines,
 )
 from app.services.sh_uploads import (
     apply_gate_pass_screenshot,
@@ -148,30 +149,83 @@ def purchases():
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
-        total_kg = request.form.get("total_kg", type=float)
         rate_per_1000 = request.form.get("rate_per_1000_kg", type=float)
         client_rate = request.form.get("client_rate_per_kg", type=float) or 0
-        paid_amount = request.form.get("paid_amount", type=float) or 0
         client_id = request.form.get("client_company_id", type=int)
         notes = request.form.get("notes", "").strip()
+        multi_mode = request.form.get("multi_mode") == "1"
 
         if (
             not date_purchased
             or not supplier_id
             or not material_name
-            or not total_kg
-            or total_kg <= 0
             or not rate_per_1000
             or rate_per_1000 <= 0
             or not client_id
         ):
-            flash("Date, supplier, material, kg, rate, and purchased-for are required.", "danger")
+            flash("Date, supplier, material, rate, and purchased-for are required.", "danger")
+            return redirect(url_for("sh_main.purchases"))
+
+        parsed_date = _parse_date(date_purchased)
+        client_total_fn = (
+            (lambda kg: calculate_total_amount(kg, client_rate)) if client_rate > 0 else (lambda kg: None)
+        )
+
+        if multi_mode:
+            try:
+                lines = parse_multi_purchase_lines(request.form)
+            except ValueError as exc:
+                flash(str(exc), "danger")
+                return redirect(url_for("sh_main.purchases"))
+
+            created = 0
+            for line in lines:
+                total_kg = line["total_kg"]
+                paid_amount = line["paid_amount"]
+                total_amount = calculate_total_amount(total_kg, rate_per_1000)
+                client_total_amount = client_total_fn(total_kg)
+                purchase = ShPurchase(
+                    date_purchased=parsed_date,
+                    supplier_company_id=supplier_id,
+                    material_name=material_name,
+                    size=size,
+                    micron=micron or None,
+                    total_kg=total_kg,
+                    rate_per_1000_kg=rate_per_1000,
+                    total_amount=total_amount,
+                    paid_amount=paid_amount,
+                    client_rate_per_kg=client_rate if client_rate > 0 else None,
+                    client_total_amount=client_total_amount,
+                    client_company_id=client_id,
+                    notes=notes or None,
+                    created_by_id=current_user.id,
+                )
+                db.session.add(purchase)
+                created += 1
+
+            db.session.flush()
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "ShPurchase",
+                None,
+                f"SH bulk purchase: {material_name} — {created} lines",
+            )
+            db.session.commit()
+            flash(f"{created} purchase records saved for {material_name}.", "success")
+            return redirect(url_for("sh_main.purchases"))
+
+        total_kg = request.form.get("total_kg", type=float)
+        paid_amount = request.form.get("paid_amount", type=float) or 0
+
+        if not total_kg or total_kg <= 0:
+            flash("Total purchased (KG) is required.", "danger")
             return redirect(url_for("sh_main.purchases"))
 
         total_amount = calculate_total_amount(total_kg, rate_per_1000)
-        client_total_amount = calculate_total_amount(total_kg, client_rate) if client_rate > 0 else 0
+        client_total_amount = client_total_fn(total_kg)
         purchase = ShPurchase(
-            date_purchased=_parse_date(date_purchased),
+            date_purchased=parsed_date,
             supplier_company_id=supplier_id,
             material_name=material_name,
             size=size,
@@ -181,7 +235,7 @@ def purchases():
             total_amount=total_amount,
             paid_amount=paid_amount,
             client_rate_per_kg=client_rate if client_rate > 0 else None,
-            client_total_amount=client_total_amount if client_rate > 0 else None,
+            client_total_amount=client_total_amount,
             client_company_id=client_id,
             notes=notes or None,
             created_by_id=current_user.id,

@@ -22,6 +22,37 @@ def calculate_total_amount(total_kg: float, rate_per_kg: float) -> float:
     return float(total_kg) * float(rate_per_kg)
 
 
+def parse_multi_purchase_lines(form) -> list[dict]:
+    """Parse repeated KG / paid rows for bulk purchase entry."""
+    total_kgs = form.getlist("line_total_kg")
+    paid_amounts = form.getlist("line_paid_amount")
+    lines = []
+
+    for index, raw_kg in enumerate(total_kgs):
+        if raw_kg in (None, ""):
+            continue
+        try:
+            total_kg = float(raw_kg)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Line {index + 1}: enter a valid KG amount.") from exc
+        if total_kg <= 0:
+            raise ValueError(f"Line {index + 1}: KG must be greater than zero.")
+
+        paid_raw = paid_amounts[index] if index < len(paid_amounts) else "0"
+        try:
+            paid_amount = float(paid_raw or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Line {index + 1}: enter a valid paid amount.") from exc
+        if paid_amount < 0:
+            raise ValueError(f"Line {index + 1}: paid amount cannot be negative.")
+
+        lines.append({"total_kg": total_kg, "paid_amount": paid_amount})
+
+    if not lines:
+        raise ValueError("Add at least one KG line.")
+    return lines
+
+
 def calculate_gate_pass_total(net_weight: float, amount_per_kg: float) -> float:
     """Total Amount = Net Weight (KG) × Amount Per KG."""
     if not net_weight or not amount_per_kg:
@@ -194,7 +225,9 @@ def get_client_party_balances() -> list[dict]:
         )
         invoice_count = ShSaleInvoice.query.filter_by(sold_to_client_id=client.id).count()
 
-        total_billed = float(purchase_billed) + float(invoice_billed)
+        # Advance stock client totals already bill the client; sale invoices are
+        # shown separately and must not be added again to avoid double counting.
+        total_billed = float(purchase_billed)
 
         ledger_received = (
             db.session.query(func.coalesce(func.sum(ShLedgerEntry.credit), 0))
