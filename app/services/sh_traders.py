@@ -193,7 +193,8 @@ def get_supplier_party_balances() -> list[dict]:
             or 0
         )
 
-        balance_to_pay = max(0.0, purchase_due - float(ledger_payments))
+        total_paid = float(paid_on_purchases) + float(ledger_payments) + float(screenshot_payments)
+        balance_to_pay = max(0.0, float(total_purchased) - total_paid)
 
         rows.append(
             {
@@ -202,6 +203,8 @@ def get_supplier_party_balances() -> list[dict]:
                 "paid_on_purchases": float(paid_on_purchases),
                 "ledger_payments": float(ledger_payments),
                 "screenshot_payments": float(screenshot_payments),
+                "total_paid": float(total_paid),
+                "purchase_due_on_records": float(purchase_due),
                 "balance_to_pay": float(balance_to_pay),
                 "purchase_count": len(purchases),
             }

@@ -153,7 +153,7 @@
                 <th>Client Total</th>
                 {% endif %}
                 <th>Paid</th>
-                <th>Due</th>
+                <th>Due (on record)</th>
                 <th>Purchased For</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -188,6 +188,11 @@
             {% endfor %}
         </tbody>
     </table>
+    <p class="field-note">
+        <strong>Due (on record)</strong> = Total − Paid on that row only.
+        Payments recorded in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> are not shown here —
+        see <a href="{{ url_for('sh_main.party_balances') }}">Party Balances</a> for the supplier’s net balance after all payments.
+    </p>
 </div>
 {% endblock %}
 
