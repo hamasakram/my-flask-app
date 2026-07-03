@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
 {% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/partnership_fields.html" import partnership_fields, partnership_script %}
 {% block title %}Advance Stock Purchased - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Advance Stock Purchased', 'Record material purchases from suppliers') }}
@@ -123,6 +124,8 @@
             <p class="field-note"><strong>Combined total:</strong> <span id="multi_combined_total">0.00</span></p>
         </div>
 
+        {{ partnership_fields(partners) }}
+
         <div class="form-group full-width">
             <label for="notes">Notes</label>
             <textarea id="notes" name="notes" rows="2"></textarea>
@@ -155,6 +158,7 @@
                 <th>Paid</th>
                 <th>Due (on record)</th>
                 <th>Purchased For</th>
+                <th>Partnership</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
@@ -176,6 +180,13 @@
                 <td>₨ {{ "{:,.2f}".format(p.paid_amount) }}</td>
                 <td class="{% if p.amount_due > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(p.amount_due) }}</td>
                 <td>{{ p.client.name }}</td>
+                <td>
+                    {% if p.has_partnership %}
+                    {% for share in p.partner_shares %}
+                    <div><strong>{{ share.partner.name }}</strong>: ₨ {{ "{:,.0f}".format(share.investment_amount) }} ({{ share.investment_percent }}% inv / {{ share.profit_percent }}% profit)</div>
+                    {% endfor %}
+                    {% else %}—{% endif %}
+                </td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_purchase', purchase_id=p.id),
@@ -184,7 +195,7 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{% if current_user.can_edit() and current_user.can_view_sensitive() %}14{% elif current_user.can_edit() %}12{% elif current_user.can_view_sensitive() %}13{% else %}11{% endif %}" class="empty">No purchases yet</td></tr>
+            <tr><td colspan="{% if current_user.can_edit() and current_user.can_view_sensitive() %}15{% elif current_user.can_edit() %}13{% elif current_user.can_view_sensitive() %}14{% else %}12{% endif %}" class="empty">No purchases yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -314,4 +325,5 @@
     document.getElementById('date_purchased').valueAsDate = new Date();
 })();
 </script>
+{{ partnership_script() }}
 {% endblock %}

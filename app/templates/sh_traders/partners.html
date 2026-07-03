@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Partners - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Partners', 'Co-investors on stock purchases — each partner has their own ledger') }}
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Partner</h2>
+    <p class="field-note">A new partner name opens a ledger automatically. Link partners when recording partnership purchases.</p>
+    <form method="POST" class="form-grid">
+        <div class="form-group full-width">
+            <label for="company_name">Partner Name</label>
+            <input type="text" id="company_name" name="company_name" placeholder="Partner / investor name" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Partner</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Saved Partners</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Partner Name</th>
+                <th>Purchase Shares</th>
+                <th>Ledger Balance</th>
+                <th>Added On</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in partners %}
+            <tr>
+                <td><strong>{{ item.partner.name }}</strong></td>
+                <td>{{ item.purchase_count }}</td>
+                <td class="{% if item.ledger_balance > 0 %}text-success{% elif item.ledger_balance < 0 %}text-danger{% endif %}">
+                    ₨ {{ "{:,.2f}".format(item.ledger_balance) }}
+                </td>
+                <td>{{ item.partner.created_at.strftime('%d-%m-%Y') }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_partner', company_id=item.partner.id),
+                    url_for('stock_deletes.delete_sh_partner', company_id=item.partner.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 5 if current_user.can_edit() else 4 }}" class="empty">No partners yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="field-note">Record partner payments in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a>.</p>
+</div>
+{% endblock %}

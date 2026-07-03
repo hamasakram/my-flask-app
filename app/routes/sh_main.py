@@ -9,12 +9,17 @@ from app.models import (
     ShGatePassScreenshot,
     ShLedgerEntry,
     ShOpeningBalance,
+    ShPartnerCompany,
     ShPaymentScreenshot,
     ShPurchase,
     ShSaleInvoice,
     ShSupplierCompany,
 )
 from app.services.inventory import log_audit
+from app.services.sh_partnership import (
+    apply_partnership_from_form,
+    get_partner_ledger_balance,
+)
 from app.services.sh_sale_invoice import (
     compute_current_balance,
     next_sale_invoice_number,
@@ -129,6 +134,48 @@ def clients():
     return render_template("sh_traders/clients.html", companies=companies)
 
 
+@sh_main_bp.route("/partners", methods=["GET", "POST"])
+@login_required
+def partners():
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Partner name is required.", "danger")
+            return redirect(url_for("sh_main.partners"))
+
+        if ShPartnerCompany.query.filter(
+            db.func.lower(ShPartnerCompany.name) == name.lower()
+        ).first():
+            flash("This partner already exists.", "warning")
+            return redirect(url_for("sh_main.partners"))
+
+        partner = ShPartnerCompany(name=name)
+        db.session.add(partner)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShPartnerCompany",
+            partner.id,
+            f"SH partner added: {name}",
+        )
+        db.session.commit()
+        flash(f"Partner '{name}' added — ledger is open for this partner.", "success")
+        return redirect(url_for("sh_main.partners"))
+
+    partner_list = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+    summaries = [
+        {
+            "partner": partner,
+            "ledger_balance": get_partner_ledger_balance(partner.id),
+            "purchase_count": partner.purchase_shares.count(),
+        }
+        for partner in partner_list
+    ]
+    return render_template("sh_traders/partners.html", partners=summaries)
+
+
 @sh_main_bp.route("/purchases", methods=["GET", "POST"])
 @login_required
 def purchases():
@@ -201,6 +248,13 @@ def purchases():
                     created_by_id=current_user.id,
                 )
                 db.session.add(purchase)
+                db.session.flush()
+                try:
+                    apply_partnership_from_form(purchase, request.form)
+                except ValueError as exc:
+                    db.session.rollback()
+                    flash(str(exc), "danger")
+                    return redirect(url_for("sh_main.purchases"))
                 created += 1
 
             db.session.flush()
@@ -242,6 +296,12 @@ def purchases():
         )
         db.session.add(purchase)
         db.session.flush()
+        try:
+            apply_partnership_from_form(purchase, request.form)
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.purchases"))
         log_audit(
             current_user.id,
             "CREATE",
@@ -258,11 +318,13 @@ def purchases():
             ShPurchase.date_purchased.desc(), ShPurchase.id.desc()
         ).all()
     )
+    partner_list = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
     return render_template(
         "sh_traders/purchases.html",
         purchases=purchase_list,
         suppliers=suppliers,
         clients=clients,
+        partners=partner_list,
     )
 
 
@@ -309,6 +371,7 @@ def payments():
         credit = request.form.get("credit", type=float) or 0
         supplier_id = request.form.get("supplier_company_id", type=int) or None
         client_id = request.form.get("client_company_id", type=int) or None
+        partner_id = request.form.get("partner_company_id", type=int) or None
         notes = request.form.get("notes", "").strip()
 
         if not entry_date:
@@ -329,6 +392,7 @@ def payments():
             credit=credit,
             supplier_company_id=supplier_id,
             client_company_id=client_id,
+            partner_company_id=partner_id,
             notes=notes or None,
             created_by_id=current_user.id,
         )
@@ -349,6 +413,7 @@ def payments():
     party_totals = get_party_balance_totals()
     suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
     return render_template(
         "sh_traders/payments.html",
         opening=opening,
@@ -357,6 +422,7 @@ def payments():
         party_totals=party_totals,
         suppliers=suppliers,
         clients=clients,
+        partners=partners,
     )
 
 

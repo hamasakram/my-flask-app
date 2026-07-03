@@ -29,6 +29,7 @@ from app.models import (
     ShOpeningBalance,
     ShGatePassScreenshot,
     ShPaymentScreenshot,
+    ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
 )
@@ -419,6 +420,25 @@ def delete_sh_client(company_id):
         "ShClientCompany",
         f"Deleted SH client: {company.name}",
         url_for("sh_main.clients"),
+    )
+
+
+@stock_deletes_bp.route("/sh/partner/<int:company_id>", methods=["POST"])
+@login_required
+def delete_sh_partner(company_id):
+    require_edit_access()
+    company = ShPartnerCompany.query.get_or_404(company_id)
+    if company.purchase_shares.count() > 0:
+        flash("Cannot delete — this partner has purchase share records.", "danger")
+        return redirect(url_for("sh_main.partners"))
+    if ShLedgerEntry.query.filter_by(partner_company_id=company_id).count() > 0:
+        flash("Cannot delete — this partner has ledger entries.", "danger")
+        return redirect(url_for("sh_main.partners"))
+    return _delete_entity(
+        company,
+        "ShPartnerCompany",
+        f"Deleted SH partner: {company.name}",
+        url_for("sh_main.partners"),
     )
 
 

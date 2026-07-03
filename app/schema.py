@@ -47,13 +47,15 @@ COLUMN_MIGRATIONS = {
         "net_weight_per_roll": "FLOAT",
         "cone_weight_per_roll": "FLOAT",
     },
-    "sh_ledger_entries": {
-        "supplier_company_id": "INTEGER",
-        "client_company_id": "INTEGER",
-    },
     "sh_purchases": {
         "client_rate_per_kg": "FLOAT",
         "client_total_amount": "FLOAT",
+        "has_partnership": "BOOLEAN DEFAULT 0",
+    },
+    "sh_ledger_entries": {
+        "supplier_company_id": "INTEGER",
+        "client_company_id": "INTEGER",
+        "partner_company_id": "INTEGER",
     },
     "bank_ledger_entries": {
         "entry_type": "VARCHAR(20) DEFAULT 'standard'",

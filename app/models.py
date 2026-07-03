@@ -435,6 +435,20 @@ class ShClientCompany(db.Model):
     purchases = db.relationship("ShPurchase", back_populates="client", lazy="dynamic")
 
 
+class ShPartnerCompany(db.Model):
+    """Business partners — co-investors on stock purchases with their own ledger."""
+
+    __tablename__ = "sh_partner_companies"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    purchase_shares = db.relationship(
+        "ShPurchasePartnerShare", back_populates="partner", lazy="dynamic"
+    )
+
+
 class ShPurchase(db.Model):
     __tablename__ = "sh_purchases"
 
@@ -455,6 +469,7 @@ class ShPurchase(db.Model):
     client_company_id = db.Column(
         db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
     )
+    has_partnership = db.Column(db.Boolean, nullable=False, default=False)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -462,10 +477,42 @@ class ShPurchase(db.Model):
     supplier = db.relationship("ShSupplierCompany", back_populates="purchases")
     client = db.relationship("ShClientCompany", back_populates="purchases")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+    partner_shares = db.relationship(
+        "ShPurchasePartnerShare",
+        back_populates="purchase",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def amount_due(self) -> float:
         return float(self.total_amount or 0) - float(self.paid_amount or 0)
+
+    @property
+    def estimated_profit(self) -> float:
+        if self.client_total_amount is None:
+            return 0.0
+        return float(self.client_total_amount or 0) - float(self.total_amount or 0)
+
+
+class ShPurchasePartnerShare(db.Model):
+    """Partner investment and profit share for a specific purchase."""
+
+    __tablename__ = "sh_purchase_partner_shares"
+
+    id = db.Column(db.Integer, primary_key=True)
+    purchase_id = db.Column(
+        db.Integer, db.ForeignKey("sh_purchases.id", ondelete="CASCADE"), nullable=False
+    )
+    partner_id = db.Column(
+        db.Integer, db.ForeignKey("sh_partner_companies.id"), nullable=False
+    )
+    investment_amount = db.Column(db.Float, nullable=False, default=0)
+    investment_percent = db.Column(db.Float, nullable=False, default=0)
+    profit_percent = db.Column(db.Float, nullable=False, default=0)
+
+    purchase = db.relationship("ShPurchase", back_populates="partner_shares")
+    partner = db.relationship("ShPartnerCompany", back_populates="purchase_shares")
 
 
 class ShOpeningBalance(db.Model):
@@ -494,12 +541,16 @@ class ShLedgerEntry(db.Model):
     client_company_id = db.Column(
         db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=True
     )
+    partner_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_partner_companies.id"), nullable=True
+    )
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     supplier = db.relationship("ShSupplierCompany")
     client = db.relationship("ShClientCompany")
+    partner = db.relationship("ShPartnerCompany")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 

@@ -30,6 +30,7 @@ from app.models import (
     ShOpeningBalance,
     ShGatePassScreenshot,
     ShPaymentScreenshot,
+    ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
 )
@@ -44,6 +45,8 @@ from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
 from app.services.sh_traders import calculate_total_amount
+from app.services.sh_partnership import apply_partnership_from_form
+from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 
@@ -1109,6 +1112,11 @@ def edit_sh_purchase(purchase_id):
         purchase.paid_amount = paid_amount
         purchase.client_company_id = client_id
         purchase.notes = notes or None
+        try:
+            apply_partnership_from_form(purchase, request.form)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("stock_edits.edit_sh_purchase", purchase_id=purchase_id))
         log_audit(
             current_user.id,
             "UPDATE",
@@ -1120,12 +1128,55 @@ def edit_sh_purchase(purchase_id):
         flash("Purchase updated.", "success")
         return redirect(url_for("sh_main.purchases"))
 
+    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+    existing_shares = purchase.partner_shares.all() if purchase.has_partnership else []
     return render_template(
         "sh_traders/edit_purchase.html",
         purchase=purchase,
         suppliers=suppliers,
         clients=clients,
+        partners=partners,
+        existing_shares=existing_shares,
         cancel_url=url_for("sh_main.purchases"),
+    )
+
+
+@stock_edits_bp.route("/sh/partner/<int:company_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_partner(company_id):
+    company = ShPartnerCompany.query.get_or_404(company_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("company_name", "").strip()
+        if not name:
+            flash("Partner name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_partner", company_id=company_id))
+
+        existing = ShPartnerCompany.query.filter(
+            ShPartnerCompany.name == name, ShPartnerCompany.id != company_id
+        ).first()
+        if existing:
+            flash("Another partner already uses this name.", "warning")
+            return redirect(url_for("stock_edits.edit_sh_partner", company_id=company_id))
+
+        company.name = name
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShPartnerCompany",
+            company.id,
+            f"Renamed partner to {name}",
+        )
+        db.session.commit()
+        flash("Partner updated.", "success")
+        return redirect(url_for("sh_main.partners"))
+
+    return render_template(
+        "shared/edit_company.html",
+        company=company,
+        module_label="SH Traders (Partner)",
+        cancel_url=url_for("sh_main.partners"),
     )
 
 
@@ -1176,6 +1227,7 @@ def edit_sh_ledger(entry_id):
         credit = request.form.get("credit", type=float) or 0
         supplier_id = request.form.get("supplier_company_id", type=int) or None
         client_id = request.form.get("client_company_id", type=int) or None
+        partner_id = request.form.get("partner_company_id", type=int) or None
         notes = request.form.get("notes", "").strip()
 
         if not entry_date:
@@ -1195,6 +1247,7 @@ def edit_sh_ledger(entry_id):
         entry.credit = credit
         entry.supplier_company_id = supplier_id
         entry.client_company_id = client_id
+        entry.partner_company_id = partner_id
         entry.notes = notes or None
         log_audit(
             current_user.id,
@@ -1212,6 +1265,7 @@ def edit_sh_ledger(entry_id):
         entry=entry,
         suppliers=ShSupplierCompany.query.order_by(ShSupplierCompany.name).all(),
         clients=ShClientCompany.query.order_by(ShClientCompany.name).all(),
+        partners=ShPartnerCompany.query.order_by(ShPartnerCompany.name).all(),
         cancel_url=url_for("sh_main.payments"),
     )
 

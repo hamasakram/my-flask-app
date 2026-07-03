@@ -1,0 +1,114 @@
+{% macro partnership_fields(partners, existing_shares=None) %}
+<div class="form-group full-width partnership-block">
+    <input type="hidden" id="has_partnership" name="has_partnership" value="0">
+    <label class="checkbox-inline">
+        <input type="checkbox" id="has_partnership_toggle">
+        Partnership purchase — stock co-invested with another party
+    </label>
+    <p class="field-note">New partner names automatically open a ledger. Set investment and profit % for this purchase.</p>
+</div>
+
+<div id="partnership-fields" class="form-group full-width" hidden>
+    <h3>Partnership Details</h3>
+    <table class="data-table compact" id="partner-lines-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Partner</th>
+                <th>Or New Name</th>
+                <th>Invested (Rs)</th>
+                <th>Investment %</th>
+                <th>Profit Share %</th>
+            </tr>
+        </thead>
+        <tbody id="partner-lines-body">
+            {% set rows = existing_shares if existing_shares else [None] %}
+            {% for share in rows %}
+            <tr class="partner-line-row">
+                <td class="line-num">{{ loop.index }}</td>
+                <td>
+                    <select name="partner_id" class="partner-select">
+                        <option value="">Select partner</option>
+                        {% for p in partners %}
+                        <option value="{{ p.id }}" {% if share and share.partner_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+                <td>
+                    <input type="text" name="partner_name" placeholder="New partner name" value="{% if share and not share.partner_id %}{{ share.partner.name }}{% endif %}">
+                </td>
+                <td><input type="number" name="partner_investment" step="0.01" min="0" value="{{ share.investment_amount if share else '' }}"></td>
+                <td><input type="number" name="partner_investment_pct" step="0.01" min="0" max="100" value="{{ share.investment_percent if share else '' }}"></td>
+                <td><input type="number" name="partner_profit_pct" step="0.01" min="0" max="100" value="{{ share.profit_percent if share else '' }}"></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <template id="partner-line-template">
+        <tr class="partner-line-row">
+            <td class="line-num"></td>
+            <td>
+                <select name="partner_id" class="partner-select">
+                    <option value="">Select partner</option>
+                    {% for p in partners %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </td>
+            <td><input type="text" name="partner_name" placeholder="New partner name"></td>
+            <td><input type="number" name="partner_investment" step="0.01" min="0"></td>
+            <td><input type="number" name="partner_investment_pct" step="0.01" min="0" max="100"></td>
+            <td><input type="number" name="partner_profit_pct" step="0.01" min="0" max="100"></td>
+        </tr>
+    </template>
+    <div class="form-actions rolls-entry-actions">
+        <button type="button" id="add-partner-line" class="btn btn-secondary">+ Add Partner</button>
+        <button type="button" id="remove-partner-line" class="btn btn-secondary">Remove Last Partner</button>
+    </div>
+</div>
+{% endmacro %}
+
+{% macro partnership_script(has_existing=False) %}
+<script>
+(function () {
+    const toggle = document.getElementById('has_partnership_toggle');
+    const hidden = document.getElementById('has_partnership');
+    const block = document.getElementById('partnership-fields');
+    const body = document.getElementById('partner-lines-body');
+    const template = document.getElementById('partner-line-template');
+    if (!toggle || !hidden || !block) return;
+
+    function renumberPartnerLines() {
+        body.querySelectorAll('.partner-line-row').forEach((row, index) => {
+            row.querySelector('.line-num').textContent = index + 1;
+        });
+    }
+
+    function setPartnershipMode(enabled) {
+        hidden.value = enabled ? '1' : '0';
+        block.hidden = !enabled;
+    }
+
+    toggle.addEventListener('change', function () {
+        setPartnershipMode(this.checked);
+    });
+
+    document.getElementById('add-partner-line')?.addEventListener('click', function () {
+        body.appendChild(template.content.cloneNode(true));
+        renumberPartnerLines();
+    });
+
+    document.getElementById('remove-partner-line')?.addEventListener('click', function () {
+        const rows = body.querySelectorAll('.partner-line-row');
+        if (rows.length <= 1) return;
+        rows[rows.length - 1].remove();
+        renumberPartnerLines();
+    });
+
+    {% if has_existing %}
+    toggle.checked = true;
+    setPartnershipMode(true);
+    {% endif %}
+})();
+</script>
+{% endmacro %}

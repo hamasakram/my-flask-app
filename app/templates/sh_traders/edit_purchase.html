@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/partnership_fields.html" import partnership_fields, partnership_script %}
 {% block title %}Edit Purchase - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Edit Purchase') }}
@@ -64,6 +65,7 @@
                 {% endfor %}
             </select>
         </div>
+        {{ partnership_fields(partners, existing_shares) }}
         <div class="form-group full-width">
             <label for="notes">Notes</label>
             <textarea id="notes" name="notes" rows="2">{{ purchase.notes or '' }}</textarea>
@@ -105,4 +107,5 @@
     updateTotals();
 })();
 </script>
+{{ partnership_script(purchase.has_partnership) }}
 {% endblock %}

@@ -97,6 +97,15 @@
             </select>
         </div>
         <div class="form-group">
+            <label for="partner_company_id">Partner</label>
+            <select id="partner_company_id" name="partner_company_id">
+                <option value="">None</option>
+                {% for p in partners %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
             <label for="debit">Debit (out)</label>
             <input type="number" id="debit" name="debit" step="0.01" min="0" value="0">
         </div>
@@ -149,6 +158,7 @@
                 <td>
                     {% if row.entry.supplier %}Supplier: {{ row.entry.supplier.name }}
                     {% elif row.entry.client %}Client: {{ row.entry.client.name }}
+                    {% elif row.entry.partner %}Partner: {{ row.entry.partner.name }}
                     {% else %}—{% endif %}
                 </td>
                 <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
