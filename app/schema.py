@@ -50,7 +50,7 @@ COLUMN_MIGRATIONS = {
     "sh_purchases": {
         "client_rate_per_kg": "FLOAT",
         "client_total_amount": "FLOAT",
-        "has_partnership": "BOOLEAN DEFAULT 0",
+        "has_partnership": "BOOLEAN DEFAULT FALSE",
     },
     "sh_ledger_entries": {
         "supplier_company_id": "INTEGER",
