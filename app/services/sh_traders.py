@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app import db
 from app.models import (
@@ -80,101 +80,17 @@ def parse_multi_item_purchase_lines(form) -> list[dict]:
     return lines
 
 
-def get_purchase_supplier_ledger(purchase_id: int) -> Optional[ShLedgerEntry]:
-    return ShLedgerEntry.query.filter_by(purchase_id=purchase_id).first()
-
-
-def sync_purchase_supplier_ledger(purchase: ShPurchase, created_by_id: Optional[int] = None) -> None:
-    """Mirror purchase paid_amount as a supplier debit in Payments & Ledger."""
-    entry = get_purchase_supplier_ledger(purchase.id)
-    paid = float(purchase.paid_amount or 0)
-
-    if paid <= 0:
-        if entry:
-            db.session.delete(entry)
-        return
-
-    note = f"Payment on purchase: {purchase.material_name}"
-    if entry:
-        entry.entry_date = purchase.date_purchased
-        entry.debit = paid
-        entry.credit = 0
-        entry.supplier_company_id = purchase.supplier_company_id
-        entry.client_company_id = None
-        entry.partner_company_id = None
-        entry.notes = note
-        return
-
-    db.session.add(
-        ShLedgerEntry(
-            entry_date=purchase.date_purchased,
-            debit=paid,
-            credit=0,
-            supplier_company_id=purchase.supplier_company_id,
-            purchase_id=purchase.id,
-            notes=note,
-            created_by_id=created_by_id,
+def remove_auto_synced_purchase_ledger_entries() -> None:
+    """Remove duplicate supplier debits auto-created from purchase paid amounts."""
+    ShLedgerEntry.query.filter(ShLedgerEntry.purchase_id.isnot(None)).delete(
+        synchronize_session=False
+    )
+    ShLedgerEntry.query.filter(
+        or_(
+            ShLedgerEntry.notes.like("Payment on purchase entry%"),
+            ShLedgerEntry.notes.like("Received from client on purchase%"),
         )
-    )
-
-
-def record_supplier_payment(
-    supplier_id: int,
-    entry_date: date,
-    amount: float,
-    notes: str,
-    created_by_id: Optional[int],
-) -> None:
-    """Record a supplier payment against the party balance (not tied to one purchase row)."""
-    paid = float(amount or 0)
-    if paid <= 0:
-        return
-    db.session.add(
-        ShLedgerEntry(
-            entry_date=entry_date,
-            debit=paid,
-            credit=0,
-            supplier_company_id=supplier_id,
-            notes=notes or "Supplier payment on purchase entry",
-            created_by_id=created_by_id,
-        )
-    )
-
-
-def record_client_receipt(
-    client_id: int,
-    entry_date: date,
-    amount: float,
-    notes: str,
-    created_by_id: Optional[int],
-) -> None:
-    """Record amount received from client against their overall balance."""
-    received = float(amount or 0)
-    if received <= 0:
-        return
-    db.session.add(
-        ShLedgerEntry(
-            entry_date=entry_date,
-            debit=0,
-            credit=received,
-            client_company_id=client_id,
-            notes=notes or "Received from client on purchase entry",
-            created_by_id=created_by_id,
-        )
-    )
-
-
-def backfill_purchase_supplier_ledgers() -> None:
-    """Create missing ledger rows for historical purchase payments."""
-    purchases = (
-        ShPurchase.query.filter(ShPurchase.paid_amount > 0)
-        .order_by(ShPurchase.id.asc())
-        .all()
-    )
-    for purchase in purchases:
-        if get_purchase_supplier_ledger(purchase.id):
-            continue
-        sync_purchase_supplier_ledger(purchase, purchase.created_by_id)
+    ).delete(synchronize_session=False)
     db.session.commit()
 
 
@@ -296,7 +212,7 @@ def get_current_ledger_balance() -> float:
 
 
 def get_supplier_party_balances() -> list[dict]:
-    """Amount to pay each supplier — purchases minus ledger payments and screenshots."""
+    """Amount to pay each supplier — auto from purchases minus ledger payments."""
     suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
     rows = []
     for supplier in suppliers:
@@ -318,8 +234,7 @@ def get_supplier_party_balances() -> list[dict]:
             or 0
         )
 
-        # Purchase payments are synced into the ledger — do not add paid_on_purchases again.
-        total_paid = float(ledger_payments) + float(screenshot_payments)
+        total_paid = float(paid_on_purchases) + float(ledger_payments) + float(screenshot_payments)
         balance_to_pay = max(0.0, float(total_purchased) - total_paid)
 
         rows.append(
@@ -416,7 +331,12 @@ def get_dashboard_stats(today: date) -> dict:
         ).first()
     )
 
-    total_outstanding = get_party_balance_totals()["total_payable"]
+    total_outstanding = (
+        db.session.query(
+            func.coalesce(func.sum(ShPurchase.total_amount - ShPurchase.paid_amount), 0)
+        ).scalar()
+        or 0
+    )
 
     recent_purchases = (
         ShPurchase.query.order_by(

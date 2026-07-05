@@ -21,12 +21,10 @@
 </div>
 
 <p class="field-note balance-note">
-    Supplier balance = Total Purchased − Ledger Paid − Payment screenshots.
-    Payments entered on purchase forms are recorded in the ledger automatically.
+    Supplier balance = Total Purchased − Paid on purchases − Ledger payments − Payment screenshots.
     Client balance to receive is based on <strong>Advance Stock Purchased</strong> (client totals).
     <strong>Sale Invoices</strong> are listed separately for reference — they are not added again to avoid double counting.
-    Amounts received from clients (on purchase entry or in
-    <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a>) reduce the client’s overall balance.
+    Ledger receipts in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> reduce the client balance.
 </p>
 
 <div class="grid-2">

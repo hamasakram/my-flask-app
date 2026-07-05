@@ -242,10 +242,10 @@ def _migrate_material_opening_stock():
                 )
 
 
-def _backfill_purchase_supplier_ledgers():
-    from app.services.sh_traders import backfill_purchase_supplier_ledgers
+def _remove_auto_synced_purchase_ledger_entries():
+    from app.services.sh_traders import remove_auto_synced_purchase_ledger_entries
 
-    backfill_purchase_supplier_ledgers()
+    remove_auto_synced_purchase_ledger_entries()
 
 
 def ensure_schema():
@@ -255,7 +255,7 @@ def ensure_schema():
 
     _drop_materials_unique_constraint()
     _migrate_material_opening_stock()
-    _backfill_purchase_supplier_ledgers()
+    _remove_auto_synced_purchase_ledger_entries()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

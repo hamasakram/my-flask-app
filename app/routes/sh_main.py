@@ -35,9 +35,6 @@ from app.services.sh_traders import (
     get_opening_balance,
     get_party_balance_totals,
     parse_multi_item_purchase_lines,
-    record_client_receipt,
-    record_supplier_payment,
-    sync_purchase_supplier_ledger,
 )
 from app.services.sh_uploads import (
     apply_gate_pass_screenshot,
@@ -199,12 +196,6 @@ def purchases():
         client_id = request.form.get("client_company_id", type=int)
         notes = request.form.get("notes", "").strip()
         multi_mode = request.form.get("multi_mode") == "1"
-        supplier_paid = request.form.get("supplier_paid_amount", type=float) or 0
-        client_received = request.form.get("client_received_amount", type=float) or 0
-
-        if supplier_paid < 0 or client_received < 0:
-            flash("Payment amounts cannot be negative.", "danger")
-            return redirect(url_for("sh_main.purchases"))
 
         if not date_purchased or not supplier_id or not client_id:
             flash("Date, supplier, and purchased-for are required.", "danger")
@@ -256,23 +247,6 @@ def purchases():
                 item_names.append(line["material_name"])
                 created += 1
 
-            if supplier_paid > 0:
-                record_supplier_payment(
-                    supplier_id,
-                    parsed_date,
-                    supplier_paid,
-                    f"Payment on purchase entry ({created} items)",
-                    current_user.id,
-                )
-            if client_received > 0:
-                record_client_receipt(
-                    client_id,
-                    parsed_date,
-                    client_received,
-                    f"Received from client on purchase entry ({created} items)",
-                    current_user.id,
-                )
-
             log_audit(
                 current_user.id,
                 "CREATE",
@@ -290,6 +264,7 @@ def purchases():
         rate_per_1000 = request.form.get("rate_per_1000_kg", type=float)
         client_rate = request.form.get("client_rate_per_kg", type=float) or 0
         total_kg = request.form.get("total_kg", type=float)
+        paid_amount = request.form.get("paid_amount", type=float) or 0
 
         if (
             not material_name
@@ -310,7 +285,7 @@ def purchases():
             total_kg=total_kg,
             rate_per_1000_kg=rate_per_1000,
             total_amount=calculate_total_amount(total_kg, rate_per_1000),
-            paid_amount=supplier_paid,
+            paid_amount=paid_amount,
             client_rate_per_kg=client_rate if client_rate > 0 else None,
             client_total_amount=(
                 calculate_total_amount(total_kg, client_rate) if client_rate > 0 else None
@@ -327,15 +302,6 @@ def purchases():
             db.session.rollback()
             flash(str(exc), "danger")
             return redirect(url_for("sh_main.purchases"))
-        sync_purchase_supplier_ledger(purchase, current_user.id)
-        if client_received > 0:
-            record_client_receipt(
-                client_id,
-                parsed_date,
-                client_received,
-                f"Received from client on purchase: {material_name}",
-                current_user.id,
-            )
         log_audit(
             current_user.id,
             "CREATE",
