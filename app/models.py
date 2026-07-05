@@ -544,6 +544,7 @@ class ShLedgerEntry(db.Model):
     partner_company_id = db.Column(
         db.Integer, db.ForeignKey("sh_partner_companies.id"), nullable=True
     )
+    purchase_id = db.Column(db.Integer, db.ForeignKey("sh_purchases.id"), nullable=True)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -551,6 +552,7 @@ class ShLedgerEntry(db.Model):
     supplier = db.relationship("ShSupplierCompany")
     client = db.relationship("ShClientCompany")
     partner = db.relationship("ShPartnerCompany")
+    purchase = db.relationship("ShPurchase", foreign_keys=[purchase_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 

@@ -22,35 +22,160 @@ def calculate_total_amount(total_kg: float, rate_per_kg: float) -> float:
     return float(total_kg) * float(rate_per_kg)
 
 
-def parse_multi_purchase_lines(form) -> list[dict]:
-    """Parse repeated KG / paid rows for bulk purchase entry."""
-    total_kgs = form.getlist("line_total_kg")
-    paid_amounts = form.getlist("line_paid_amount")
+def parse_multi_item_purchase_lines(form) -> list[dict]:
+    """Parse multiple material lines for one purchase entry."""
+    materials = form.getlist("item_material_name")
+    sizes = form.getlist("item_size")
+    microns = form.getlist("item_micron")
+    rates = form.getlist("item_rate_per_kg")
+    client_rates = form.getlist("item_client_rate_per_kg")
+    total_kgs = form.getlist("item_total_kg")
     lines = []
 
-    for index, raw_kg in enumerate(total_kgs):
-        if raw_kg in (None, ""):
+    for index, raw_material in enumerate(materials):
+        material_name = (raw_material or "").strip()
+        if not material_name:
             continue
+
+        size = sizes[index].strip() if index < len(sizes) else ""
+        micron = microns[index].strip() if index < len(microns) else ""
+
+        rate_raw = rates[index] if index < len(rates) else ""
         try:
-            total_kg = float(raw_kg)
+            rate_per_kg = float(rate_raw)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"Line {index + 1}: enter a valid KG amount.") from exc
+            raise ValueError(f"Item {index + 1}: enter a valid Amount / KG.") from exc
+        if rate_per_kg <= 0:
+            raise ValueError(f"Item {index + 1}: Amount / KG must be greater than zero.")
+
+        client_rate_raw = client_rates[index] if index < len(client_rates) else "0"
+        try:
+            client_rate = float(client_rate_raw or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Item {index + 1}: enter a valid client rate.") from exc
+        if client_rate < 0:
+            raise ValueError(f"Item {index + 1}: client rate cannot be negative.")
+
+        kg_raw = total_kgs[index] if index < len(total_kgs) else ""
+        try:
+            total_kg = float(kg_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Item {index + 1}: enter a valid KG amount.") from exc
         if total_kg <= 0:
-            raise ValueError(f"Line {index + 1}: KG must be greater than zero.")
+            raise ValueError(f"Item {index + 1}: KG must be greater than zero.")
 
-        paid_raw = paid_amounts[index] if index < len(paid_amounts) else "0"
-        try:
-            paid_amount = float(paid_raw or 0)
-        except (TypeError, ValueError) as exc:
-            raise ValueError(f"Line {index + 1}: enter a valid paid amount.") from exc
-        if paid_amount < 0:
-            raise ValueError(f"Line {index + 1}: paid amount cannot be negative.")
-
-        lines.append({"total_kg": total_kg, "paid_amount": paid_amount})
+        lines.append(
+            {
+                "material_name": material_name,
+                "size": size,
+                "micron": micron,
+                "rate_per_kg": rate_per_kg,
+                "client_rate_per_kg": client_rate,
+                "total_kg": total_kg,
+            }
+        )
 
     if not lines:
-        raise ValueError("Add at least one KG line.")
+        raise ValueError("Add at least one item with material name and KG.")
     return lines
+
+
+def get_purchase_supplier_ledger(purchase_id: int) -> Optional[ShLedgerEntry]:
+    return ShLedgerEntry.query.filter_by(purchase_id=purchase_id).first()
+
+
+def sync_purchase_supplier_ledger(purchase: ShPurchase, created_by_id: Optional[int] = None) -> None:
+    """Mirror purchase paid_amount as a supplier debit in Payments & Ledger."""
+    entry = get_purchase_supplier_ledger(purchase.id)
+    paid = float(purchase.paid_amount or 0)
+
+    if paid <= 0:
+        if entry:
+            db.session.delete(entry)
+        return
+
+    note = f"Payment on purchase: {purchase.material_name}"
+    if entry:
+        entry.entry_date = purchase.date_purchased
+        entry.debit = paid
+        entry.credit = 0
+        entry.supplier_company_id = purchase.supplier_company_id
+        entry.client_company_id = None
+        entry.partner_company_id = None
+        entry.notes = note
+        return
+
+    db.session.add(
+        ShLedgerEntry(
+            entry_date=purchase.date_purchased,
+            debit=paid,
+            credit=0,
+            supplier_company_id=purchase.supplier_company_id,
+            purchase_id=purchase.id,
+            notes=note,
+            created_by_id=created_by_id,
+        )
+    )
+
+
+def record_supplier_payment(
+    supplier_id: int,
+    entry_date: date,
+    amount: float,
+    notes: str,
+    created_by_id: Optional[int],
+) -> None:
+    """Record a supplier payment against the party balance (not tied to one purchase row)."""
+    paid = float(amount or 0)
+    if paid <= 0:
+        return
+    db.session.add(
+        ShLedgerEntry(
+            entry_date=entry_date,
+            debit=paid,
+            credit=0,
+            supplier_company_id=supplier_id,
+            notes=notes or "Supplier payment on purchase entry",
+            created_by_id=created_by_id,
+        )
+    )
+
+
+def record_client_receipt(
+    client_id: int,
+    entry_date: date,
+    amount: float,
+    notes: str,
+    created_by_id: Optional[int],
+) -> None:
+    """Record amount received from client against their overall balance."""
+    received = float(amount or 0)
+    if received <= 0:
+        return
+    db.session.add(
+        ShLedgerEntry(
+            entry_date=entry_date,
+            debit=0,
+            credit=received,
+            client_company_id=client_id,
+            notes=notes or "Received from client on purchase entry",
+            created_by_id=created_by_id,
+        )
+    )
+
+
+def backfill_purchase_supplier_ledgers() -> None:
+    """Create missing ledger rows for historical purchase payments."""
+    purchases = (
+        ShPurchase.query.filter(ShPurchase.paid_amount > 0)
+        .order_by(ShPurchase.id.asc())
+        .all()
+    )
+    for purchase in purchases:
+        if get_purchase_supplier_ledger(purchase.id):
+            continue
+        sync_purchase_supplier_ledger(purchase, purchase.created_by_id)
+    db.session.commit()
 
 
 def calculate_gate_pass_total(net_weight: float, amount_per_kg: float) -> float:
@@ -171,7 +296,7 @@ def get_current_ledger_balance() -> float:
 
 
 def get_supplier_party_balances() -> list[dict]:
-    """Amount to pay each supplier — auto from purchases minus ledger payments."""
+    """Amount to pay each supplier — purchases minus ledger payments and screenshots."""
     suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
     rows = []
     for supplier in suppliers:
@@ -193,7 +318,8 @@ def get_supplier_party_balances() -> list[dict]:
             or 0
         )
 
-        total_paid = float(paid_on_purchases) + float(ledger_payments) + float(screenshot_payments)
+        # Purchase payments are synced into the ledger — do not add paid_on_purchases again.
+        total_paid = float(ledger_payments) + float(screenshot_payments)
         balance_to_pay = max(0.0, float(total_purchased) - total_paid)
 
         rows.append(
@@ -290,12 +416,7 @@ def get_dashboard_stats(today: date) -> dict:
         ).first()
     )
 
-    total_outstanding = (
-        db.session.query(
-            func.coalesce(func.sum(ShPurchase.total_amount - ShPurchase.paid_amount), 0)
-        ).scalar()
-        or 0
-    )
+    total_outstanding = get_party_balance_totals()["total_payable"]
 
     recent_purchases = (
         ShPurchase.query.order_by(

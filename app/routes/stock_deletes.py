@@ -446,6 +446,9 @@ def delete_sh_partner(company_id):
 @login_required
 def delete_sh_purchase(purchase_id):
     purchase = ShPurchase.query.get_or_404(purchase_id)
+    ShLedgerEntry.query.filter_by(purchase_id=purchase_id).delete(
+        synchronize_session=False
+    )
     ShPaymentScreenshot.query.filter_by(purchase_id=purchase_id).update(
         {ShPaymentScreenshot.purchase_id: None},
         synchronize_session=False,

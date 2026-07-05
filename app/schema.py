@@ -56,6 +56,7 @@ COLUMN_MIGRATIONS = {
         "supplier_company_id": "INTEGER",
         "client_company_id": "INTEGER",
         "partner_company_id": "INTEGER",
+        "purchase_id": "INTEGER",
     },
     "bank_ledger_entries": {
         "entry_type": "VARCHAR(20) DEFAULT 'standard'",
@@ -241,6 +242,12 @@ def _migrate_material_opening_stock():
                 )
 
 
+def _backfill_purchase_supplier_ledgers():
+    from app.services.sh_traders import backfill_purchase_supplier_ledgers
+
+    backfill_purchase_supplier_ledgers()
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
@@ -248,6 +255,7 @@ def ensure_schema():
 
     _drop_materials_unique_constraint()
     _migrate_material_opening_stock()
+    _backfill_purchase_supplier_ledgers()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

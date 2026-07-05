@@ -19,7 +19,7 @@
         <div class="form-group full-width">
             <label class="checkbox-inline">
                 <input type="checkbox" id="multi_mode_toggle">
-                Add multiple purchases at once (same material, supplier, rates &amp; client)
+                Add multiple items in one entry (different materials, same supplier &amp; client)
             </label>
         </div>
         <div class="form-group">
@@ -36,26 +36,6 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="material_name">Material Name</label>
-            <input type="text" id="material_name" name="material_name" required>
-        </div>
-        <div class="form-group">
-            <label for="size">Size</label>
-            <input type="text" id="size" name="size">
-        </div>
-        <div class="form-group">
-            <label for="micron">Micron (Thickness)</label>
-            <input type="text" id="micron" name="micron">
-        </div>
-        <div class="form-group">
-            <label for="rate_per_1000_kg">Amount / KG</label>
-            <input type="number" id="rate_per_1000_kg" name="rate_per_1000_kg" step="0.01" min="0.01" required>
-        </div>
-        <div class="form-group">
-            <label for="client_rate_per_kg">Amount / KG for Client</label>
-            <input type="number" id="client_rate_per_kg" name="client_rate_per_kg" step="0.01" min="0">
-        </div>
-        <div class="form-group">
             <label for="client_company_id">Purchased For</label>
             <select id="client_company_id" name="client_company_id" required>
                 <option value="">Select client</option>
@@ -65,7 +45,27 @@
             </select>
         </div>
 
-        <div id="single-entry-fields" class="form-group full-width purchase-entry-grid">
+        <div id="single-item-fields" class="form-group full-width purchase-entry-grid">
+            <div class="form-group">
+                <label for="material_name">Material Name</label>
+                <input type="text" id="material_name" name="material_name" required>
+            </div>
+            <div class="form-group">
+                <label for="size">Size</label>
+                <input type="text" id="size" name="size">
+            </div>
+            <div class="form-group">
+                <label for="micron">Micron (Thickness)</label>
+                <input type="text" id="micron" name="micron">
+            </div>
+            <div class="form-group">
+                <label for="rate_per_1000_kg">Amount / KG</label>
+                <input type="number" id="rate_per_1000_kg" name="rate_per_1000_kg" step="0.01" min="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="client_rate_per_kg">Amount / KG for Client</label>
+                <input type="number" id="client_rate_per_kg" name="client_rate_per_kg" step="0.01" min="0">
+            </div>
             <div class="form-group">
                 <label for="total_kg">Total Purchased (KG)</label>
                 <input type="number" id="total_kg" name="total_kg" step="0.01" min="0.01">
@@ -79,49 +79,79 @@
                 <label for="client_total_amount_display">Client Total (auto)</label>
                 <input type="text" id="client_total_amount_display" readonly class="readonly-field" value="0.00">
             </div>
-            <div class="form-group">
-                <label for="paid_amount">Paid to the Company</label>
-                <input type="number" id="paid_amount" name="paid_amount" step="0.01" min="0" value="0">
-            </div>
         </div>
 
-        <div id="multi-entry-fields" class="form-group full-width" hidden>
-            <h3>Multiple KG Lines</h3>
-            <p class="field-note">Each row saves as a separate purchase with the same material details above.</p>
-            <table class="data-table compact" id="purchase-lines-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Total Purchased (KG)</th>
-                        <th>Total Amount (auto)</th>
-                        <th>Client Total (auto)</th>
-                        <th>Paid to the Company</th>
-                    </tr>
-                </thead>
-                <tbody id="purchase-lines-body">
-                    <tr class="purchase-line-row">
-                        <td class="line-num">1</td>
-                        <td><input type="number" name="line_total_kg" step="0.01" min="0.01" class="line-kg"></td>
-                        <td><input type="text" readonly class="readonly-field line-total" value="0.00"></td>
-                        <td><input type="text" readonly class="readonly-field line-client-total" value="0.00"></td>
-                        <td><input type="number" name="line_paid_amount" step="0.01" min="0" value="0"></td>
-                    </tr>
-                </tbody>
-            </table>
-            <template id="purchase-line-template">
-                <tr class="purchase-line-row">
+        <div id="multi-item-fields" class="form-group full-width" hidden>
+            <h3>Items</h3>
+            <p class="field-note">Each row saves as a separate purchase record with the details below.</p>
+            <div class="table-scroll">
+                <table class="data-table compact" id="purchase-items-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Material Name</th>
+                            <th>Size</th>
+                            <th>Micron</th>
+                            <th>Amount / KG</th>
+                            <th>Client Rate / KG</th>
+                            <th>KG</th>
+                            <th>Total (auto)</th>
+                            <th>Client Total (auto)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="purchase-items-body">
+                        <tr class="purchase-item-row">
+                            <td class="line-num">1</td>
+                            <td><input type="text" name="item_material_name" class="item-material"></td>
+                            <td><input type="text" name="item_size" class="item-size"></td>
+                            <td><input type="text" name="item_micron" class="item-micron"></td>
+                            <td><input type="number" name="item_rate_per_kg" step="0.01" min="0.01" class="item-rate"></td>
+                            <td><input type="number" name="item_client_rate_per_kg" step="0.01" min="0" class="item-client-rate"></td>
+                            <td><input type="number" name="item_total_kg" step="0.01" min="0.01" class="item-kg"></td>
+                            <td><input type="text" readonly class="readonly-field item-total" value="0.00"></td>
+                            <td><input type="text" readonly class="readonly-field item-client-total" value="0.00"></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <template id="purchase-item-template">
+                <tr class="purchase-item-row">
                     <td class="line-num"></td>
-                    <td><input type="number" name="line_total_kg" step="0.01" min="0.01" class="line-kg"></td>
-                    <td><input type="text" readonly class="readonly-field line-total" value="0.00"></td>
-                    <td><input type="text" readonly class="readonly-field line-client-total" value="0.00"></td>
-                    <td><input type="number" name="line_paid_amount" step="0.01" min="0" value="0"></td>
+                    <td><input type="text" name="item_material_name" class="item-material"></td>
+                    <td><input type="text" name="item_size" class="item-size"></td>
+                    <td><input type="text" name="item_micron" class="item-micron"></td>
+                    <td><input type="number" name="item_rate_per_kg" step="0.01" min="0.01" class="item-rate"></td>
+                    <td><input type="number" name="item_client_rate_per_kg" step="0.01" min="0" class="item-client-rate"></td>
+                    <td><input type="number" name="item_total_kg" step="0.01" min="0.01" class="item-kg"></td>
+                    <td><input type="text" readonly class="readonly-field item-total" value="0.00"></td>
+                    <td><input type="text" readonly class="readonly-field item-client-total" value="0.00"></td>
                 </tr>
             </template>
             <div class="form-actions rolls-entry-actions">
-                <button type="button" id="add-purchase-line" class="btn btn-secondary">+ Add Line</button>
-                <button type="button" id="remove-purchase-line" class="btn btn-secondary">Remove Last Line</button>
+                <button type="button" id="add-purchase-item" class="btn btn-secondary">+ Add Item</button>
+                <button type="button" id="remove-purchase-item" class="btn btn-secondary">Remove Last Item</button>
             </div>
-            <p class="field-note"><strong>Combined total:</strong> <span id="multi_combined_total">0.00</span></p>
+        </div>
+
+        <div id="entry-totals" class="form-group full-width purchase-entry-grid highlight-totals">
+            <div class="form-group">
+                <label>Entry Total (Supplier)</label>
+                <input type="text" id="entry_supplier_total" readonly class="readonly-field" value="0.00">
+            </div>
+            <div class="form-group">
+                <label>Entry Total (Client)</label>
+                <input type="text" id="entry_client_total" readonly class="readonly-field" value="0.00">
+            </div>
+            <div class="form-group">
+                <label for="supplier_paid_amount">Paid to the Company</label>
+                <input type="number" id="supplier_paid_amount" name="supplier_paid_amount" step="0.01" min="0" value="0">
+                <small class="field-note">Recorded in Payments &amp; Ledger — adjusts supplier balance</small>
+            </div>
+            <div class="form-group">
+                <label for="client_received_amount">Received from Client</label>
+                <input type="number" id="client_received_amount" name="client_received_amount" step="0.01" min="0" value="0">
+                <small class="field-note">Recorded in Payments &amp; Ledger — adjusts client overall balance</small>
+            </div>
         </div>
 
         {{ partnership_fields(partners) }}
@@ -155,8 +185,6 @@
                 <th>Client Rate/KG</th>
                 <th>Client Total</th>
                 {% endif %}
-                <th>Paid</th>
-                <th>Due (on record)</th>
                 <th>Purchased For</th>
                 <th>Partnership</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
@@ -177,8 +205,6 @@
                 <td>{% if p.client_rate_per_kg %}{{ "{:,.2f}".format(p.client_rate_per_kg) }}{% else %}—{% endif %}</td>
                 <td>{% if p.client_total_amount %}₨ {{ "{:,.2f}".format(p.client_total_amount) }}{% else %}—{% endif %}</td>
                 {% endif %}
-                <td>₨ {{ "{:,.2f}".format(p.paid_amount) }}</td>
-                <td class="{% if p.amount_due > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(p.amount_due) }}</td>
                 <td>{{ p.client.name }}</td>
                 <td>
                     {% if p.has_partnership %}
@@ -195,14 +221,13 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{% if current_user.can_edit() and current_user.can_view_sensitive() %}15{% elif current_user.can_edit() %}13{% elif current_user.can_view_sensitive() %}14{% else %}12{% endif %}" class="empty">No purchases yet</td></tr>
+            <tr><td colspan="{% if current_user.can_edit() and current_user.can_view_sensitive() %}13{% elif current_user.can_edit() %}11{% elif current_user.can_view_sensitive() %}12{% else %}10{% endif %}" class="empty">No purchases yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
     <p class="field-note">
-        <strong>Due (on record)</strong> = Total − Paid on that row only.
-        Payments recorded in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> are not shown here —
-        see <a href="{{ url_for('sh_main.party_balances') }}">Party Balances</a> for the supplier’s net balance after all payments.
+        Supplier and client payments are recorded in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a>
+        and adjust party balances in <a href="{{ url_for('sh_main.party_balances') }}">Party Balances</a> — not per individual row above.
     </p>
 </div>
 {% endblock %}
@@ -215,16 +240,18 @@
 
     const multiToggle = document.getElementById('multi_mode_toggle');
     const multiModeInput = document.getElementById('multi_mode');
-    const singleFields = document.getElementById('single-entry-fields');
-    const multiFields = document.getElementById('multi-entry-fields');
-    const kgInput = document.getElementById('total_kg');
+    const singleFields = document.getElementById('single-item-fields');
+    const multiFields = document.getElementById('multi-item-fields');
+    const materialInput = document.getElementById('material_name');
     const rateInput = document.getElementById('rate_per_1000_kg');
-    const totalDisplay = document.getElementById('total_amount_display');
+    const kgInput = document.getElementById('total_kg');
     const clientRateInput = document.getElementById('client_rate_per_kg');
+    const totalDisplay = document.getElementById('total_amount_display');
     const clientTotalDisplay = document.getElementById('client_total_amount_display');
-    const linesBody = document.getElementById('purchase-lines-body');
-    const lineTemplate = document.getElementById('purchase-line-template');
-    const combinedTotal = document.getElementById('multi_combined_total');
+    const entrySupplierTotal = document.getElementById('entry_supplier_total');
+    const entryClientTotal = document.getElementById('entry_client_total');
+    const itemsBody = document.getElementById('purchase-items-body');
+    const itemTemplate = document.getElementById('purchase-item-template');
     const saveBtn = document.getElementById('save-purchase-btn');
 
     function formatAmount(value) {
@@ -234,43 +261,56 @@
     function updateSingleTotals() {
         const kg = parseFloat(kgInput.value) || 0;
         const rate = parseFloat(rateInput.value) || 0;
-        totalDisplay.value = formatAmount(kg * rate);
-        if (clientRateInput && clientTotalDisplay) {
-            const clientRate = parseFloat(clientRateInput.value) || 0;
-            clientTotalDisplay.value = formatAmount(kg * clientRate);
-        }
+        const clientRate = parseFloat(clientRateInput?.value) || 0;
+        const supplierTotal = kg * rate;
+        const clientTotal = kg * clientRate;
+        totalDisplay.value = formatAmount(supplierTotal);
+        if (clientTotalDisplay) clientTotalDisplay.value = formatAmount(clientTotal);
+        entrySupplierTotal.value = formatAmount(supplierTotal);
+        entryClientTotal.value = formatAmount(clientTotal);
     }
 
-    function renumberLines() {
-        linesBody.querySelectorAll('.purchase-line-row').forEach((row, index) => {
+    function renumberItems() {
+        itemsBody.querySelectorAll('.purchase-item-row').forEach((row, index) => {
             row.querySelector('.line-num').textContent = index + 1;
         });
     }
 
-    function updateLineRow(row) {
-        const kg = parseFloat(row.querySelector('.line-kg').value) || 0;
-        const rate = parseFloat(rateInput.value) || 0;
-        const clientRate = parseFloat(clientRateInput?.value) || 0;
-        row.querySelector('.line-total').value = formatAmount(kg * rate);
-        row.querySelector('.line-client-total').value = formatAmount(kg * clientRate);
+    function updateItemRow(row) {
+        const kg = parseFloat(row.querySelector('.item-kg').value) || 0;
+        const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+        const clientRate = parseFloat(row.querySelector('.item-client-rate').value) || 0;
+        row.querySelector('.item-total').value = formatAmount(kg * rate);
+        row.querySelector('.item-client-total').value = formatAmount(kg * clientRate);
     }
 
     function updateMultiTotals() {
-        let combined = 0;
-        linesBody.querySelectorAll('.purchase-line-row').forEach((row) => {
-            updateLineRow(row);
-            combined += parseFloat(row.querySelector('.line-kg').value) || 0;
+        let supplierTotal = 0;
+        let clientTotal = 0;
+        itemsBody.querySelectorAll('.purchase-item-row').forEach((row) => {
+            updateItemRow(row);
+            const kg = parseFloat(row.querySelector('.item-kg').value) || 0;
+            const rate = parseFloat(row.querySelector('.item-rate').value) || 0;
+            const clientRate = parseFloat(row.querySelector('.item-client-rate').value) || 0;
+            supplierTotal += kg * rate;
+            clientTotal += kg * clientRate;
         });
-        const rate = parseFloat(rateInput.value) || 0;
-        combinedTotal.textContent = formatAmount(combined * rate);
+        entrySupplierTotal.value = formatAmount(supplierTotal);
+        entryClientTotal.value = formatAmount(clientTotal);
+    }
+
+    function setSingleRequired(required) {
+        materialInput.required = required;
+        rateInput.required = required;
+        kgInput.required = required;
     }
 
     function setMultiMode(enabled) {
         multiModeInput.value = enabled ? '1' : '0';
         singleFields.hidden = enabled;
         multiFields.hidden = !enabled;
-        kgInput.required = !enabled;
-        saveBtn.textContent = enabled ? 'Save All Purchases' : 'Save Purchase';
+        setSingleRequired(!enabled);
+        saveBtn.textContent = enabled ? 'Save All Items' : 'Save Purchase';
         if (enabled) updateMultiTotals();
         else updateSingleTotals();
     }
@@ -279,45 +319,42 @@
         setMultiMode(this.checked);
     });
 
-    document.getElementById('add-purchase-line')?.addEventListener('click', function () {
-        const clone = lineTemplate.content.cloneNode(true);
-        linesBody.appendChild(clone);
-        renumberLines();
+    document.getElementById('add-purchase-item')?.addEventListener('click', function () {
+        itemsBody.appendChild(itemTemplate.content.cloneNode(true));
+        renumberItems();
         updateMultiTotals();
     });
 
-    document.getElementById('remove-purchase-line')?.addEventListener('click', function () {
-        const rows = linesBody.querySelectorAll('.purchase-line-row');
+    document.getElementById('remove-purchase-item')?.addEventListener('click', function () {
+        const rows = itemsBody.querySelectorAll('.purchase-item-row');
         if (rows.length <= 1) return;
         rows[rows.length - 1].remove();
-        renumberLines();
+        renumberItems();
         updateMultiTotals();
     });
 
-    linesBody?.addEventListener('input', function (event) {
-        if (event.target.classList.contains('line-kg')) {
+    itemsBody?.addEventListener('input', function (event) {
+        if (
+            event.target.classList.contains('item-kg')
+            || event.target.classList.contains('item-rate')
+            || event.target.classList.contains('item-client-rate')
+        ) {
             updateMultiTotals();
         }
     });
 
     kgInput?.addEventListener('input', updateSingleTotals);
-    rateInput?.addEventListener('input', function () {
-        updateSingleTotals();
-        if (multiToggle.checked) updateMultiTotals();
-    });
-    clientRateInput?.addEventListener('input', function () {
-        updateSingleTotals();
-        if (multiToggle.checked) updateMultiTotals();
-    });
+    rateInput?.addEventListener('input', updateSingleTotals);
+    clientRateInput?.addEventListener('input', updateSingleTotals);
 
     form.addEventListener('submit', function (event) {
         if (multiToggle.checked) {
-            const hasKg = Array.from(linesBody.querySelectorAll('.line-kg')).some(
-                (input) => parseFloat(input.value) > 0
+            const hasItem = Array.from(itemsBody.querySelectorAll('.item-material')).some(
+                (input) => input.value.trim() !== ''
             );
-            if (!hasKg) {
+            if (!hasItem) {
                 event.preventDefault();
-                alert('Add at least one KG line.');
+                alert('Add at least one item with a material name.');
             }
         }
     });
