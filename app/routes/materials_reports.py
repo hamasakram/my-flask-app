@@ -9,8 +9,9 @@ from app.services.materials_export import (
     export_material_inventory_excel,
     export_material_inventory_pdf,
     export_material_transactions_excel,
+    export_material_usage_pdf,
 )
-from app.services.materials_inventory import calculate_live_stock
+from app.services.materials_inventory import USAGE_PERIODS, calculate_live_stock, get_usage_report
 
 materials_reports_bp = Blueprint("materials_reports", __name__, url_prefix="/materials/reports")
 
@@ -163,6 +164,30 @@ def audit_trail():
         "materials/audit_trail.html",
         logs=logs,
         filters={"start_date": start_date or "", "end_date": end_date or ""},
+    )
+
+
+@materials_reports_bp.route("/usage/pdf")
+@login_required
+def export_usage_pdf():
+    period = request.args.get("period", "daily")
+    if period not in USAGE_PERIODS:
+        period = "daily"
+
+    report = get_usage_report(period)
+    output = export_material_usage_pdf(report)
+    filename = f"materials_usage_{period}_{report['start_date'].strftime('%Y%m%d')}.pdf"
+    if report["start_date"] != report["end_date"]:
+        filename = (
+            f"materials_usage_{period}_"
+            f"{report['start_date'].strftime('%Y%m%d')}_{report['end_date'].strftime('%Y%m%d')}.pdf"
+        )
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/pdf",
     )
 
 

@@ -1,10 +1,12 @@
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import func
 
 from app import db
 from app.models import AppSetting, Material, MaterialOpeningStock, MaterialTransaction
+
+USAGE_PERIODS = ("daily", "weekly", "monthly")
 
 
 def create_material(
@@ -258,7 +260,94 @@ def get_stock_usage_records(limit: int = 30) -> list[MaterialTransaction]:
     )
 
 
-def get_dashboard_stats(today: date) -> dict:
+def get_usage_period_range(period: str, reference: date | None = None) -> tuple[date, date, str]:
+    """Return start date, end date, and display label for a usage report period."""
+    if period not in USAGE_PERIODS:
+        raise ValueError(f"Invalid usage period: {period}")
+
+    ref = reference or date.today()
+    if period == "daily":
+        return ref, ref, ref.strftime("%d %B %Y")
+
+    if period == "weekly":
+        start = ref - timedelta(days=ref.weekday())
+        end = start + timedelta(days=6)
+        if start.year == end.year:
+            label = f"{start.strftime('%d %b')} – {end.strftime('%d %b %Y')}"
+        else:
+            label = f"{start.strftime('%d %b %Y')} – {end.strftime('%d %b %Y')}"
+        return start, end, label
+
+    start = ref.replace(day=1)
+    if ref.month == 12:
+        end = ref.replace(day=31)
+    else:
+        end = ref.replace(month=ref.month + 1, day=1) - timedelta(days=1)
+    return start, end, ref.strftime("%B %Y")
+
+
+def get_usage_report(period: str, reference: date | None = None) -> dict:
+    """Build usage analytics for daily, weekly, or monthly stock-used records."""
+    start_date, end_date, period_label = get_usage_period_range(period, reference)
+
+    records = (
+        MaterialTransaction.query.filter(
+            MaterialTransaction.transaction_type == MaterialTransaction.TRANSACTION_USED,
+            MaterialTransaction.transaction_date >= start_date,
+            MaterialTransaction.transaction_date <= end_date,
+        )
+        .order_by(
+            MaterialTransaction.transaction_date.desc(),
+            MaterialTransaction.id.desc(),
+        )
+        .all()
+    )
+
+    by_material: dict[str, dict] = {}
+    by_date: dict[str, dict] = {}
+    total_used = 0.0
+
+    for txn in records:
+        total_used += txn.quantity
+        material_name = txn.material.display_name
+
+        material_row = by_material.setdefault(
+            material_name,
+            {
+                "material_name": material_name,
+                "category": txn.material.category,
+                "total_used": 0.0,
+                "record_count": 0,
+            },
+        )
+        material_row["total_used"] += txn.quantity
+        material_row["record_count"] += 1
+
+        date_key = txn.transaction_date.isoformat()
+        date_row = by_date.setdefault(
+            date_key,
+            {"date": txn.transaction_date, "total_used": 0.0, "record_count": 0},
+        )
+        date_row["total_used"] += txn.quantity
+        date_row["record_count"] += 1
+
+    return {
+        "period": period,
+        "period_label": period_label,
+        "start_date": start_date,
+        "end_date": end_date,
+        "total_used": total_used,
+        "record_count": len(records),
+        "material_count": len(by_material),
+        "records": records,
+        "by_material": sorted(
+            by_material.values(), key=lambda row: row["total_used"], reverse=True
+        ),
+        "by_date": sorted(by_date.values(), key=lambda row: row["date"]),
+    }
+
+
+def get_dashboard_stats(today: date, usage_period: str = "daily") -> dict:
     live_stock = calculate_live_stock()
     total_inventory = sum(item["current"] for item in live_stock)
 
@@ -305,4 +394,5 @@ def get_dashboard_stats(today: date) -> dict:
         "by_material": sorted(by_material.items(), key=lambda x: x[1], reverse=True)[:15],
         "low_stock": low_stock,
         "recent_transactions": recent,
+        "usage_report": get_usage_report(usage_period, today),
     }

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Materials Dashboard - RN COLOUR{% endblock %}
 {% block content %}
+{% set usage = stats.usage_report %}
 <div class="page-header">
     <div>
         <h1>Materials Dashboard</h1>
@@ -41,6 +42,136 @@
         <span class="stat-label">Low Stock Items</span>
         <span class="stat-value">{{ stats.low_stock|length }}</span>
     </div>
+</div>
+
+<div class="card usage-report-card">
+    <div class="usage-report-header">
+        <div>
+            <h2>Stock Used Report</h2>
+            <p class="page-subtitle">{{ usage.period_label }}</p>
+        </div>
+        <div class="header-actions">
+            <a href="{{ url_for('materials_reports.export_usage_pdf', period=usage_period) }}" class="btn btn-primary">Download PDF</a>
+        </div>
+    </div>
+
+    <div class="period-tabs">
+        {% for period in usage_periods %}
+        <a
+            href="{{ url_for('materials_main.dashboard', period=period) }}"
+            class="period-tab {% if usage_period == period %}active{% endif %}"
+        >
+            {{ period|capitalize }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <div class="stats-grid usage-stats-grid">
+        <div class="stat-card accent-orange">
+            <span class="stat-label">Total Used (kg)</span>
+            <span class="stat-value">{{ "%.1f"|format(usage.total_used) }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Usage Records</span>
+            <span class="stat-value">{{ usage.record_count }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Materials Used</span>
+            <span class="stat-value">{{ usage.material_count }}</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-label">Avg per Record (kg)</span>
+            <span class="stat-value">
+                {% if usage.record_count %}
+                {{ "%.1f"|format(usage.total_used / usage.record_count) }}
+                {% else %}
+                0.0
+                {% endif %}
+            </span>
+        </div>
+    </div>
+
+    <div class="grid-2">
+        <div>
+            <h3 class="section-title">Material-wise Summary</h3>
+            <table class="data-table compact">
+                <thead>
+                    <tr>
+                        <th>Material</th>
+                        <th>Category</th>
+                        <th>Records</th>
+                        <th>Used (kg)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in usage.by_material %}
+                    <tr>
+                        <td>{{ row.material_name }}</td>
+                        <td><span class="badge badge-blue">{{ row.category }}</span></td>
+                        <td>{{ row.record_count }}</td>
+                        <td>{{ "%.1f"|format(row.total_used) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="empty">No usage records in this period</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if usage_period != 'daily' %}
+        <div>
+            <h3 class="section-title">Daily Breakdown</h3>
+            <table class="data-table compact">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Records</th>
+                        <th>Used (kg)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in usage.by_date %}
+                    <tr>
+                        <td>{{ row.date.strftime('%d-%m-%Y') }}</td>
+                        <td>{{ row.record_count }}</td>
+                        <td>{{ "%.1f"|format(row.total_used) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="empty">No daily usage in this period</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+
+    <h3 class="section-title">Detailed Usage Records</h3>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Material</th>
+                <th>Used (kg)</th>
+                <th>Left (kg)</th>
+                <th>Production / Notes</th>
+                <th>Entered By</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for txn in usage.records %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.material.display_name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+                <td>{{ txn.created_by.username if txn.created_by else '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty">No usage records in this period</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 <div class="grid-2">
