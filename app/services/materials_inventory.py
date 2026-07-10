@@ -8,7 +8,6 @@ from app.models import AppSetting, Material, MaterialOpeningStock, MaterialTrans
 
 
 def create_material(
-    company_id: int,
     name: str,
     size: str = "",
     category: str = "PET",
@@ -23,7 +22,6 @@ def create_material(
         raise ValueError("Material name is required.")
 
     material = Material(
-        company_id=company_id,
         category=cleaned_category,
         name=cleaned_name,
         size=cleaned_size,
@@ -35,14 +33,13 @@ def create_material(
 
 
 def get_or_create_material(
-    company_id: int,
     name: str,
     size: str = "",
     category: str = "PET",
     micron: str = "",
 ) -> Material:
     """Backward-compatible alias — always creates a new material."""
-    return create_material(company_id, name, size, category, micron)
+    return create_material(name, size, category, micron)
 
 
 def get_low_stock_threshold(material: Material) -> int:
@@ -98,23 +95,21 @@ def parse_opening_material_name(text: str) -> dict:
     }
 
 
-def find_material_for_opening_name(company_id: int, opening_name: str) -> Material | None:
+def find_material_for_opening_name(opening_name: str) -> Material | None:
     target = opening_name.strip().lower()
-    materials = Material.query.filter_by(company_id=company_id).all()
-    for material in materials:
+    for material in Material.query.all():
         if material.display_name.strip().lower() == target:
             return material
     return None
 
 
-def find_or_create_material_for_opening_name(company_id: int, opening_name: str) -> Material:
-    existing = find_material_for_opening_name(company_id, opening_name)
+def find_or_create_material_for_opening_name(opening_name: str) -> Material:
+    existing = find_material_for_opening_name(opening_name)
     if existing:
         return existing
 
     parsed = parse_opening_material_name(opening_name)
     return create_material(
-        company_id=company_id,
         name=parsed["name"],
         size=parsed["size"],
         category=parsed["category"],
@@ -122,13 +117,9 @@ def find_or_create_material_for_opening_name(company_id: int, opening_name: str)
     )
 
 
-def get_company_material_options(company_id: int, *, context: str = "receive") -> list[dict]:
+def get_material_options(*, context: str = "receive") -> list[dict]:
     """Build material dropdown options for purchase or usage forms."""
-    materials = (
-        Material.query.filter_by(company_id=company_id)
-        .order_by(Material.category, Material.name, Material.size)
-        .all()
-    )
+    materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
     opening_names = get_opening_stock_names()
     options: list[dict] = []
     seen_material_ids: set[int] = set()
@@ -156,7 +147,7 @@ def get_company_material_options(company_id: int, *, context: str = "receive") -
 
     opening_records = MaterialOpeningStock.query.order_by(MaterialOpeningStock.material_name).all()
     for record in opening_records:
-        material = find_material_for_opening_name(company_id, record.material_name)
+        material = find_material_for_opening_name(record.material_name)
         if material:
             add_material_option(material, in_opening_stock=True)
         else:
@@ -177,7 +168,7 @@ def get_company_material_options(company_id: int, *, context: str = "receive") -
     return options
 
 
-def resolve_material_selection(company_id: int, material_ref: str) -> Material | None:
+def resolve_material_selection(material_ref: str) -> Material | None:
     if not material_ref:
         return None
     if material_ref.startswith("opening:"):
@@ -185,23 +176,20 @@ def resolve_material_selection(company_id: int, material_ref: str) -> Material |
         opening = MaterialOpeningStock.query.get(opening_id)
         if not opening:
             return None
-        return find_or_create_material_for_opening_name(company_id, opening.material_name)
+        return find_or_create_material_for_opening_name(opening.material_name)
 
     material_id = int(material_ref)
-    return Material.query.filter_by(id=material_id, company_id=company_id).first()
+    return Material.query.filter_by(id=material_id).first()
 
 
 def calculate_live_stock(
-    company_id: Optional[int] = None,
     material_id: Optional[int] = None,
 ) -> list[dict]:
     query = Material.query
-    if company_id:
-        query = query.filter_by(company_id=company_id)
     if material_id:
         query = query.filter_by(id=material_id)
 
-    materials = query.order_by(Material.company_id, Material.name, Material.size).all()
+    materials = query.order_by(Material.name, Material.size).all()
     results = []
 
     for material in materials:
@@ -209,7 +197,6 @@ def calculate_live_stock(
         received = (
             db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
             .filter_by(
-                company_id=material.company_id,
                 material_id=material.id,
                 transaction_type=MaterialTransaction.TRANSACTION_RECEIVED,
             )
@@ -218,7 +205,6 @@ def calculate_live_stock(
         used = (
             db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
             .filter_by(
-                company_id=material.company_id,
                 material_id=material.id,
                 transaction_type=MaterialTransaction.TRANSACTION_USED,
             )
@@ -229,7 +215,6 @@ def calculate_live_stock(
 
         results.append(
             {
-                "company": material.company,
                 "material": material,
                 "opening": opening,
                 "received": float(received),
@@ -243,17 +228,15 @@ def calculate_live_stock(
     return results
 
 
-def get_current_stock(company_id: int, material_id: int) -> float:
-    rows = calculate_live_stock(company_id=company_id, material_id=material_id)
+def get_current_stock(material_id: int) -> float:
+    rows = calculate_live_stock(material_id=material_id)
     if not rows:
         return 0.0
     return rows[0]["current"]
 
 
-def calculate_used_from_left(
-    company_id: int, material_id: int, quantity_left: float
-) -> float:
-    current_stock = get_current_stock(company_id, material_id)
+def calculate_used_from_left(material_id: int, quantity_left: float) -> float:
+    current_stock = get_current_stock(material_id)
     if quantity_left > current_stock:
         raise ValueError(
             f"Quantity left ({quantity_left}) cannot exceed current stock ({current_stock:.1f} kg)."
@@ -297,14 +280,11 @@ def get_dashboard_stats(today: date) -> dict:
         .scalar()
     )
 
-    by_company: dict[str, float] = {}
     by_material: dict[str, float] = {}
     low_stock = []
 
     for item in live_stock:
-        company_name = item["company"].name
         material_name = item["material"].display_name
-        by_company[company_name] = by_company.get(company_name, 0) + item["current"]
         by_material[material_name] = by_material.get(material_name, 0) + item["current"]
         if item["is_low"]:
             low_stock.append(item)
@@ -322,7 +302,6 @@ def get_dashboard_stats(today: date) -> dict:
         "total_inventory": total_inventory,
         "received_today": float(received_today),
         "used_today": float(used_today),
-        "by_company": sorted(by_company.items(), key=lambda x: x[0]),
         "by_material": sorted(by_material.items(), key=lambda x: x[1], reverse=True)[:15],
         "low_stock": low_stock,
         "recent_transactions": recent,

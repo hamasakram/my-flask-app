@@ -203,19 +203,8 @@ def delete_materials_opening(record_id):
 @stock_deletes_bp.route("/materials/company/<int:company_id>", methods=["POST"])
 @login_required
 def delete_materials_company(company_id):
-    require_edit_access()
-    company = Company.query.get_or_404(company_id)
-    if company.scope != Company.SCOPE_MATERIALS:
-        abort(404)
-    if materials_company_in_use(company_id):
-        flash("Cannot delete — this company has materials or stock records.", "danger")
-        return redirect(url_for("materials.companies"))
-    return _delete_entity(
-        company,
-        "Company",
-        f"Deleted materials company: {company.name}",
-        url_for("materials.companies"),
-    )
+    flash("Companies are not used in Materials.", "info")
+    return redirect(url_for("materials.catalog"))
 
 
 @stock_deletes_bp.route("/materials/catalog/<int:material_id>", methods=["POST"])

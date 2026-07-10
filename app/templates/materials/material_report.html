@@ -8,11 +8,10 @@
         <button type="submit" class="btn btn-primary">Search</button>
     </form>
     <table class="data-table">
-        <thead><tr><th>Company</th><th>Material</th><th>Opening (kg)</th><th>Purchased (kg)</th><th>Used (kg)</th><th>Current (kg)</th><th>Status</th></tr></thead>
+        <thead><tr><th>Material</th><th>Opening (kg)</th><th>Purchased (kg)</th><th>Used (kg)</th><th>Current (kg)</th><th>Status</th></tr></thead>
         <tbody>
             {% for item in rows %}
             <tr class="{% if item.is_low %}row-low{% endif %}">
-                <td>{{ item.company.name }}</td>
                 <td>{{ item.material.display_name }}</td>
                 <td>{{ "%.1f"|format(item.opening) }}</td>
                 <td>{{ "%.1f"|format(item.received) }}</td>
@@ -21,7 +20,7 @@
                 <td>{% if item.is_low %}<span class="badge badge-red">LOW</span>{% else %}<span class="badge badge-green">OK</span>{% endif %}</td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty">No data</td></tr>
+            <tr><td colspan="6" class="empty">No data</td></tr>
             {% endfor %}
         </tbody>
     </table>

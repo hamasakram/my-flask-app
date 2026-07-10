@@ -5,8 +5,7 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template, r
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Company, Material, MaterialOpeningStock, MaterialTransaction, StockPurchaseReceipt
-from app.services.companies import get_material_companies
+from app.models import Material, MaterialOpeningStock, MaterialTransaction, StockPurchaseReceipt
 from app.services.inventory import log_audit
 from app.services.receipt_uploads import apply_receipt_file, resolve_receipt_file, save_receipt_upload
 from app.services.weights import parse_manual_weights
@@ -14,8 +13,8 @@ from app.services.materials_inventory import (
     calculate_live_stock,
     calculate_used_from_left,
     create_material,
-    get_company_material_options,
     get_current_stock,
+    get_material_options,
     get_stock_usage_records,
     material_matches_opening_stock,
     resolve_material_selection,
@@ -33,63 +32,27 @@ def require_edit_access():
 @materials_bp.route("/companies", methods=["GET", "POST"])
 @login_required
 def companies():
-    if request.method == "POST":
-        require_edit_access()
-        company_name = request.form.get("company_name", "").strip()
-
-        if not company_name:
-            flash("Company name is required.", "danger")
-            return redirect(url_for("materials.companies"))
-
-        existing = Company.query.filter_by(name=company_name).first()
-        if existing:
-            if existing.scope == Company.SCOPE_MATERIALS:
-                flash("This company already exists in Materials.", "warning")
-            else:
-                flash(
-                    "This company name is already used in Ink Stock. Choose a different name.",
-                    "danger",
-                )
-            return redirect(url_for("materials.companies"))
-
-        company = Company(name=company_name, scope=Company.SCOPE_MATERIALS)
-        db.session.add(company)
-        db.session.flush()
-        log_audit(
-            current_user.id,
-            "CREATE",
-            "Company",
-            company.id,
-            f"Materials company added: {company_name}",
-        )
-        db.session.commit()
-        flash(f"Company '{company_name}' added.", "success")
-        return redirect(url_for("materials.companies"))
-
-    material_companies = get_material_companies()
-    return render_template("materials/companies.html", companies=material_companies)
+    flash("Companies are not used in Materials. Add materials directly in the catalog.", "info")
+    return redirect(url_for("materials.catalog"))
 
 
 @materials_bp.route("/catalog", methods=["GET", "POST"])
 @login_required
 def catalog():
-    companies = get_material_companies()
-
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
         category = request.form.get("category", "PET").strip().upper()
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
 
-        if not company_id or not material_name or category not in ("PET", "METALIZE", "LD"):
-            flash("Company, category (PET/METALIZE/LD), and item name are required.", "danger")
+        if not material_name or category not in ("PET", "METALIZE", "LD"):
+            flash("Category (PET/METALIZE/LD) and item name are required.", "danger")
             return redirect(url_for("materials.catalog"))
 
         try:
             material = create_material(
-                company_id, material_name, size, category=category, micron=micron
+                material_name, size, category=category, micron=micron
             )
             log_audit(
                 current_user.id,
@@ -106,14 +69,9 @@ def catalog():
 
         return redirect(url_for("materials.catalog"))
 
-    materials = (
-        Material.query.join(Company)
-        .order_by(Company.name, Material.name, Material.size)
-        .all()
-    )
+    materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
     return render_template(
         "materials/catalog.html",
-        companies=companies,
         materials=materials,
         categories=("PET", "METALIZE", "LD"),
     )
@@ -180,11 +138,8 @@ def opening_stock():
 @materials_bp.route("/receive", methods=["GET", "POST"])
 @login_required
 def receive_stock():
-    companies = get_material_companies()
-
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
         material_ref = request.form.get("material_id", "").strip()
         quantity = request.form.get("quantity", type=float)
         weights = parse_manual_weights(request.form)
@@ -192,23 +147,21 @@ def receive_stock():
         notes = request.form.get("notes", "").strip()
 
         if (
-            not company_id
-            or not material_ref
+            not material_ref
             or not quantity
             or quantity <= 0
             or not transaction_date
         ):
-            flash("Company, material, quantity, and date are required.", "danger")
+            flash("Material, quantity, and date are required.", "danger")
             return redirect(url_for("materials.receive_stock"))
 
-        material = resolve_material_selection(company_id, material_ref)
+        material = resolve_material_selection(material_ref)
         if not material:
             flash("Invalid material selection.", "danger")
             return redirect(url_for("materials.receive_stock"))
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = MaterialTransaction(
-            company_id=company_id,
             material_id=material.id,
             transaction_type=MaterialTransaction.TRANSACTION_RECEIVED,
             quantity=quantity,
@@ -228,7 +181,7 @@ def receive_stock():
             "CREATE",
             "MaterialTransaction",
             txn.id,
-            f"Received {quantity} kg of {material.display_name} for {txn.company.name}",
+            f"Received {quantity} kg of {material.display_name}",
         )
         db.session.commit()
         flash(f"Stock received: {quantity} kg of '{material.display_name}' recorded.", "success")
@@ -245,9 +198,10 @@ def receive_stock():
         .limit(30)
         .all()
     )
+    material_options = get_material_options(context="receive")
     return render_template(
         "materials/receive_stock.html",
-        companies=companies,
+        material_options=material_options,
         recent_received=recent_received,
     )
 
@@ -255,27 +209,23 @@ def receive_stock():
 @materials_bp.route("/use", methods=["GET", "POST"])
 @login_required
 def use_stock():
-    companies = get_material_companies()
-
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
         material_ref = request.form.get("material_id", "").strip()
         quantity_left = request.form.get("quantity_left", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
         if (
-            not company_id
-            or not material_ref
+            not material_ref
             or quantity_left is None
             or quantity_left < 0
             or not transaction_date
         ):
-            flash("Company, material, quantity left (kg), and date are required.", "danger")
+            flash("Material, quantity left (kg), and date are required.", "danger")
             return redirect(url_for("materials.use_stock"))
 
-        material = resolve_material_selection(company_id, material_ref)
+        material = resolve_material_selection(material_ref)
         if not material or not material_matches_opening_stock(material):
             flash("Invalid material selection. Only opening stock materials can be used here.", "danger")
             return redirect(url_for("materials.use_stock"))
@@ -283,7 +233,7 @@ def use_stock():
         material_id = material.id
 
         try:
-            quantity_used = calculate_used_from_left(company_id, material_id, quantity_left)
+            quantity_used = calculate_used_from_left(material_id, quantity_left)
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("materials.use_stock"))
@@ -297,7 +247,6 @@ def use_stock():
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = MaterialTransaction(
-            company_id=company_id,
             material_id=material_id,
             transaction_type=MaterialTransaction.TRANSACTION_USED,
             quantity=quantity_used,
@@ -313,7 +262,7 @@ def use_stock():
             "CREATE",
             "MaterialTransaction",
             txn.id,
-            f"Used {quantity_used} kg of {material.display_name} ({quantity_left} kg left) for {txn.company.name}",
+            f"Used {quantity_used} kg of {material.display_name} ({quantity_left} kg left)",
         )
         db.session.commit()
         flash(
@@ -323,40 +272,40 @@ def use_stock():
         return redirect(url_for("materials.use_stock"))
 
     recent_usage = get_stock_usage_records()
+    material_options = get_material_options(context="use")
     return render_template(
         "materials/use_stock.html",
-        companies=companies,
+        material_options=material_options,
         recent_usage=recent_usage,
     )
 
 
-@materials_bp.route("/api/materials/<int:company_id>")
+@materials_bp.route("/api/materials")
 @login_required
-def get_company_materials(company_id):
+def get_materials_api():
     context = request.args.get("context", "receive")
     if context not in {"receive", "use"}:
         return jsonify({"error": "Invalid context"}), 400
-    return jsonify(get_company_material_options(company_id, context=context))
+    return jsonify(get_material_options(context=context))
 
 
-@materials_bp.route("/api/stock/<int:company_id>/<int:material_id>")
+@materials_bp.route("/api/stock/<int:material_id>")
 @login_required
-def get_material_stock(company_id, material_id):
-    material = Material.query.filter_by(id=material_id, company_id=company_id).first()
+def get_material_stock(material_id):
+    material = Material.query.filter_by(id=material_id).first()
     if not material:
         return jsonify({"error": "Material not found"}), 404
 
-    current = get_current_stock(company_id, material_id)
+    current = get_current_stock(material_id)
     return jsonify({"current_stock": current, "material_name": material.display_name})
 
 
 @materials_bp.route("/live")
 @login_required
 def live_inventory():
-    company_id = request.args.get("company_id", type=int)
     material_search = request.args.get("material", "").strip().lower()
 
-    rows = calculate_live_stock(company_id=company_id)
+    rows = calculate_live_stock()
     if material_search:
         rows = [
             r
@@ -364,12 +313,9 @@ def live_inventory():
             if material_search in r["material"].display_name.lower()
         ]
 
-    companies = get_material_companies()
     return render_template(
         "materials/live_inventory.html",
         rows=rows,
-        companies=companies,
-        selected_company=company_id,
         material_search=request.args.get("material", ""),
     )
 
@@ -392,20 +338,17 @@ def view_purchase_receipt(record_id):
 @materials_bp.route("/purchase-receipts", methods=["GET", "POST"])
 @login_required
 def purchase_receipts():
-    companies = get_material_companies()
-
     if request.method == "POST":
         require_edit_access()
         receipt_date = request.form.get("receipt_date")
-        company_id = request.form.get("company_id", type=int)
         transaction_id = request.form.get("material_transaction_id", type=int) or None
         title = request.form.get("title", "").strip()
         amount = request.form.get("amount", type=float)
         notes = request.form.get("notes", "").strip()
         screenshot = request.files.get("screenshot")
 
-        if not receipt_date or not company_id:
-            flash("Receipt date and company are required.", "danger")
+        if not receipt_date:
+            flash("Receipt date is required.", "danger")
             return redirect(url_for("materials.purchase_receipts"))
 
         try:
@@ -417,7 +360,6 @@ def purchase_receipts():
         record = StockPurchaseReceipt(
             module=StockPurchaseReceipt.MODULE_MATERIALS,
             receipt_date=datetime.strptime(receipt_date, "%Y-%m-%d").date(),
-            company_id=company_id,
             material_transaction_id=transaction_id,
             title=title or None,
             amount=amount,
@@ -432,7 +374,7 @@ def purchase_receipts():
             "CREATE",
             "StockPurchaseReceipt",
             record.id,
-            f"Materials purchase receipt for company #{company_id}",
+            "Materials purchase receipt uploaded",
         )
         db.session.commit()
         flash("Purchase receipt uploaded.", "success")
@@ -454,6 +396,5 @@ def purchase_receipts():
     return render_template(
         "materials/purchase_receipts.html",
         records=records,
-        companies=companies,
         received_txns=received_txns,
     )

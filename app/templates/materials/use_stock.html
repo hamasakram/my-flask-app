@@ -16,18 +16,12 @@
     </p>
     <form method="POST" class="form-grid">
         <div class="form-group">
-            <label for="company_id">Company</label>
-            <select id="company_id" name="company_id" required>
-                <option value="">Select company</option>
-                {% for company in companies %}
-                <option value="{{ company.id }}">{{ company.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group">
             <label for="material_id">Material</label>
-            <select id="material_id" name="material_id" required disabled>
-                <option value="">Select company first</option>
+            <select id="material_id" name="material_id" required>
+                <option value="">Select material</option>
+                {% for option in material_options %}
+                <option value="{{ option.id }}">{{ option.name }}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="form-group">
@@ -62,7 +56,7 @@
     <table class="data-table compact">
         <thead>
             <tr>
-                <th>Date</th><th>Company</th><th>Material</th><th>Left (kg)</th><th>Used (kg)</th><th>Production / Notes</th><th>Entered By</th>
+                <th>Date</th><th>Material</th><th>Left (kg)</th><th>Used (kg)</th><th>Production / Notes</th><th>Entered By</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
@@ -70,7 +64,6 @@
             {% for txn in recent_usage %}
             <tr>
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ txn.company.name }}</td>
                 <td>{{ txn.material.display_name }}</td>
                 <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
@@ -82,7 +75,7 @@
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No usage records yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No usage records yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -92,7 +85,6 @@
 
 {% block scripts %}
 <script>
-const companySelect = document.getElementById('company_id');
 const materialSelect = document.getElementById('material_id');
 const currentStockInput = document.getElementById('current_stock');
 const quantityLeftInput = document.getElementById('quantity_left');
@@ -120,8 +112,8 @@ function updateCalculatedUsed() {
 
 async function loadMaterialStock() {
     resetStockFields();
-    if (!companySelect.value || !materialSelect.value) return;
-    const res = await fetch(`/materials/inventory/api/stock/${companySelect.value}/${materialSelect.value}`);
+    if (!materialSelect.value) return;
+    const res = await fetch(`/materials/inventory/api/stock/${materialSelect.value}`);
     if (!res.ok) { currentStockInput.value = 'Unavailable'; return; }
     const data = await res.json();
     currentStock = data.current_stock;
@@ -130,27 +122,6 @@ async function loadMaterialStock() {
     updateCalculatedUsed();
 }
 
-companySelect?.addEventListener('change', async function() {
-    materialSelect.innerHTML = '<option value="">Loading...</option>';
-    materialSelect.disabled = true;
-    resetStockFields();
-    if (!this.value) { materialSelect.innerHTML = '<option value="">Select company first</option>'; return; }
-    const res = await fetch(`/materials/inventory/api/materials/${this.value}?context=use`);
-    const materials = await res.json();
-    materialSelect.innerHTML = '<option value="">Select material</option>';
-    if (!materials.length) {
-        materialSelect.innerHTML = '<option value="">No opening stock materials for this company</option>';
-        materialSelect.disabled = true;
-        return;
-    }
-    materials.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name;
-        materialSelect.appendChild(opt);
-    });
-    materialSelect.disabled = false;
-});
 materialSelect?.addEventListener('change', loadMaterialStock);
 quantityLeftInput?.addEventListener('input', updateCalculatedUsed);
 document.getElementById('transaction_date').valueAsDate = new Date();

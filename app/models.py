@@ -117,7 +117,7 @@ class Material(db.Model):
     __tablename__ = "materials"
 
     id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True)
     category = db.Column(db.String(20), nullable=False, default="PET")
     name = db.Column(db.String(150), nullable=False)
     size = db.Column(db.String(100), nullable=False, default="")
@@ -167,7 +167,7 @@ class MaterialTransaction(db.Model):
     TRANSACTION_TYPES = (TRANSACTION_RECEIVED, TRANSACTION_USED)
 
     id = db.Column(db.Integer, primary_key=True)
-    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True)
     material_id = db.Column(db.Integer, db.ForeignKey("materials.id"), nullable=False)
     transaction_type = db.Column(db.String(50), nullable=False)
     quantity = db.Column(db.Float, nullable=False)
@@ -198,7 +198,7 @@ class StockPurchaseReceipt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     module = db.Column(db.String(20), nullable=False)
     receipt_date = db.Column(db.Date, nullable=False)
-    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True)
     inventory_transaction_id = db.Column(
         db.Integer, db.ForeignKey("inventory_transactions.id"), nullable=True
     )

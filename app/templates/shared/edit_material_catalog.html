@@ -20,14 +20,6 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="company_id">Company</label>
-            <select id="company_id" name="company_id" required>
-                {% for company in companies %}
-                <option value="{{ company.id }}" {% if company.id == material.company_id %}selected{% endif %}>{{ company.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group">
             <label for="material_name">Item Name</label>
             <input type="text" id="material_name" name="material_name" value="{{ material.name }}" required>
         </div>

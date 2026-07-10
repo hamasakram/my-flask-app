@@ -248,6 +248,195 @@ def _remove_auto_synced_purchase_ledger_entries():
     remove_auto_synced_purchase_ledger_entries()
 
 
+def _make_materials_company_id_nullable():
+    """Allow materials stock records without a company."""
+    inspector = inspect(db.engine)
+    if not inspector.has_table("materials"):
+        return
+
+    dialect = db.engine.dialect.name
+
+    if dialect == "postgresql":
+        with db.engine.begin() as conn:
+            conn.execute(text("ALTER TABLE materials ALTER COLUMN company_id DROP NOT NULL"))
+        if inspector.has_table("material_transactions"):
+            with db.engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE material_transactions ALTER COLUMN company_id DROP NOT NULL")
+                )
+        if inspector.has_table("stock_purchase_receipts"):
+            with db.engine.begin() as conn:
+                conn.execute(
+                    text("ALTER TABLE stock_purchase_receipts ALTER COLUMN company_id DROP NOT NULL")
+                )
+        return
+
+    if dialect != "sqlite":
+        return
+
+    with db.engine.begin() as conn:
+        table_sql = conn.execute(
+            text("SELECT sql FROM sqlite_master WHERE type='table' AND name='materials'")
+        ).scalar()
+        if table_sql and "company_id INTEGER NOT NULL" in table_sql:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE materials_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        company_id INTEGER,
+                        category VARCHAR(20) NOT NULL DEFAULT 'PET',
+                        name VARCHAR(150) NOT NULL,
+                        size VARCHAR(100) NOT NULL DEFAULT '',
+                        micron VARCHAR(50),
+                        low_stock_threshold INTEGER,
+                        created_at DATETIME NOT NULL,
+                        FOREIGN KEY(company_id) REFERENCES companies (id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO materials_new
+                        (id, company_id, category, name, size, micron, low_stock_threshold, created_at)
+                    SELECT id, company_id, COALESCE(category, 'PET'), name, size, micron,
+                           low_stock_threshold, created_at
+                    FROM materials
+                    """
+                )
+            )
+            conn.execute(text("DROP TABLE materials"))
+            conn.execute(text("ALTER TABLE materials_new RENAME TO materials"))
+
+        txn_sql = conn.execute(
+            text("SELECT sql FROM sqlite_master WHERE type='table' AND name='material_transactions'")
+        ).scalar()
+        if txn_sql and "company_id INTEGER NOT NULL" in txn_sql:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE material_transactions_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        company_id INTEGER,
+                        material_id INTEGER NOT NULL,
+                        transaction_type VARCHAR(50) NOT NULL,
+                        quantity FLOAT NOT NULL,
+                        quantity_left FLOAT,
+                        weight_per_quantity FLOAT,
+                        gross_weight FLOAT,
+                        tw FLOAT,
+                        net_weight FLOAT,
+                        micron VARCHAR(50),
+                        transaction_date DATE NOT NULL,
+                        notes TEXT,
+                        created_by_id INTEGER,
+                        created_at DATETIME NOT NULL,
+                        FOREIGN KEY(company_id) REFERENCES companies (id),
+                        FOREIGN KEY(material_id) REFERENCES materials (id),
+                        FOREIGN KEY(created_by_id) REFERENCES users (id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO material_transactions_new
+                        (id, company_id, material_id, transaction_type, quantity, quantity_left,
+                         weight_per_quantity, gross_weight, tw, net_weight, micron,
+                         transaction_date, notes, created_by_id, created_at)
+                    SELECT id, company_id, material_id, transaction_type, quantity, quantity_left,
+                           weight_per_quantity, gross_weight, tw, net_weight, micron,
+                           transaction_date, notes, created_by_id, created_at
+                    FROM material_transactions
+                    """
+                )
+            )
+            conn.execute(text("DROP TABLE material_transactions"))
+            conn.execute(text("ALTER TABLE material_transactions_new RENAME TO material_transactions"))
+
+        receipt_sql = conn.execute(
+            text(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='stock_purchase_receipts'"
+            )
+        ).scalar()
+        if receipt_sql and "company_id INTEGER NOT NULL" in receipt_sql:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE stock_purchase_receipts_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        module VARCHAR(20) NOT NULL,
+                        receipt_date DATE NOT NULL,
+                        company_id INTEGER,
+                        inventory_transaction_id INTEGER,
+                        material_transaction_id INTEGER,
+                        title VARCHAR(200),
+                        amount FLOAT,
+                        notes TEXT,
+                        screenshot_filename VARCHAR(255),
+                        screenshot_data BLOB,
+                        screenshot_mimetype VARCHAR(100),
+                        created_by_id INTEGER,
+                        created_at DATETIME NOT NULL,
+                        FOREIGN KEY(company_id) REFERENCES companies (id),
+                        FOREIGN KEY(inventory_transaction_id) REFERENCES inventory_transactions (id),
+                        FOREIGN KEY(material_transaction_id) REFERENCES material_transactions (id),
+                        FOREIGN KEY(created_by_id) REFERENCES users (id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO stock_purchase_receipts_new
+                        (id, module, receipt_date, company_id, inventory_transaction_id,
+                         material_transaction_id, title, amount, notes, screenshot_filename,
+                         screenshot_data, screenshot_mimetype, created_by_id, created_at)
+                    SELECT id, module, receipt_date, company_id, inventory_transaction_id,
+                           material_transaction_id, title, amount, notes, screenshot_filename,
+                           screenshot_data, screenshot_mimetype, created_by_id, created_at
+                    FROM stock_purchase_receipts
+                    """
+                )
+            )
+            conn.execute(text("DROP TABLE stock_purchase_receipts"))
+            conn.execute(text("ALTER TABLE stock_purchase_receipts_new RENAME TO stock_purchase_receipts"))
+
+
+def _remove_materials_companies():
+    """Clear materials opening stock and detach materials from companies."""
+    from app.models import AppSetting, Company
+
+    flag_key = "materials_no_companies_v1"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+
+    _make_materials_company_id_nullable()
+
+    with db.engine.begin() as conn:
+        if inspect(db.engine).has_table("material_opening_stock"):
+            conn.execute(text("DELETE FROM material_opening_stock"))
+        if inspect(db.engine).has_table("material_transactions"):
+            conn.execute(text("UPDATE material_transactions SET company_id = NULL"))
+        if inspect(db.engine).has_table("materials"):
+            conn.execute(text("UPDATE materials SET company_id = NULL"))
+        if inspect(db.engine).has_table("stock_purchase_receipts"):
+            conn.execute(
+                text(
+                    "UPDATE stock_purchase_receipts SET company_id = NULL "
+                    "WHERE module = 'materials'"
+                )
+            )
+
+    Company.query.filter_by(scope=Company.SCOPE_MATERIALS).delete(synchronize_session=False)
+    db.session.add(AppSetting(key=flag_key, value="done"))
+    db.session.commit()
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
@@ -255,6 +444,7 @@ def ensure_schema():
 
     _drop_materials_unique_constraint()
     _migrate_material_opening_stock()
+    _remove_materials_companies()
     _remove_auto_synced_purchase_ledger_entries()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"

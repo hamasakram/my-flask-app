@@ -21,7 +21,6 @@ def export_material_inventory_excel(rows, title="Materials Inventory Report"):
     ws.title = "Materials"
 
     headers = [
-        "Company",
         "Material",
         "Opening (kg)",
         "Received (kg)",
@@ -37,7 +36,6 @@ def export_material_inventory_excel(rows, title="Materials Inventory Report"):
     for offset, item in enumerate(rows):
         row_num = next_row + offset
         values = [
-            item["company"].name,
             item["material"].display_name,
             item["opening"],
             item["received"],
@@ -62,7 +60,6 @@ def export_material_transactions_excel(transactions):
 
     headers = [
         "Date",
-        "Company",
         "Material",
         "Type",
         "Used (kg)",
@@ -78,7 +75,6 @@ def export_material_transactions_excel(transactions):
         row_num = next_row + offset
         values = [
             txn.transaction_date.strftime("%Y-%m-%d"),
-            txn.company.name,
             txn.material.display_name,
             txn.transaction_type,
             txn.quantity if txn.transaction_type == "Stock Used" else "",
@@ -120,12 +116,11 @@ def export_material_inventory_pdf(rows, title="Materials Inventory Report"):
     elements.append(Spacer(1, 0.2 * inch))
 
     data = [
-        ["Company", "Material", "Opening", "Received", "Used", "Current", "Threshold", "Status"]
+        ["Material", "Opening", "Received", "Used", "Current", "Threshold", "Status"]
     ]
     for item in rows:
         data.append(
             [
-                item["company"].name,
                 item["material"].display_name,
                 f"{item['opening']:.1f}",
                 f"{item['received']:.1f}",

@@ -45,19 +45,6 @@
 
 <div class="grid-2">
     <div class="card">
-        <h2>Current Stock by Company</h2>
-        <table class="data-table compact">
-            <thead><tr><th>Company</th><th>Stock (kg)</th></tr></thead>
-            <tbody>
-                {% for name, qty in stats.by_company %}
-                <tr><td>{{ name }}</td><td>{{ "%.1f"|format(qty) }}</td></tr>
-                {% else %}
-                <tr><td colspan="2" class="empty">No data yet</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    <div class="card">
         <h2>Current Stock by Material</h2>
         <table class="data-table compact">
             <thead><tr><th>Material</th><th>Stock (kg)</th></tr></thead>
@@ -70,18 +57,14 @@
             </tbody>
         </table>
     </div>
-</div>
-
-<div class="grid-2">
     <div class="card">
         <h2>Low Stock Alerts</h2>
         {% if stats.low_stock %}
         <table class="data-table compact">
-            <thead><tr><th>Company</th><th>Material</th><th>Current (kg)</th><th>Threshold</th></tr></thead>
+            <thead><tr><th>Material</th><th>Current (kg)</th><th>Threshold</th></tr></thead>
             <tbody>
                 {% for item in stats.low_stock %}
                 <tr class="row-low">
-                    <td>{{ item.company.name }}</td>
                     <td>{{ item.material.display_name }}</td>
                     <td>{{ "%.1f"|format(item.current) }}</td>
                     <td>{{ item.threshold }}</td>
@@ -93,31 +76,30 @@
         <p class="empty-state">All stock levels are above threshold.</p>
         {% endif %}
     </div>
-    <div class="card">
-        <h2>Recent Transactions</h2>
-        <table class="data-table compact">
-            <thead><tr><th>Date</th><th>Company</th><th>Material</th><th>Type</th><th>Qty (kg)</th></tr></thead>
-            <tbody>
-                {% for txn in stats.recent_transactions %}
-                <tr>
-                    <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                    <td>{{ txn.company.name }}</td>
-                    <td>{{ txn.material.display_name }}</td>
-                    <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
-                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="5" class="empty">No transactions yet</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+</div>
+
+<div class="card">
+    <h2>Recent Transactions</h2>
+    <table class="data-table compact">
+        <thead><tr><th>Date</th><th>Material</th><th>Type</th><th>Qty (kg)</th></tr></thead>
+        <tbody>
+            {% for txn in stats.recent_transactions %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.material.display_name }}</td>
+                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="empty">No transactions yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="quick-actions">
-    <a href="{{ url_for('materials.companies') }}" class="btn btn-primary">+ Add Company</a>
-    <a href="{{ url_for('materials.catalog') }}" class="btn btn-secondary">+ Add Material</a>
+    <a href="{{ url_for('materials.catalog') }}" class="btn btn-primary">+ Add Material</a>
     <a href="{{ url_for('materials.receive_stock') }}" class="btn btn-secondary">Stock Purchased</a>
     <a href="{{ url_for('materials.use_stock') }}" class="btn btn-secondary">Record Usage</a>
 </div>

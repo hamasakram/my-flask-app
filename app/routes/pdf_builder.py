@@ -65,12 +65,10 @@ def _companies_for_module(module, report_type="purchases"):
         get_chemical_companies,
         get_glue_companies,
         get_ink_companies,
-        get_material_companies,
     )
 
     mapping = {
         "ink": get_ink_companies,
-        "materials": get_material_companies,
         "glue": get_glue_companies,
         "chemicals": get_chemical_companies,
     }

@@ -1,11 +1,10 @@
 from datetime import datetime
 
-from flask import Blueprint, make_response, render_template, request, send_file
+from flask import Blueprint, make_response, redirect, render_template, request, send_file, url_for
 from flask_login import login_required
 from sqlalchemy import extract
 
-from app.models import AuditLog, Company, InkType, InventoryTransaction, Material, MaterialTransaction
-from app.services.companies import get_material_companies
+from app.models import AuditLog, Material, MaterialTransaction
 from app.services.materials_export import (
     export_material_inventory_excel,
     export_material_inventory_pdf,
@@ -17,24 +16,21 @@ materials_reports_bp = Blueprint("materials_reports", __name__, url_prefix="/mat
 
 
 def _parse_filters():
-    company_id = request.args.get("company_id", type=int)
     material_id = request.args.get("material_id", type=int)
     start_date = request.args.get("start_date")
     end_date = request.args.get("end_date")
 
     parsed_start = datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else None
     parsed_end = datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else None
-    return company_id, material_id, parsed_start, parsed_end
+    return material_id, parsed_start, parsed_end
 
 
 @materials_reports_bp.route("/transactions")
 @login_required
 def transactions():
-    company_id, material_id, start_date, end_date = _parse_filters()
+    material_id, start_date, end_date = _parse_filters()
 
-    query = MaterialTransaction.query.join(Company).join(Material)
-    if company_id:
-        query = query.filter(MaterialTransaction.company_id == company_id)
+    query = MaterialTransaction.query.join(Material)
     if material_id:
         query = query.filter(MaterialTransaction.material_id == material_id)
     if start_date:
@@ -47,16 +43,13 @@ def transactions():
         MaterialTransaction.id.desc(),
     ).all()
 
-    companies = get_material_companies()
     materials = Material.query.order_by(Material.name).all()
 
     return render_template(
         "materials/transactions.html",
         transactions=transactions_list,
-        companies=companies,
         materials=materials,
         filters={
-            "company_id": company_id,
             "material_id": material_id,
             "start_date": request.args.get("start_date", ""),
             "end_date": request.args.get("end_date", ""),
@@ -67,15 +60,8 @@ def transactions():
 @materials_reports_bp.route("/company")
 @login_required
 def company_report():
-    company_id = request.args.get("company_id", type=int)
-    rows = calculate_live_stock(company_id=company_id)
-    companies = get_material_companies()
-    return render_template(
-        "materials/company_report.html",
-        rows=rows,
-        companies=companies,
-        selected_company=company_id,
-    )
+    flash("Company reports are not available for Materials.", "info")
+    return redirect(url_for("materials_reports.material_report"))
 
 
 @materials_reports_bp.route("/material")
@@ -99,18 +85,14 @@ def material_report():
 def monthly_report():
     month = request.args.get("month", type=int) or datetime.now().month
     year = request.args.get("year", type=int) or datetime.now().year
-    company_id = request.args.get("company_id", type=int)
 
     query = MaterialTransaction.query.filter(
         extract("month", MaterialTransaction.transaction_date) == month,
         extract("year", MaterialTransaction.transaction_date) == year,
     )
-    if company_id:
-        query = query.filter(MaterialTransaction.company_id == company_id)
 
     txns = query.order_by(MaterialTransaction.transaction_date).all()
-    live_rows = calculate_live_stock(company_id=company_id)
-    companies = get_material_companies()
+    live_rows = calculate_live_stock()
 
     received = sum(
         t.quantity for t in txns if t.transaction_type == MaterialTransaction.TRANSACTION_RECEIVED
@@ -124,8 +106,6 @@ def monthly_report():
         period_label=f"{datetime(year, month, 1).strftime('%B %Y')}",
         txns=txns,
         live_rows=live_rows,
-        companies=companies,
-        selected_company=company_id,
         received=received,
         used=used,
         period_type="monthly",
@@ -138,17 +118,13 @@ def monthly_report():
 @login_required
 def yearly_report():
     year = request.args.get("year", type=int) or datetime.now().year
-    company_id = request.args.get("company_id", type=int)
 
     query = MaterialTransaction.query.filter(
         extract("year", MaterialTransaction.transaction_date) == year
     )
-    if company_id:
-        query = query.filter(MaterialTransaction.company_id == company_id)
 
     txns = query.order_by(MaterialTransaction.transaction_date).all()
-    live_rows = calculate_live_stock(company_id=company_id)
-    companies = get_material_companies()
+    live_rows = calculate_live_stock()
 
     received = sum(
         t.quantity for t in txns if t.transaction_type == MaterialTransaction.TRANSACTION_RECEIVED
@@ -162,8 +138,6 @@ def yearly_report():
         period_label=str(year),
         txns=txns,
         live_rows=live_rows,
-        companies=companies,
-        selected_company=company_id,
         received=received,
         used=used,
         period_type="yearly",
@@ -195,8 +169,7 @@ def audit_trail():
 @materials_reports_bp.route("/export/inventory/<fmt>")
 @login_required
 def export_inventory(fmt):
-    company_id = request.args.get("company_id", type=int)
-    rows = calculate_live_stock(company_id=company_id)
+    rows = calculate_live_stock()
 
     if fmt == "excel":
         output = export_material_inventory_excel(rows)
@@ -224,11 +197,9 @@ def export_inventory(fmt):
 @materials_reports_bp.route("/export/transactions/<fmt>")
 @login_required
 def export_transactions(fmt):
-    company_id, material_id, start_date, end_date = _parse_filters()
+    material_id, start_date, end_date = _parse_filters()
 
     query = MaterialTransaction.query
-    if company_id:
-        query = query.filter(MaterialTransaction.company_id == company_id)
     if material_id:
         query = query.filter(MaterialTransaction.material_id == material_id)
     if start_date:
@@ -254,7 +225,6 @@ def export_transactions(fmt):
         for txn in txns:
             rows.append(
                 {
-                    "company": txn.company,
                     "material": txn.material,
                     "opening": 0,
                     "received": txn.quantity

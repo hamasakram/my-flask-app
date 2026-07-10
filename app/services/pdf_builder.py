@@ -43,7 +43,6 @@ MODULE_PDF_FIELDS = {
         ("status", "Status"),
     ],
     MODULE_MATERIALS: [
-        ("company", "Company"),
         ("category", "Category"),
         ("item", "Item Name"),
         ("size", "Size"),
@@ -109,7 +108,7 @@ def get_module_rows(module: str, company_id=None, report_type: str = "purchases"
         rows = calculate_live_stock(company_id=company_id)
         return [_normalize_ink_row(r) for r in rows]
     if module == MODULE_MATERIALS:
-        rows = material_live_stock(company_id=company_id)
+        rows = material_live_stock()
         return [_normalize_material_row(r) for r in rows]
     if module == MODULE_GLUE:
         rows = glue_live_stock(company_id=company_id)
@@ -149,7 +148,6 @@ def _normalize_ink_row(row):
 def _normalize_material_row(row):
     material = row["material"]
     return {
-        "company": row["company"].name,
         "category": material.category,
         "item": material.name,
         "size": material.size or "—",
