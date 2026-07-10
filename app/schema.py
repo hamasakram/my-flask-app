@@ -437,6 +437,24 @@ def _remove_materials_companies():
     db.session.commit()
 
 
+def _clear_materials_opening_stock():
+    """One-time wipe of all materials opening stock records."""
+    from app.models import AppSetting, MaterialOpeningStock
+
+    flag_key = "materials_clear_opening_stock_v2"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+
+    if not inspect(db.engine).has_table("material_opening_stock"):
+        db.session.add(AppSetting(key=flag_key, value="no_table"))
+        db.session.commit()
+        return
+
+    deleted = MaterialOpeningStock.query.delete(synchronize_session=False)
+    db.session.add(AppSetting(key=flag_key, value=f"cleared_{deleted}"))
+    db.session.commit()
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
@@ -445,6 +463,7 @@ def ensure_schema():
     _drop_materials_unique_constraint()
     _migrate_material_opening_stock()
     _remove_materials_companies()
+    _clear_materials_opening_stock()
     _remove_auto_synced_purchase_ledger_entries()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"

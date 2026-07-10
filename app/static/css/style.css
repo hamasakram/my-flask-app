@@ -407,6 +407,19 @@ textarea { resize: vertical; min-height: 4rem; }
     color: var(--brand-red);
 }
 
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.card-header-row h2 {
+    margin: 0;
+}
+
 .quick-actions {
     display: flex;
     gap: 0.75rem;

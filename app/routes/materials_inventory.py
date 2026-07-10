@@ -135,6 +135,28 @@ def opening_stock():
     )
 
 
+@materials_bp.route("/opening-stock/clear-all", methods=["POST"])
+@login_required
+def clear_all_opening_stock():
+    require_edit_access()
+    count = MaterialOpeningStock.query.count()
+    if count == 0:
+        flash("Opening stock is already empty.", "info")
+        return redirect(url_for("materials.opening_stock"))
+
+    MaterialOpeningStock.query.delete(synchronize_session=False)
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "MaterialOpeningStock",
+        None,
+        f"Cleared all {count} materials opening stock records",
+    )
+    db.session.commit()
+    flash(f"All {count} opening stock records deleted.", "success")
+    return redirect(url_for("materials.opening_stock"))
+
+
 @materials_bp.route("/receive", methods=["GET", "POST"])
 @login_required
 def receive_stock():
