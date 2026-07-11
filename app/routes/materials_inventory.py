@@ -311,14 +311,14 @@ def get_materials_api():
     return jsonify(get_material_options(context=context))
 
 
-@materials_bp.route("/api/stock/<int:material_id>")
+@materials_bp.route("/api/stock/<path:material_ref>")
 @login_required
-def get_material_stock(material_id):
-    material = Material.query.filter_by(id=material_id).first()
+def get_material_stock(material_ref):
+    material = resolve_material_selection(material_ref)
     if not material:
         return jsonify({"error": "Material not found"}), 404
 
-    current = get_current_stock(material_id)
+    current = get_current_stock(material.id)
     return jsonify({"current_stock": current, "material_name": material.display_name})
 
 

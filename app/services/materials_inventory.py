@@ -57,10 +57,11 @@ def get_low_stock_threshold(material: Material) -> int:
 
 
 def get_opening_quantity(material: Material) -> float:
-    opening = MaterialOpeningStock.query.filter(
-        func.lower(MaterialOpeningStock.material_name) == material.display_name.lower()
-    ).first()
-    return opening.quantity if opening else 0.0
+    for record in MaterialOpeningStock.query.all():
+        matched = find_material_for_opening_name(record.material_name)
+        if matched and matched.id == material.id:
+            return record.quantity
+    return 0.0
 
 
 def get_opening_stock_names() -> set[str]:
@@ -75,7 +76,14 @@ def get_opening_stock_names() -> set[str]:
 def material_matches_opening_stock(material: Material, opening_names: set[str] | None = None) -> bool:
     if opening_names is None:
         opening_names = get_opening_stock_names()
-    return material.display_name.strip().lower() in opening_names
+    name = material.name.strip().lower()
+    display = material.display_name.strip().lower()
+    if name in opening_names or display in opening_names:
+        return True
+    for record in MaterialOpeningStock.query.all():
+        if find_material_for_opening_name(record.material_name) == material:
+            return True
+    return False
 
 
 def parse_opening_material_name(text: str) -> dict:
@@ -101,6 +109,8 @@ def find_material_for_opening_name(opening_name: str) -> Material | None:
     target = opening_name.strip().lower()
     for material in Material.query.all():
         if material.display_name.strip().lower() == target:
+            return material
+        if material.name.strip().lower() == target:
             return material
     return None
 
@@ -142,9 +152,21 @@ def get_material_options(*, context: str = "receive") -> list[dict]:
         )
 
     if context == "use":
-        for material in materials:
-            if material_matches_opening_stock(material, opening_names):
+        opening_records = MaterialOpeningStock.query.order_by(
+            MaterialOpeningStock.material_name
+        ).all()
+        for record in opening_records:
+            material = find_material_for_opening_name(record.material_name)
+            if material:
                 add_material_option(material, in_opening_stock=True)
+            else:
+                options.append(
+                    {
+                        "id": f"opening:{record.id}",
+                        "name": f"{record.material_name} (Opening Stock)",
+                        "in_opening_stock": True,
+                    }
+                )
         return options
 
     opening_records = MaterialOpeningStock.query.order_by(MaterialOpeningStock.material_name).all()
