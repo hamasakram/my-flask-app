@@ -11,7 +11,7 @@
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
     <h2>Record Stock Purchased</h2>
-    <p class="field-note">Materials from <a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a> are listed first.</p>
+    <p class="field-note">Only materials added in <a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a> appear here.</p>
     <form method="POST" class="form-grid" id="purchase-form">
         <div class="form-group">
             <label for="material_id">Material</label>

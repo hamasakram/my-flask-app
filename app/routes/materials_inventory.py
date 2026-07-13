@@ -178,8 +178,11 @@ def receive_stock():
             return redirect(url_for("materials.receive_stock"))
 
         material = resolve_material_selection(material_ref)
-        if not material:
-            flash("Invalid material selection.", "danger")
+        if not material or not material_matches_opening_stock(material):
+            flash(
+                "Invalid material selection. Only opening stock materials can be purchased here.",
+                "danger",
+            )
             return redirect(url_for("materials.receive_stock"))
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()

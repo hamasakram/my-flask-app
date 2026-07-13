@@ -11,7 +11,12 @@ from app.services.materials_export import (
     export_material_transactions_excel,
     export_material_usage_pdf,
 )
-from app.services.materials_inventory import USAGE_PERIODS, calculate_live_stock, get_usage_report
+from app.services.materials_inventory import (
+    USAGE_PERIODS,
+    calculate_live_stock,
+    get_materials_in_opening_stock,
+    get_usage_report,
+)
 
 materials_reports_bp = Blueprint("materials_reports", __name__, url_prefix="/materials/reports")
 
@@ -44,7 +49,7 @@ def transactions():
         MaterialTransaction.id.desc(),
     ).all()
 
-    materials = Material.query.order_by(Material.name).all()
+    materials = get_materials_in_opening_stock()
 
     return render_template(
         "materials/transactions.html",

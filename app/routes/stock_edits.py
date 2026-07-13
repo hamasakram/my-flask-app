@@ -48,6 +48,10 @@ from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
+from app.services.materials_inventory import (
+    get_materials_in_opening_stock,
+    material_matches_opening_stock,
+)
 
 from pathlib import Path
 
@@ -307,8 +311,8 @@ def edit_materials_received(txn_id):
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
         material = Material.query.filter_by(id=material_id).first()
-        if not material:
-            flash("Invalid material selection.", "danger")
+        if not material or not material_matches_opening_stock(material):
+            flash("Invalid material selection. Only opening stock materials are allowed.", "danger")
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
         weights = parse_manual_weights(request.form)
@@ -332,7 +336,7 @@ def edit_materials_received(txn_id):
         flash("Purchase record updated.", "success")
         return redirect(url_for("materials.receive_stock"))
 
-    materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
+    materials = get_materials_in_opening_stock()
     return render_template(
         "shared/edit_materials_received.html",
         txn=txn,

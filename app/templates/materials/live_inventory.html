@@ -6,7 +6,7 @@
         <h1>Live Inventory</h1>
         <p class="page-subtitle">Current Stock (kg) = Opening + Purchased − Used</p>
         {% if not rows %}
-        <p class="field-note">No opening stock yet — current stock shows Purchased − Used until opening stock is added.</p>
+        <p class="field-note">Add materials in <a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a> to see live inventory here.</p>
         {% endif %}
     </div>
     <div class="header-actions">
