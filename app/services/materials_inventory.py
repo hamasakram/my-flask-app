@@ -362,7 +362,10 @@ def get_usage_report(period: str, reference: date | None = None) -> dict:
     start_date, end_date, period_label = get_usage_period_range(period, reference)
 
     records = (
-        MaterialTransaction.query.options(joinedload(MaterialTransaction.material))
+        MaterialTransaction.query.options(
+            joinedload(MaterialTransaction.material),
+            joinedload(MaterialTransaction.created_by),
+        )
         .filter(
             MaterialTransaction.transaction_type == MaterialTransaction.TRANSACTION_USED,
             MaterialTransaction.transaction_date >= start_date,

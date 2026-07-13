@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
@@ -299,6 +299,7 @@ def use_stock():
         "materials/use_stock.html",
         material_options=material_options,
         recent_usage=recent_usage,
+        report_date=date.today().isoformat(),
     )
 
 

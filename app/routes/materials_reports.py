@@ -174,7 +174,15 @@ def export_usage_pdf():
     if period not in USAGE_PERIODS:
         period = "daily"
 
-    report = get_usage_report(period)
+    reference = None
+    date_param = request.args.get("date", "").strip()
+    if date_param:
+        try:
+            reference = datetime.strptime(date_param, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+
+    report = get_usage_report(period, reference)
     output = export_material_usage_pdf(report)
     filename = f"materials_usage_{period}_{report['start_date'].strftime('%Y%m%d')}.pdf"
     if report["start_date"] != report["end_date"]:

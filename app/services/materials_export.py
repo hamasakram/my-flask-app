@@ -9,6 +9,7 @@ from app.services.export import (
     _add_excel_logo,
     _write_excel_headers,
 )
+from app.services.materials_inventory import _material_label
 from openpyxl import Workbook
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -357,7 +358,7 @@ def export_material_usage_pdf(report: dict) -> BytesIO:
             detail_data.append(
                 [
                     txn.transaction_date.strftime("%d-%b-%Y"),
-                    txn.material.display_name,
+                    _material_label(txn.material, txn.material_id),
                     f"{txn.quantity:.1f}",
                     f"{txn.quantity_left:.1f}" if txn.quantity_left is not None else "—",
                     (txn.notes or "—")[:80],
