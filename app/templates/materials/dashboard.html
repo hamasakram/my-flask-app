@@ -161,7 +161,7 @@
             {% for txn in usage.records %}
             <tr>
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ txn.material.display_name }}</td>
+                <td>{{ txn.material.display_name if txn.material else ('Unknown #' ~ txn.material_id) }}</td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
                 <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
                 <td>{{ txn.notes or '—' }}</td>
@@ -217,7 +217,7 @@
             {% for txn in stats.recent_transactions %}
             <tr>
                 <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ txn.material.display_name }}</td>
+                <td>{{ txn.material.display_name if txn.material else ('Unknown #' ~ txn.material_id) }}</td>
                 <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock Received' else 'orange' }}">{{ txn.transaction_type }}</span></td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
             </tr>

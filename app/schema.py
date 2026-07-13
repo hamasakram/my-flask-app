@@ -407,6 +407,19 @@ def _make_materials_company_id_nullable():
             conn.execute(text("ALTER TABLE stock_purchase_receipts_new RENAME TO stock_purchase_receipts"))
 
 
+def _ensure_materials_company_id_nullable():
+    """Ensure materials tables allow null company_id even if prior migrations ran."""
+    from app.models import AppSetting
+
+    flag_key = "materials_company_id_nullable_v1"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+
+    _make_materials_company_id_nullable()
+    db.session.add(AppSetting(key=flag_key, value="done"))
+    db.session.commit()
+
+
 def _remove_materials_companies():
     """Clear materials opening stock and detach materials from companies."""
     from app.models import AppSetting, Company
@@ -414,8 +427,6 @@ def _remove_materials_companies():
     flag_key = "materials_no_companies_v1"
     if AppSetting.query.filter_by(key=flag_key).first():
         return
-
-    _make_materials_company_id_nullable()
 
     with db.engine.begin() as conn:
         if inspect(db.engine).has_table("material_opening_stock"):
@@ -462,6 +473,7 @@ def ensure_schema():
 
     _drop_materials_unique_constraint()
     _migrate_material_opening_stock()
+    _ensure_materials_company_id_nullable()
     _remove_materials_companies()
     _clear_materials_opening_stock()
     _remove_auto_synced_purchase_ledger_entries()
