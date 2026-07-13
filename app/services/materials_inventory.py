@@ -2,11 +2,40 @@ from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 from app import db
 from app.models import AppSetting, Material, MaterialOpeningStock, MaterialTransaction
 
 USAGE_PERIODS = ("daily", "weekly", "monthly")
+
+
+def _normalize_name(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _build_material_name_index(materials: list[Material]) -> dict[str, Material]:
+    index: dict[str, Material] = {}
+    for material in materials:
+        index[_normalize_name(material.display_name)] = material
+        index[_normalize_name(material.name)] = material
+    return index
+
+
+def _build_opening_quantity_by_material_id(
+    materials: list[Material] | None = None,
+) -> dict[int, float]:
+    if materials is None:
+        materials = Material.query.all()
+    name_index = _build_material_name_index(materials)
+    quantities: dict[int, float] = {}
+    for name, qty in db.session.query(
+        MaterialOpeningStock.material_name, MaterialOpeningStock.quantity
+    ).all():
+        material = name_index.get(_normalize_name(name))
+        if material:
+            quantities[material.id] = quantities.get(material.id, 0.0) + float(qty)
+    return quantities
 
 
 def create_material(
@@ -56,17 +85,18 @@ def get_low_stock_threshold(material: Material) -> int:
     return 50
 
 
-def get_opening_quantity(material: Material) -> float:
-    for record in MaterialOpeningStock.query.all():
-        matched = find_material_for_opening_name(record.material_name)
-        if matched and matched.id == material.id:
-            return record.quantity
-    return 0.0
+def get_opening_quantity(
+    material: Material,
+    opening_lookup: dict[int, float] | None = None,
+) -> float:
+    if opening_lookup is None:
+        opening_lookup = _build_opening_quantity_by_material_id([material])
+    return opening_lookup.get(material.id, 0.0)
 
 
 def get_opening_stock_names() -> set[str]:
     names = {
-        (name or "").strip().lower()
+        _normalize_name(name)
         for (name,) in db.session.query(MaterialOpeningStock.material_name).all()
         if name and name.strip()
     }
@@ -76,14 +106,9 @@ def get_opening_stock_names() -> set[str]:
 def material_matches_opening_stock(material: Material, opening_names: set[str] | None = None) -> bool:
     if opening_names is None:
         opening_names = get_opening_stock_names()
-    name = material.name.strip().lower()
-    display = material.display_name.strip().lower()
-    if name in opening_names or display in opening_names:
-        return True
-    for record in MaterialOpeningStock.query.all():
-        if find_material_for_opening_name(record.material_name) == material:
-            return True
-    return False
+    name = _normalize_name(material.name)
+    display = _normalize_name(material.display_name)
+    return name in opening_names or display in opening_names
 
 
 def parse_opening_material_name(text: str) -> dict:
@@ -105,18 +130,20 @@ def parse_opening_material_name(text: str) -> dict:
     }
 
 
-def find_material_for_opening_name(opening_name: str) -> Material | None:
-    target = opening_name.strip().lower()
-    for material in Material.query.all():
-        if material.display_name.strip().lower() == target:
-            return material
-        if material.name.strip().lower() == target:
-            return material
-    return None
+def find_material_for_opening_name(
+    opening_name: str,
+    name_index: dict[str, Material] | None = None,
+) -> Material | None:
+    target = _normalize_name(opening_name)
+    if name_index is None:
+        name_index = _build_material_name_index(Material.query.all())
+    return name_index.get(target)
 
 
 def find_or_create_material_for_opening_name(opening_name: str) -> Material:
-    existing = find_material_for_opening_name(opening_name)
+    materials = Material.query.all()
+    name_index = _build_material_name_index(materials)
+    existing = find_material_for_opening_name(opening_name, name_index)
     if existing:
         return existing
 
@@ -129,51 +156,25 @@ def find_or_create_material_for_opening_name(opening_name: str) -> Material:
     )
 
 
-def get_material_options(*, context: str = "receive") -> list[dict]:
-    """Build material dropdown options for purchase or usage forms."""
-    materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
-    opening_names = get_opening_stock_names()
-    options: list[dict] = []
-    seen_material_ids: set[int] = set()
-
-    def add_material_option(material: Material, *, in_opening_stock: bool):
-        if material.id in seen_material_ids:
-            return
-        seen_material_ids.add(material.id)
-        label = material.display_name
-        if in_opening_stock:
-            label = f"{label} (Opening Stock)"
-        options.append(
-            {
-                "id": material.id,
-                "name": label,
-                "in_opening_stock": in_opening_stock,
-            }
-        )
-
-    if context == "use":
-        opening_records = MaterialOpeningStock.query.order_by(
-            MaterialOpeningStock.material_name
-        ).all()
-        for record in opening_records:
-            material = find_material_for_opening_name(record.material_name)
-            if material:
-                add_material_option(material, in_opening_stock=True)
-            else:
-                options.append(
-                    {
-                        "id": f"opening:{record.id}",
-                        "name": f"{record.material_name} (Opening Stock)",
-                        "in_opening_stock": True,
-                    }
-                )
-        return options
-
-    opening_records = MaterialOpeningStock.query.order_by(MaterialOpeningStock.material_name).all()
+def _append_opening_stock_options(
+    options: list[dict],
+    seen_material_ids: set[int],
+    opening_records: list[MaterialOpeningStock],
+    name_index: dict[str, Material],
+) -> None:
     for record in opening_records:
-        material = find_material_for_opening_name(record.material_name)
+        material = name_index.get(_normalize_name(record.material_name))
         if material:
-            add_material_option(material, in_opening_stock=True)
+            if material.id in seen_material_ids:
+                continue
+            seen_material_ids.add(material.id)
+            options.append(
+                {
+                    "id": material.id,
+                    "name": f"{material.display_name} (Opening Stock)",
+                    "in_opening_stock": True,
+                }
+            )
         else:
             options.append(
                 {
@@ -183,10 +184,40 @@ def get_material_options(*, context: str = "receive") -> list[dict]:
                 }
             )
 
+
+def get_material_options(*, context: str = "receive") -> list[dict]:
+    """Build material dropdown options for purchase or usage forms."""
+    materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
+    opening_records = MaterialOpeningStock.query.order_by(
+        MaterialOpeningStock.material_name
+    ).all()
+    opening_names = {_normalize_name(record.material_name) for record in opening_records}
+    name_index = _build_material_name_index(materials)
+    options: list[dict] = []
+    seen_material_ids: set[int] = set()
+
+    _append_opening_stock_options(options, seen_material_ids, opening_records, name_index)
+
+    if context == "use":
+        return options
+
     for material in materials:
-        add_material_option(
-            material,
-            in_opening_stock=material_matches_opening_stock(material, opening_names),
+        if material.id in seen_material_ids:
+            continue
+        seen_material_ids.add(material.id)
+        in_opening = (
+            _normalize_name(material.name) in opening_names
+            or _normalize_name(material.display_name) in opening_names
+        )
+        label = material.display_name
+        if in_opening:
+            label = f"{label} (Opening Stock)"
+        options.append(
+            {
+                "id": material.id,
+                "name": label,
+                "in_opening_stock": in_opening,
+            }
         )
 
     return options
@@ -206,6 +237,26 @@ def resolve_material_selection(material_ref: str) -> Material | None:
     return Material.query.filter_by(id=material_id).first()
 
 
+def _transaction_totals_by_material(
+    material_id: Optional[int] = None,
+) -> dict[tuple[int, str], float]:
+    query = db.session.query(
+        MaterialTransaction.material_id,
+        MaterialTransaction.transaction_type,
+        func.coalesce(func.sum(MaterialTransaction.quantity), 0),
+    )
+    if material_id:
+        query = query.filter(MaterialTransaction.material_id == material_id)
+    query = query.group_by(
+        MaterialTransaction.material_id,
+        MaterialTransaction.transaction_type,
+    )
+    return {
+        (mid, txn_type): float(qty)
+        for mid, txn_type, qty in query.all()
+    }
+
+
 def calculate_live_stock(
     material_id: Optional[int] = None,
 ) -> list[dict]:
@@ -214,35 +265,25 @@ def calculate_live_stock(
         query = query.filter_by(id=material_id)
 
     materials = query.order_by(Material.name, Material.size).all()
+    opening_lookup = _build_opening_quantity_by_material_id(materials)
+    txn_totals = _transaction_totals_by_material(material_id)
     results = []
 
     for material in materials:
-        opening = get_opening_quantity(material)
-        received = (
-            db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
-            .filter_by(
-                material_id=material.id,
-                transaction_type=MaterialTransaction.TRANSACTION_RECEIVED,
-            )
-            .scalar()
+        opening = opening_lookup.get(material.id, 0.0)
+        received = txn_totals.get(
+            (material.id, MaterialTransaction.TRANSACTION_RECEIVED), 0.0
         )
-        used = (
-            db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
-            .filter_by(
-                material_id=material.id,
-                transaction_type=MaterialTransaction.TRANSACTION_USED,
-            )
-            .scalar()
-        )
-        current = opening + float(received) - float(used)
+        used = txn_totals.get((material.id, MaterialTransaction.TRANSACTION_USED), 0.0)
+        current = opening + received - used
         threshold = get_low_stock_threshold(material)
 
         results.append(
             {
                 "material": material,
                 "opening": opening,
-                "received": float(received),
-                "used": float(used),
+                "received": received,
+                "used": used,
                 "current": current,
                 "threshold": threshold,
                 "is_low": current <= threshold,
@@ -321,7 +362,8 @@ def get_usage_report(period: str, reference: date | None = None) -> dict:
     start_date, end_date, period_label = get_usage_period_range(period, reference)
 
     records = (
-        MaterialTransaction.query.filter(
+        MaterialTransaction.query.options(joinedload(MaterialTransaction.material))
+        .filter(
             MaterialTransaction.transaction_type == MaterialTransaction.TRANSACTION_USED,
             MaterialTransaction.transaction_date >= start_date,
             MaterialTransaction.transaction_date <= end_date,
@@ -330,6 +372,7 @@ def get_usage_report(period: str, reference: date | None = None) -> dict:
             MaterialTransaction.transaction_date.desc(),
             MaterialTransaction.id.desc(),
         )
+        .limit(500)
         .all()
     )
 
@@ -410,7 +453,8 @@ def get_dashboard_stats(today: date, usage_period: str = "daily") -> dict:
             low_stock.append(item)
 
     recent = (
-        MaterialTransaction.query.order_by(
+        MaterialTransaction.query.options(joinedload(MaterialTransaction.material))
+        .order_by(
             MaterialTransaction.transaction_date.desc(),
             MaterialTransaction.id.desc(),
         )
