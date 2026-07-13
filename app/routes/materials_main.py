@@ -1,6 +1,6 @@
 from datetime import date
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, current_app, render_template, request
 from flask_login import login_required
 
 from app.services.materials_inventory import USAGE_PERIODS, get_dashboard_stats
@@ -18,7 +18,12 @@ def dashboard():
         usage_period = "daily"
 
     today = date.today()
-    stats = get_dashboard_stats(today, usage_period=usage_period)
+    try:
+        stats = get_dashboard_stats(today, usage_period=usage_period)
+    except Exception:
+        current_app.logger.exception("Failed to build materials dashboard stats")
+        raise
+
     return render_template(
         "materials/dashboard.html",
         stats=stats,

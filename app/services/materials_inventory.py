@@ -286,6 +286,14 @@ def get_usage_period_range(period: str, reference: date | None = None) -> tuple[
     return start, end, ref.strftime("%B %Y")
 
 
+def _material_label(material: Material | None, material_id: int | None = None) -> str:
+    if material:
+        return material.display_name
+    if material_id:
+        return f"Unknown material #{material_id}"
+    return "Unknown material"
+
+
 def get_usage_report(period: str, reference: date | None = None) -> dict:
     """Build usage analytics for daily, weekly, or monthly stock-used records."""
     start_date, end_date, period_label = get_usage_period_range(period, reference)
@@ -309,13 +317,14 @@ def get_usage_report(period: str, reference: date | None = None) -> dict:
 
     for txn in records:
         total_used += txn.quantity
-        material_name = txn.material.display_name
+        material_name = _material_label(txn.material, txn.material_id)
+        category = txn.material.category if txn.material else "—"
 
         material_row = by_material.setdefault(
             material_name,
             {
                 "material_name": material_name,
-                "category": txn.material.category,
+                "category": category,
                 "total_used": 0.0,
                 "record_count": 0,
             },
