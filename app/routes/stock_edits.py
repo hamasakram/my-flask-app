@@ -50,7 +50,8 @@ from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_sc
 from app.services.weights import parse_manual_weights
 from app.services.materials_inventory import (
     get_materials_in_opening_stock,
-    material_matches_opening_stock,
+    is_valid_opening_stock_selection,
+    sync_opening_stock_material,
 )
 
 from pathlib import Path
@@ -311,7 +312,7 @@ def edit_materials_received(txn_id):
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
         material = Material.query.filter_by(id=material_id).first()
-        if not material or not material_matches_opening_stock(material):
+        if not material or not is_valid_opening_stock_selection(str(material_id)):
             flash("Invalid material selection. Only opening stock materials are allowed.", "danger")
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
@@ -421,6 +422,7 @@ def edit_materials_opening(record_id):
             record.id,
             f"Updated opening stock: {material_name} = {quantity}",
         )
+        sync_opening_stock_material(material_name)
         db.session.commit()
         flash("Opening stock updated.", "success")
         return redirect(url_for("materials.opening_stock"))

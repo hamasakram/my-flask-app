@@ -186,16 +186,28 @@ class _OpeningStockOnlyMaterial:
 
 
 def get_materials_in_opening_stock() -> list[Material]:
-    opening_names = get_opening_stock_names()
-    if not opening_names:
+    opening_records = MaterialOpeningStock.query.order_by(
+        MaterialOpeningStock.material_name
+    ).all()
+    if not opening_records:
         return []
-    return [
-        material
-        for material in Material.query.order_by(
-            Material.category, Material.name, Material.size
-        ).all()
-        if material_matches_opening_stock(material, opening_names)
-    ]
+
+    name_index = _build_material_name_index(
+        Material.query.order_by(Material.category, Material.name, Material.size).all()
+    )
+    materials: list[Material] = []
+    seen_ids: set[int] = set()
+    seen_names: set[str] = set()
+    for record in opening_records:
+        norm = _normalize_name(record.material_name)
+        if not norm or norm in seen_names:
+            continue
+        seen_names.add(norm)
+        material = find_material_for_opening_name(record.material_name, name_index)
+        if material and material.id not in seen_ids:
+            seen_ids.add(material.id)
+            materials.append(material)
+    return materials
 
 
 def material_matches_opening_stock(material: Material, opening_names: set[str] | None = None) -> bool:
@@ -252,43 +264,53 @@ def find_or_create_material_for_opening_name(opening_name: str) -> Material:
     )
 
 
+def sync_opening_stock_material(material_name: str) -> Material:
+    """Create or link a catalog material when opening stock is saved."""
+    return find_or_create_material_for_opening_name(material_name)
+
+
+def is_valid_opening_stock_selection(material_ref: str) -> bool:
+    """Return True when a dropdown/API selection refers to opening stock."""
+    if not material_ref:
+        return False
+    if material_ref.startswith("opening:"):
+        try:
+            opening_id = int(material_ref.split(":", 1)[1])
+        except ValueError:
+            return False
+        return MaterialOpeningStock.query.get(opening_id) is not None
+    try:
+        material_id = int(material_ref)
+    except ValueError:
+        return False
+    material = Material.query.filter_by(id=material_id).first()
+    return material is not None and material_matches_opening_stock(material)
+
+
 def _append_opening_stock_options(
     options: list[dict],
-    seen_material_ids: set[int],
     opening_records: list[MaterialOpeningStock],
     name_index: dict[str, Material],
 ) -> None:
-    seen_opening_keys: set[str] = set()
+    seen_names: set[str] = set()
     for record in opening_records:
-        key = _normalize_name(record.material_name)
-        if key in seen_opening_keys:
+        norm = _normalize_name(record.material_name)
+        if not norm or norm in seen_names:
             continue
-        seen_opening_keys.add(key)
+        seen_names.add(norm)
 
         material = find_material_for_opening_name(record.material_name, name_index)
-        if material:
-            if material.id in seen_material_ids:
-                continue
-            seen_material_ids.add(material.id)
-            options.append(
-                {
-                    "id": material.id,
-                    "name": material.display_name,
-                    "in_opening_stock": True,
-                }
-            )
-        else:
-            options.append(
-                {
-                    "id": f"opening:{record.id}",
-                    "name": record.material_name,
-                    "in_opening_stock": True,
-                }
-            )
+        options.append(
+            {
+                "id": material.id if material else f"opening:{record.id}",
+                "name": record.material_name.strip(),
+                "in_opening_stock": True,
+            }
+        )
 
 
 def get_material_options(*, context: str = "receive") -> list[dict]:
-    """Build material dropdown options from opening stock only."""
+    """Build material dropdown options from opening stock records only."""
     _ = context
     opening_records = MaterialOpeningStock.query.order_by(
         MaterialOpeningStock.material_name
@@ -299,9 +321,8 @@ def get_material_options(*, context: str = "receive") -> list[dict]:
     materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
     name_index = _build_material_name_index(materials)
     options: list[dict] = []
-    seen_material_ids: set[int] = set()
-    _append_opening_stock_options(options, seen_material_ids, opening_records, name_index)
-    return options
+    _append_opening_stock_options(options, opening_records, name_index)
+    return sorted(options, key=lambda option: option["name"].lower())
 
 
 def resolve_material_selection(material_ref: str) -> Material | None:

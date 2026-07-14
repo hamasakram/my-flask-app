@@ -16,8 +16,9 @@ from app.services.materials_inventory import (
     get_current_stock,
     get_material_options,
     get_stock_usage_records,
-    material_matches_opening_stock,
+    is_valid_opening_stock_selection,
     resolve_material_selection,
+    sync_opening_stock_material,
 )
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials/inventory")
@@ -124,6 +125,7 @@ def opening_stock():
             entity_id,
             f"{material_name}: opening stock set to {quantity} kg",
         )
+        sync_opening_stock_material(material_name)
         db.session.commit()
         flash("Opening stock saved successfully.", "success")
         return redirect(url_for("materials.opening_stock"))
@@ -178,7 +180,7 @@ def receive_stock():
             return redirect(url_for("materials.receive_stock"))
 
         material = resolve_material_selection(material_ref)
-        if not material or not material_matches_opening_stock(material):
+        if not material or not is_valid_opening_stock_selection(material_ref):
             flash(
                 "Invalid material selection. Only opening stock materials can be purchased here.",
                 "danger",
@@ -251,7 +253,7 @@ def use_stock():
             return redirect(url_for("materials.use_stock"))
 
         material = resolve_material_selection(material_ref)
-        if not material or not material_matches_opening_stock(material):
+        if not material or not is_valid_opening_stock_selection(material_ref):
             flash("Invalid material selection. Only opening stock materials can be used here.", "danger")
             return redirect(url_for("materials.use_stock"))
 
