@@ -17,9 +17,54 @@ def _normalize_name(value: str) -> str:
 def _build_material_name_index(materials: list[Material]) -> dict[str, Material]:
     index: dict[str, Material] = {}
     for material in materials:
-        index[_normalize_name(material.display_name)] = material
-        index[_normalize_name(material.name)] = material
+        for key in _material_lookup_keys(material):
+            index.setdefault(key, material)
     return index
+
+
+def _material_lookup_keys(material: Material) -> set[str]:
+    keys = {
+        _normalize_name(material.name),
+        _normalize_name(material.display_name),
+    }
+    if material.size:
+        keys.add(_normalize_name(f"{material.name} {material.size}"))
+        keys.add(_normalize_name(f"{material.name}·{material.size}"))
+    if material.category and material.size:
+        keys.add(_normalize_name(f"{material.category} {material.name} {material.size}"))
+        keys.add(
+            _normalize_name(f"{material.category}·{material.name}·{material.size}")
+        )
+    return {key for key in keys if key}
+
+
+def _opening_lookup_keys(opening_name: str) -> set[str]:
+    keys = {_normalize_name(opening_name)}
+    stripped = (opening_name or "").strip()
+    if not stripped:
+        return keys
+
+    tokens = stripped.split()
+    if len(tokens) >= 2 and tokens[-1].replace(".", "", 1).isdigit():
+        name_part = " ".join(tokens[:-1])
+        size_part = tokens[-1]
+        keys.add(_normalize_name(f"{name_part} {size_part}"))
+        keys.add(_normalize_name(name_part))
+
+    parts = [part.strip() for part in stripped.split("·") if part.strip()]
+    if len(parts) >= 2:
+        category = parts[0].upper()
+        name = parts[1]
+        size = parts[2] if len(parts) > 2 else ""
+        keys.add(_normalize_name(name))
+        if size:
+            keys.add(_normalize_name(f"{name} {size}"))
+            keys.add(_normalize_name(f"{category} {name} {size}"))
+            keys.add(_normalize_name(f"{category}·{name}·{size}"))
+    elif len(parts) == 1:
+        keys.add(_normalize_name(parts[0]))
+
+    return {key for key in keys if key}
 
 
 def _build_opening_quantity_by_material_id(
@@ -32,7 +77,7 @@ def _build_opening_quantity_by_material_id(
     for name, qty in db.session.query(
         MaterialOpeningStock.material_name, MaterialOpeningStock.quantity
     ).all():
-        material = name_index.get(_normalize_name(name))
+        material = find_material_for_opening_name(name, name_index)
         if material:
             quantities[material.id] = quantities.get(material.id, 0.0) + float(qty)
     return quantities
@@ -95,11 +140,10 @@ def get_opening_quantity(
 
 
 def get_opening_stock_names() -> set[str]:
-    names = {
-        _normalize_name(name)
-        for (name,) in db.session.query(MaterialOpeningStock.material_name).all()
-        if name and name.strip()
-    }
+    names: set[str] = set()
+    for (name,) in db.session.query(MaterialOpeningStock.material_name).all():
+        if name and name.strip():
+            names.update(_opening_lookup_keys(name))
     return names
 
 
@@ -157,9 +201,7 @@ def get_materials_in_opening_stock() -> list[Material]:
 def material_matches_opening_stock(material: Material, opening_names: set[str] | None = None) -> bool:
     if opening_names is None:
         opening_names = get_opening_stock_names()
-    name = _normalize_name(material.name)
-    display = _normalize_name(material.display_name)
-    return name in opening_names or display in opening_names
+    return bool(_material_lookup_keys(material) & opening_names)
 
 
 def parse_opening_material_name(text: str) -> dict:
@@ -185,10 +227,13 @@ def find_material_for_opening_name(
     opening_name: str,
     name_index: dict[str, Material] | None = None,
 ) -> Material | None:
-    target = _normalize_name(opening_name)
     if name_index is None:
         name_index = _build_material_name_index(Material.query.all())
-    return name_index.get(target)
+    for key in _opening_lookup_keys(opening_name):
+        material = name_index.get(key)
+        if material:
+            return material
+    return None
 
 
 def find_or_create_material_for_opening_name(opening_name: str) -> Material:
@@ -220,7 +265,7 @@ def _append_opening_stock_options(
             continue
         seen_opening_keys.add(key)
 
-        material = name_index.get(key)
+        material = find_material_for_opening_name(record.material_name, name_index)
         if material:
             if material.id in seen_material_ids:
                 continue
@@ -307,7 +352,8 @@ def calculate_live_stock(
     results = []
 
     for key in sorted(opening_by_name):
-        material = name_index.get(key)
+        opening_name = display_names.get(key, key)
+        material = find_material_for_opening_name(opening_name, name_index)
         if material_id is not None and (not material or material.id != material_id):
             continue
 
