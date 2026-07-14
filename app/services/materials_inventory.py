@@ -45,23 +45,26 @@ def _opening_lookup_keys(opening_name: str) -> set[str]:
         return keys
 
     tokens = stripped.split()
-    if len(tokens) >= 2 and tokens[-1].replace(".", "", 1).isdigit():
+    has_numeric_size = len(tokens) >= 2 and tokens[-1].replace(".", "", 1).isdigit()
+    if has_numeric_size:
         name_part = " ".join(tokens[:-1])
         size_part = tokens[-1]
         keys.add(_normalize_name(f"{name_part} {size_part}"))
-        keys.add(_normalize_name(name_part))
+    elif len(tokens) == 1:
+        keys.add(_normalize_name(tokens[0]))
 
     parts = [part.strip() for part in stripped.split("·") if part.strip()]
     if len(parts) >= 2:
         category = parts[0].upper()
         name = parts[1]
         size = parts[2] if len(parts) > 2 else ""
-        keys.add(_normalize_name(name))
         if size:
             keys.add(_normalize_name(f"{name} {size}"))
             keys.add(_normalize_name(f"{category} {name} {size}"))
             keys.add(_normalize_name(f"{category}·{name}·{size}"))
-    elif len(parts) == 1:
+        else:
+            keys.add(_normalize_name(name))
+    elif len(parts) == 1 and not has_numeric_size:
         keys.add(_normalize_name(parts[0]))
 
     return {key for key in keys if key}
@@ -269,6 +272,7 @@ def find_material_for_opening_name(
                 if _normalize_name(material.category) != parsed_category:
                     continue
                 return material
+            return None
     except ValueError:
         pass
 
