@@ -217,35 +217,126 @@ def material_matches_opening_stock(material: Material, opening_names: set[str] |
 
 
 def parse_opening_material_name(text: str) -> dict:
-    parts = [part.strip() for part in text.split("·") if part.strip()]
-    if not parts:
+    stripped = (text or "").strip()
+    if not stripped:
         raise ValueError("Material name is required.")
-    if len(parts) == 1:
-        return {"category": "PET", "name": parts[0], "size": "", "micron": ""}
 
-    category = parts[0].upper()
-    name = parts[1]
-    size = parts[2] if len(parts) > 2 else ""
-    micron = parts[3].replace("μ", "").strip() if len(parts) > 3 else ""
-    return {
-        "category": category,
-        "name": name,
-        "size": size,
-        "micron": micron,
-    }
+    parts = [part.strip() for part in stripped.split("·") if part.strip()]
+    if len(parts) >= 2:
+        category = parts[0].upper()
+        name = parts[1]
+        size = parts[2] if len(parts) > 2 else ""
+        micron = parts[3].replace("μ", "").strip() if len(parts) > 3 else ""
+        return {
+            "category": category,
+            "name": name,
+            "size": size,
+            "micron": micron,
+        }
+
+    tokens = stripped.split()
+    if len(tokens) >= 2 and tokens[-1].replace(".", "", 1).isdigit():
+        return {
+            "category": "PET",
+            "name": " ".join(tokens[:-1]),
+            "size": tokens[-1],
+            "micron": "",
+        }
+
+    return {"category": "PET", "name": stripped, "size": "", "micron": ""}
 
 
 def find_material_for_opening_name(
     opening_name: str,
     name_index: dict[str, Material] | None = None,
 ) -> Material | None:
+    normalized_opening = _normalize_name(opening_name)
+    materials = Material.query.order_by(Material.category, Material.name, Material.size).all()
     if name_index is None:
-        name_index = _build_material_name_index(Material.query.all())
+        name_index = _build_material_name_index(materials)
+
+    try:
+        parsed = parse_opening_material_name(opening_name)
+        if parsed["size"]:
+            parsed_name = _normalize_name(parsed["name"])
+            parsed_size = _normalize_name(parsed["size"])
+            parsed_category = _normalize_name(parsed["category"])
+            for material in materials:
+                if _normalize_name(material.name) != parsed_name:
+                    continue
+                if _normalize_name(material.size or "") != parsed_size:
+                    continue
+                if _normalize_name(material.category) != parsed_category:
+                    continue
+                return material
+    except ValueError:
+        pass
+
+    for material in materials:
+        if _normalize_name(material.display_name) == normalized_opening:
+            return material
+        if _normalize_name(material.name) == normalized_opening and not (material.size or "").strip():
+            return material
+
     for key in _opening_lookup_keys(opening_name):
         material = name_index.get(key)
         if material:
             return material
     return None
+
+
+def get_opening_quantity_for_name(opening_name: str) -> float:
+    """Sum opening-stock quantities for a material name label."""
+    target = _normalize_name(opening_name)
+    if not target:
+        return 0.0
+    total = 0.0
+    for name, qty in db.session.query(
+        MaterialOpeningStock.material_name, MaterialOpeningStock.quantity
+    ).all():
+        if _normalize_name(name) == target:
+            total += float(qty)
+    return total
+
+
+def get_opening_quantity_for_material(material: Material) -> float:
+    """Sum all opening-stock rows linked to a catalog material."""
+    name_index = _build_material_name_index(Material.query.all())
+    total = 0.0
+    for name, qty in db.session.query(
+        MaterialOpeningStock.material_name, MaterialOpeningStock.quantity
+    ).all():
+        matched = find_material_for_opening_name(name, name_index)
+        if matched and matched.id == material.id:
+            total += float(qty)
+    return total
+
+
+def get_opening_quantity_for_ref(material_ref: str) -> float:
+    if material_ref.startswith("opening:"):
+        opening_id = int(material_ref.split(":", 1)[1])
+        record = MaterialOpeningStock.query.get(opening_id)
+        if not record:
+            return 0.0
+        return get_opening_quantity_for_name(record.material_name)
+
+    material = Material.query.filter_by(id=int(material_ref)).first()
+    if not material:
+        return 0.0
+    return get_opening_quantity_for_material(material)
+
+
+def get_current_stock_for_ref(material_ref: str) -> float:
+    """Current stock for a dropdown/API selection: opening + purchased − used."""
+    material = resolve_material_selection(material_ref)
+    if not material:
+        return 0.0
+
+    opening = get_opening_quantity_for_ref(material_ref)
+    txn_totals = _transaction_totals_by_material(material.id)
+    received = txn_totals.get((material.id, MaterialTransaction.TRANSACTION_RECEIVED), 0.0)
+    used = txn_totals.get((material.id, MaterialTransaction.TRANSACTION_USED), 0.0)
+    return opening + received - used
 
 
 def find_or_create_material_for_opening_name(opening_name: str) -> Material:
@@ -302,8 +393,9 @@ def _append_opening_stock_options(
         material = find_material_for_opening_name(record.material_name, name_index)
         options.append(
             {
-                "id": material.id if material else f"opening:{record.id}",
+                "id": f"opening:{record.id}",
                 "name": record.material_name.strip(),
+                "display_name": material.display_name if material else record.material_name.strip(),
                 "in_opening_stock": True,
             }
         )
@@ -362,23 +454,29 @@ def _transaction_totals_by_material(
 def calculate_live_stock(
     material_id: Optional[int] = None,
 ) -> list[dict]:
-    opening_by_name = _opening_quantity_by_name()
-    if not opening_by_name:
+    opening_records = MaterialOpeningStock.query.order_by(
+        MaterialOpeningStock.material_name
+    ).all()
+    if not opening_records:
         return []
 
-    display_names = get_opening_stock_display_names()
     all_materials = Material.query.order_by(Material.name, Material.size).all()
     name_index = _build_material_name_index(all_materials)
     txn_totals = _transaction_totals_by_material(material_id)
     results = []
+    seen_names: set[str] = set()
 
-    for key in sorted(opening_by_name):
-        opening_name = display_names.get(key, key)
-        material = find_material_for_opening_name(opening_name, name_index)
+    for record in opening_records:
+        norm = _normalize_name(record.material_name)
+        if not norm or norm in seen_names:
+            continue
+        seen_names.add(norm)
+
+        material = find_material_for_opening_name(record.material_name, name_index)
         if material_id is not None and (not material or material.id != material_id):
             continue
 
-        opening = opening_by_name[key]
+        opening = get_opening_quantity_for_name(record.material_name)
         if material:
             received = txn_totals.get(
                 (material.id, MaterialTransaction.TRANSACTION_RECEIVED), 0.0
@@ -394,7 +492,7 @@ def calculate_live_stock(
             used = 0.0
             current = opening
             threshold = 50
-            row_material = _OpeningStockOnlyMaterial(display_names.get(key, key))
+            row_material = _OpeningStockOnlyMaterial(record.material_name.strip())
 
         results.append(
             {
@@ -412,14 +510,27 @@ def calculate_live_stock(
 
 
 def get_current_stock(material_id: int) -> float:
-    rows = calculate_live_stock(material_id=material_id)
-    if not rows:
+    material = Material.query.filter_by(id=material_id).first()
+    if not material:
         return 0.0
-    return rows[0]["current"]
+    opening = get_opening_quantity_for_material(material)
+    txn_totals = _transaction_totals_by_material(material_id)
+    received = txn_totals.get((material_id, MaterialTransaction.TRANSACTION_RECEIVED), 0.0)
+    used = txn_totals.get((material_id, MaterialTransaction.TRANSACTION_USED), 0.0)
+    return opening + received - used
 
 
 def calculate_used_from_left(material_id: int, quantity_left: float) -> float:
     current_stock = get_current_stock(material_id)
+    if quantity_left > current_stock:
+        raise ValueError(
+            f"Quantity left ({quantity_left}) cannot exceed current stock ({current_stock:.1f} kg)."
+        )
+    return current_stock - quantity_left
+
+
+def calculate_used_from_left_for_ref(material_ref: str, quantity_left: float) -> float:
+    current_stock = get_current_stock_for_ref(material_ref)
     if quantity_left > current_stock:
         raise ValueError(
             f"Quantity left ({quantity_left}) cannot exceed current stock ({current_stock:.1f} kg)."

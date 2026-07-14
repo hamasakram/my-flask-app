@@ -11,9 +11,9 @@ from app.services.receipt_uploads import apply_receipt_file, resolve_receipt_fil
 from app.services.weights import parse_manual_weights
 from app.services.materials_inventory import (
     calculate_live_stock,
-    calculate_used_from_left,
+    calculate_used_from_left_for_ref,
     create_material,
-    get_current_stock,
+    get_current_stock_for_ref,
     get_material_options,
     get_stock_usage_records,
     is_valid_opening_stock_selection,
@@ -260,7 +260,7 @@ def use_stock():
         material_id = material.id
 
         try:
-            quantity_used = calculate_used_from_left(material_id, quantity_left)
+            quantity_used = calculate_used_from_left_for_ref(material_ref, quantity_left)
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("materials.use_stock"))
@@ -324,8 +324,22 @@ def get_material_stock(material_ref):
     if not material:
         return jsonify({"error": "Material not found"}), 404
 
-    current = get_current_stock(material.id)
-    return jsonify({"current_stock": current, "material_name": material.display_name})
+    current = get_current_stock_for_ref(material_ref)
+    opening_record = None
+    if material_ref.startswith("opening:"):
+        opening_id = int(material_ref.split(":", 1)[1])
+        opening_record = MaterialOpeningStock.query.get(opening_id)
+
+    return jsonify(
+        {
+            "current_stock": current,
+            "material_name": (
+                opening_record.material_name.strip()
+                if opening_record
+                else material.display_name
+            ),
+        }
+    )
 
 
 @materials_bp.route("/live")
