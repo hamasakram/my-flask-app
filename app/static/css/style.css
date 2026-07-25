@@ -167,6 +167,34 @@ main.with-sidebar {
 
 .header-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
+.daily-report-pdf-form {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.input-date-sm {
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.875rem;
+    background: var(--surface);
+    color: var(--text);
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -350,6 +378,74 @@ textarea { resize: vertical; min-height: 4rem; }
     gap: 0.65rem;
     flex-wrap: wrap;
     margin-bottom: 1rem;
+}
+
+.period-tabs {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.period-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 1.1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.88rem;
+    font-weight: 600;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.period-tab:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.period-tab.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.usage-report-card {
+    margin-bottom: 1.5rem;
+}
+
+.usage-report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
+}
+
+.usage-stats-grid {
+    margin-bottom: 1.25rem;
+}
+
+.section-title {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    color: var(--brand-red);
+}
+
+.card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.card-header-row h2 {
+    margin: 0;
 }
 
 .quick-actions {

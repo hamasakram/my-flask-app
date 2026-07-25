@@ -38,7 +38,6 @@ from app.services.companies import (
     get_chemical_companies,
     get_glue_companies,
     get_ink_companies,
-    get_material_companies,
 )
 from app.services.bank_ledger import bank_account_exists, update_bank_transfer
 from app.services.inventory import create_ink_type, log_audit
@@ -49,6 +48,7 @@ from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
+from app.services.materials_inventory import list_materials
 
 from pathlib import Path
 
@@ -288,20 +288,18 @@ def edit_ink_opening(record_id):
 @login_required
 def edit_materials_received(txn_id):
     txn = MaterialTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != MaterialTransaction.TRANSACTION_RECEIVED:
+    if txn.transaction_type != MaterialTransaction.TRANSACTION_STOCK_IN:
         abort(404)
 
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
         material_id = request.form.get("material_id", type=int)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
         if (
-            not company_id
-            or not material_id
+            not material_id
             or not quantity
             or quantity <= 0
             or not transaction_date
@@ -309,13 +307,12 @@ def edit_materials_received(txn_id):
             flash("All required fields must be filled.", "danger")
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
-        material = Material.query.filter_by(id=material_id, company_id=company_id).first()
+        material = Material.query.filter_by(id=material_id).first()
         if not material:
             flash("Invalid material selection.", "danger")
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
         weights = parse_manual_weights(request.form)
-        txn.company_id = company_id
         txn.material_id = material_id
         txn.quantity = quantity
         txn.weight_per_quantity = weights["weight_per_quantity"]
@@ -336,10 +333,11 @@ def edit_materials_received(txn_id):
         flash("Purchase record updated.", "success")
         return redirect(url_for("materials.stock_in"))
 
+    materials = list_materials()
     return render_template(
         "shared/edit_materials_received.html",
         txn=txn,
-        companies=get_material_companies(),
+        materials=materials,
         cancel_url=url_for("materials.stock_in"),
     )
 
@@ -348,7 +346,7 @@ def edit_materials_received(txn_id):
 @login_required
 def edit_materials_used(txn_id):
     txn = MaterialTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != MaterialTransaction.TRANSACTION_USED:
+    if txn.transaction_type != MaterialTransaction.TRANSACTION_STOCK_LEFT:
         abort(404)
 
     if request.method == "POST":
@@ -422,12 +420,12 @@ def edit_materials_opening(record_id):
         )
         db.session.commit()
         flash("Opening stock updated.", "success")
-        return redirect(url_for("materials.opening_stock"))
+        return redirect(url_for("materials.materials_list"))
 
     return render_template(
         "shared/edit_materials_opening.html",
         record=record,
-        cancel_url=url_for("materials.opening_stock"),
+        cancel_url=url_for("materials.materials_list"),
     )
 
 
@@ -711,34 +709,8 @@ def edit_chemicals_opening(record_id):
 @stock_edits_bp.route("/materials/company/<int:company_id>", methods=["GET", "POST"])
 @login_required
 def edit_materials_company(company_id):
-    company = Company.query.get_or_404(company_id)
-    if company.scope != Company.SCOPE_MATERIALS:
-        abort(404)
-
-    if request.method == "POST":
-        require_edit_access()
-        name = request.form.get("company_name", "").strip()
-        if not name:
-            flash("Company name is required.", "danger")
-            return redirect(url_for("stock_edits.edit_materials_company", company_id=company_id))
-
-        existing = Company.query.filter(Company.name == name, Company.id != company_id).first()
-        if existing:
-            flash("This company name is already in use.", "danger")
-            return redirect(url_for("stock_edits.edit_materials_company", company_id=company_id))
-
-        company.name = name
-        log_audit(current_user.id, "UPDATE", "Company", company.id, f"Renamed materials company to {name}")
-        db.session.commit()
-        flash("Company updated.", "success")
-        return redirect(url_for("materials.companies"))
-
-    return render_template(
-        "shared/edit_company.html",
-        company=company,
-        module_label="Materials",
-        cancel_url=url_for("materials.companies"),
-    )
+    flash("Companies are not used in Materials.", "info")
+    return redirect(url_for("materials.catalog"))
 
 
 @stock_edits_bp.route("/ink/company/<int:company_id>", methods=["GET", "POST"])
@@ -1697,12 +1669,18 @@ def _edit_purchase_receipt(record_id, module, receipt_dir, redirect_endpoint, te
         notes = request.form.get("notes", "").strip()
         screenshot = request.files.get("screenshot")
 
-        if not receipt_date or not company_id:
-            flash("Receipt date and company are required.", "danger")
+        if not receipt_date:
+            flash("Receipt date is required.", "danger")
             return redirect(request.url)
 
         record.receipt_date = _parse_date(receipt_date)
-        record.company_id = company_id
+        if module == StockPurchaseReceipt.MODULE_INK:
+            if not company_id:
+                flash("Company is required for ink receipts.", "danger")
+                return redirect(request.url)
+            record.company_id = company_id
+        else:
+            record.company_id = None
         record.title = title or None
         record.amount = amount
         record.notes = notes or None
@@ -1744,12 +1722,12 @@ def _edit_purchase_receipt(record_id, module, receipt_dir, redirect_endpoint, te
         cancel_url = url_for("inventory.purchase_receipts")
         view_url = url_for("inventory.view_purchase_receipt", record_id=record.id)
     else:
-        companies = get_material_companies()
         received_txns = MaterialTransaction.query.filter_by(
             transaction_type=MaterialTransaction.TRANSACTION_RECEIVED
         ).order_by(MaterialTransaction.transaction_date.desc()).limit(100).all()
         cancel_url = url_for("materials.purchase_receipts")
         view_url = url_for("materials.view_purchase_receipt", record_id=record.id)
+        companies = []
 
     return render_template(
         template_name,

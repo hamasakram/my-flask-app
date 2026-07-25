@@ -24,7 +24,7 @@
         <div class="form-group full-width">
             <label for="material_name">Material</label>
             <input type="text" id="material_name" name="material_name" placeholder="e.g. METALIZE · CPP METALIZE · 810 · 20μ" required>
-            <small class="field-note">Type the material name exactly as it appears in stock records for live stock to match.</small>
+            <small class="field-note">Materials added here automatically appear in Stock Purchased, Stock Used, and Live Inventory.</small>
         </div>
         <div class="form-group">
             <label for="quantity">Quantity (kg)</label>
@@ -46,7 +46,15 @@
 {% endif %}
 
 <div class="card">
-    <h2>Current Opening Stock Records</h2>
+    <div class="card-header-row">
+        <h2>Current Opening Stock Records</h2>
+        {% if current_user.can_edit() and records %}
+        <form method="POST" action="{{ url_for('materials.clear_all_opening_stock') }}" class="inline-action-form"
+              onsubmit="return confirm('Delete ALL opening stock records? This cannot be undone.');">
+            <button type="submit" class="btn btn-danger btn-sm">Clear All</button>
+        </form>
+        {% endif %}
+    </div>
     <table class="data-table">
         <thead><tr><th>Material</th><th>Quantity (kg)</th><th>As of Date</th><th>Notes</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>

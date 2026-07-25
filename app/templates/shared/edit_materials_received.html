@@ -4,24 +4,18 @@
 {% block content %}
 <div class="page-header">
     <h1>Edit Stock Purchased</h1>
-    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.material.display_name }}</p>
+    <p class="page-subtitle">{{ txn.material.display_name }}</p>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
     <form method="POST" class="form-grid" id="purchase-form">
         <div class="form-group">
-            <label for="company_id">Company</label>
-            <select id="company_id" name="company_id" required>
-                {% for company in companies %}
-                <option value="{{ company.id }}" {% if company.id == txn.company_id %}selected{% endif %}>{{ company.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group">
             <label for="material_id">Material</label>
             <select id="material_id" name="material_id" required>
-                <option value="{{ txn.material_id }}" selected>{{ txn.material.display_name }}</option>
+                {% for material in materials %}
+                <option value="{{ material.id }}" {% if material.id == txn.material_id %}selected{% endif %}>{{ material.display_name }}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="form-group">
@@ -49,23 +43,4 @@
     </form>
 </div>
 {% endif %}
-{% endblock %}
-
-{% block scripts %}
-<script>
-const companySelect = document.getElementById('company_id');
-const materialSelect = document.getElementById('material_id');
-companySelect?.addEventListener('change', async function() {
-    if (!this.value) return;
-    const res = await fetch(`/materials/inventory/api/materials/${this.value}`);
-    const materials = await res.json();
-    materialSelect.innerHTML = '';
-    materials.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.name;
-        materialSelect.appendChild(opt);
-    });
-});
-</script>
 {% endblock %}

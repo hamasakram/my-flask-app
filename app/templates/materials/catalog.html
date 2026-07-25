@@ -20,15 +20,6 @@
             </div>
         </div>
         <div class="form-group">
-            <label for="company_id">Company</label>
-            <select id="company_id" name="company_id" required>
-                <option value="">Select company</option>
-                {% for company in companies %}
-                <option value="{{ company.id }}">{{ company.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group">
             <label for="material_name">Item Name</label>
             <input type="text" id="material_name" name="material_name" required>
         </div>
@@ -44,20 +35,18 @@
             <button type="submit" class="btn btn-primary">Save Material</button>
         </div>
     </form>
-    <p class="field-note">Add companies first in <a href="{{ url_for('materials.companies') }}">Companies</a>.</p>
 </div>
 {% endif %}
 
 <div class="card">
     <h2>Saved Materials</h2>
     <table class="data-table">
-        <thead><tr><th>ID</th><th>Category</th><th>Company</th><th>Item</th><th>Size</th><th>Micron</th><th>Added</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
+        <thead><tr><th>ID</th><th>Category</th><th>Item</th><th>Size</th><th>Micron</th><th>Added</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for material in materials %}
             <tr>
                 <td>#{{ material.id }}</td>
                 <td><span class="badge badge-blue">{{ material.category }}</span></td>
-                <td>{{ material.company.name }}</td>
                 <td>{{ material.name }}</td>
                 <td>{{ material.size or '—' }}</td>
                 <td>{{ material.micron or '—' }}</td>
@@ -68,7 +57,7 @@
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No materials saved yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No materials saved yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

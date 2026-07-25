@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Edit Stock Used</h1>
-    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.material.display_name }}</p>
+    <p class="page-subtitle">{{ txn.material.display_name }}</p>
 </div>
 
 {% if current_user.can_edit() %}
