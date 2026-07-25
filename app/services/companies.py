@@ -1,4 +1,19 @@
+from app import db
 from app.models import Company
+
+DEFAULT_MATERIALS_COMPANY = "RN Materials"
+
+
+def get_or_create_default_materials_company() -> Company:
+    company = Company.query.filter_by(
+        name=DEFAULT_MATERIALS_COMPANY, scope=Company.SCOPE_MATERIALS
+    ).first()
+    if company:
+        return company
+    company = Company(name=DEFAULT_MATERIALS_COMPANY, scope=Company.SCOPE_MATERIALS)
+    db.session.add(company)
+    db.session.flush()
+    return company
 
 
 def get_ink_companies():

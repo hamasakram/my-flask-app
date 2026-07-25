@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Materials - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Materials</h1>
+    <p class="page-subtitle">Add and list all printing materials</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Material</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="category">Category Name</label>
+            <input type="text" id="category" name="category" placeholder="e.g. PET, Metalize" required>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size" placeholder="e.g. 680 mm">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron <span class="hint">(optional)</span></label>
+            <input type="text" id="micron" name="micron" placeholder="e.g. 12, 15">
+        </div>
+        <div class="form-group">
+            <label for="initial_kg">KG</label>
+            <input type="number" id="initial_kg" name="initial_kg" step="0.1" min="0" value="0" required>
+            <small class="field-note">Starting stock in kg when material is first added.</small>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Material</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>All Materials</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Material Name</th>
+                <th>Size</th>
+                <th>Micron</th>
+                <th>KG</th>
+                <th>Left (KG)</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for material in materials %}
+            <tr>
+                <td>{{ material.category }}</td>
+                <td>{{ material.name }}</td>
+                <td>{{ material.size or '—' }}</td>
+                <td>{{ material.micron or '—' }}</td>
+                <td>{{ "%.1f"|format(material.initial_kg) }}</td>
+                <td><strong>{{ "%.1f"|format(live_stock.get(material.id, material.initial_kg)) }}</strong></td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_materials_catalog', material_id=material.id),
+                    url_for('stock_deletes.delete_materials_catalog', material_id=material.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No materials yet. Add your first material above.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

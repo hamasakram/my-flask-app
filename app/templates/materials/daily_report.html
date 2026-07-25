@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Daily Report - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Daily Report</h1>
+        <p class="page-subtitle">{{ report_data.report_date.strftime('%d %B %Y') }}</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('materials_reports.daily_report_pdf', date=selected_date) }}" class="btn btn-primary">Download PDF</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="GET" class="filter-bar">
+        <input type="date" name="date" value="{{ selected_date }}">
+        <button type="submit" class="btn btn-secondary">View Date</button>
+    </form>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Stock In Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_stock_in) }} kg</span>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Used Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_used) }} kg</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>How Much Left — All Materials</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Material</th>
+                <th>Size</th>
+                <th>Micron</th>
+                <th>Initial KG</th>
+                <th>Stock In</th>
+                <th>Used</th>
+                <th>Left (KG)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data.live_stock %}
+            <tr>
+                <td>{{ item.material.category }}</td>
+                <td>{{ item.material.name }}</td>
+                <td>{{ item.material.size or '—' }}</td>
+                <td>{{ item.material.micron or '—' }}</td>
+                <td>{{ "%.1f"|format(item.initial_kg) }}</td>
+                <td>{{ "%.1f"|format(item.stock_in) }}</td>
+                <td>{{ "%.1f"|format(item.used) }}</td>
+                <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty">No materials added yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Today's Activity</h2>
+    <table class="data-table">
+        <thead>
+            <tr><th>Type</th><th>Material</th><th>Qty (KG)</th><th>Left (KG)</th><th>Where Used</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+            {% for txn in report_data.stock_in_today %}
+            <tr>
+                <td><span class="badge badge-green">Stock In</span></td>
+                <td>{{ txn.material.display_name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>—</td>
+                <td>—</td>
+                <td>{{ txn.notes or '—' }}</td>
+            </tr>
+            {% endfor %}
+            {% for txn in report_data.stock_left_today %}
+            <tr>
+                <td><span class="badge badge-orange">Stock Left</span></td>
+                <td>{{ txn.material.display_name }}</td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                <td>{{ txn.where_used or '—' }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+            </tr>
+            {% endfor %}
+            {% if not report_data.stock_in_today and not report_data.stock_left_today %}
+            <tr><td colspan="6" class="empty">No activity on this date</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

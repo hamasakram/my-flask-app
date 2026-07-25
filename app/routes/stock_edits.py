@@ -334,13 +334,13 @@ def edit_materials_received(txn_id):
         )
         db.session.commit()
         flash("Purchase record updated.", "success")
-        return redirect(url_for("materials.receive_stock"))
+        return redirect(url_for("materials.stock_in"))
 
     return render_template(
         "shared/edit_materials_received.html",
         txn=txn,
         companies=get_material_companies(),
-        cancel_url=url_for("materials.receive_stock"),
+        cancel_url=url_for("materials.stock_in"),
     )
 
 
@@ -375,12 +375,12 @@ def edit_materials_used(txn_id):
         )
         db.session.commit()
         flash("Usage record updated.", "success")
-        return redirect(url_for("materials.use_stock"))
+        return redirect(url_for("materials.stock_left"))
 
     return render_template(
         "shared/edit_materials_used.html",
         txn=txn,
-        cancel_url=url_for("materials.use_stock"),
+        cancel_url=url_for("materials.stock_left"),
     )
 
 
@@ -821,21 +821,21 @@ def edit_materials_catalog(material_id):
 
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
-        category = request.form.get("category", "PET").strip().upper()
+        category = request.form.get("category", "").strip()
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
+        initial_kg = request.form.get("initial_kg", type=float)
 
-        if not company_id or not material_name or category not in ("PET", "METALIZE", "LD"):
-            flash("Company, category, and item name are required.", "danger")
+        if not category or not material_name or initial_kg is None:
+            flash("Category, material name, and KG are required.", "danger")
             return redirect(url_for("stock_edits.edit_materials_catalog", material_id=material_id))
 
-        material.company_id = company_id
         material.category = category
         material.name = material_name
         material.size = size
         material.micron = micron or None
+        material.initial_kg = initial_kg
         log_audit(
             current_user.id,
             "UPDATE",
@@ -845,14 +845,12 @@ def edit_materials_catalog(material_id):
         )
         db.session.commit()
         flash("Material updated.", "success")
-        return redirect(url_for("materials.catalog"))
+        return redirect(url_for("materials.materials_list"))
 
     return render_template(
         "shared/edit_material_catalog.html",
         material=material,
-        companies=get_material_companies(),
-        categories=("PET", "METALIZE", "LD"),
-        cancel_url=url_for("materials.catalog"),
+        cancel_url=url_for("materials.materials_list"),
     )
 
 

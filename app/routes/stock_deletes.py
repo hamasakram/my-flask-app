@@ -170,7 +170,7 @@ def delete_materials_received(txn_id):
         txn,
         "MaterialTransaction",
         f"Deleted purchase record #{txn_id}",
-        url_for("materials.receive_stock"),
+        url_for("materials.stock_in"),
     )
 
 
@@ -184,7 +184,7 @@ def delete_materials_used(txn_id):
         txn,
         "MaterialTransaction",
         f"Deleted usage record #{txn_id}",
-        url_for("materials.use_stock"),
+        url_for("materials.stock_left"),
     )
 
 
@@ -230,7 +230,7 @@ def delete_materials_catalog(material_id):
         material,
         "Material",
         f"Deleted material: {material.display_name}",
-        url_for("materials.catalog"),
+        url_for("materials.materials_list"),
     )
 
 

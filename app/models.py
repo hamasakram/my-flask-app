@@ -118,10 +118,11 @@ class Material(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
-    category = db.Column(db.String(20), nullable=False, default="PET")
+    category = db.Column(db.String(100), nullable=False, default="")
     name = db.Column(db.String(150), nullable=False)
     size = db.Column(db.String(100), nullable=False, default="")
     micron = db.Column(db.String(50))
+    initial_kg = db.Column(db.Float, nullable=False, default=0)
     low_stock_threshold = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
@@ -137,7 +138,7 @@ class Material(db.Model):
             parts.append(self.size)
         if self.micron:
             parts.append(f"{self.micron}μ")
-        return " · ".join(parts)
+        return " · ".join(p for p in parts if p)
 
 
 class MaterialOpeningStock(db.Model):
@@ -162,9 +163,11 @@ class MaterialOpeningStock(db.Model):
 class MaterialTransaction(db.Model):
     __tablename__ = "material_transactions"
 
-    TRANSACTION_RECEIVED = "Stock Received"
-    TRANSACTION_USED = "Stock Used"
-    TRANSACTION_TYPES = (TRANSACTION_RECEIVED, TRANSACTION_USED)
+    TRANSACTION_STOCK_IN = "Stock In"
+    TRANSACTION_STOCK_LEFT = "Stock Left"
+    TRANSACTION_RECEIVED = TRANSACTION_STOCK_IN
+    TRANSACTION_USED = TRANSACTION_STOCK_LEFT
+    TRANSACTION_TYPES = (TRANSACTION_STOCK_IN, TRANSACTION_STOCK_LEFT)
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
@@ -177,6 +180,7 @@ class MaterialTransaction(db.Model):
     tw = db.Column(db.Float, nullable=True)
     net_weight = db.Column(db.Float, nullable=True)
     micron = db.Column(db.String(50))
+    where_used = db.Column(db.Text)
     transaction_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))

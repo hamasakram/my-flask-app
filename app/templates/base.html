@@ -53,22 +53,11 @@
             {% elif active_module == 'materials' %}
             <li><a href="{{ url_for('materials_main.dashboard') }}" class="{% if request.endpoint == 'materials_main.dashboard' %}active{% endif %}">Dashboard</a></li>
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
-            <li class="nav-section">Materials</li>
-            <li><a href="{{ url_for('materials.companies') }}">Companies</a></li>
-            <li><a href="{{ url_for('materials.catalog') }}">Materials to Add</a></li>
-            <li><a href="{{ url_for('materials.opening_stock') }}">Opening Stock</a></li>
-            <li><a href="{{ url_for('materials.receive_stock') }}">Stock Purchased</a></li>
-            <li><a href="{{ url_for('materials.purchase_receipts') }}">Purchase Receipts</a></li>
-            <li><a href="{{ url_for('materials.use_stock') }}">Stock Used</a></li>
-            <li><a href="{{ url_for('materials.live_inventory') }}">Live Inventory</a></li>
-            <li class="nav-section">Reports</li>
-            <li><a href="{{ url_for('materials_reports.transactions') }}">Transactions</a></li>
-            <li><a href="{{ url_for('materials_reports.company_report') }}">By Company</a></li>
-            <li><a href="{{ url_for('materials_reports.material_report') }}">By Material</a></li>
-            <li><a href="{{ url_for('materials_reports.monthly_report') }}">Monthly</a></li>
-            <li><a href="{{ url_for('materials_reports.yearly_report') }}">Yearly</a></li>
-            <li><a href="{{ url_for('materials_reports.audit_trail') }}">Audit Trail</a></li>
-            <li><a href="{{ url_for('pdf.builder', module='materials') }}">Custom PDF</a></li>
+            <li class="nav-section">Printing Materials</li>
+            <li><a href="{{ url_for('materials.materials_list') }}">Materials</a></li>
+            <li><a href="{{ url_for('materials.stock_in') }}">Stock In</a></li>
+            <li><a href="{{ url_for('materials.stock_left') }}">Stock Left</a></li>
+            <li><a href="{{ url_for('materials_reports.daily_report') }}">Daily Report</a></li>
             {% endif %}
             {% elif active_module == 'glue' %}
             <li><a href="{{ url_for('glue_main.dashboard') }}" class="{% if request.endpoint == 'glue_main.dashboard' %}active{% endif %}">Dashboard</a></li>

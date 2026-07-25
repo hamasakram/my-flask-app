@@ -8,8 +8,9 @@ COLUMN_MIGRATIONS = {
         "unit_type": "VARCHAR(20)",
     },
     "materials": {
-        "category": "VARCHAR(20)",
+        "category": "VARCHAR(100)",
         "micron": "VARCHAR(50)",
+        "initial_kg": "FLOAT DEFAULT 0",
     },
     "material_transactions": {
         "weight_per_quantity": "FLOAT",
@@ -17,6 +18,7 @@ COLUMN_MIGRATIONS = {
         "tw": "FLOAT",
         "net_weight": "FLOAT",
         "micron": "VARCHAR(50)",
+        "where_used": "TEXT",
     },
     "material_opening_stock": {
         "material_name": "VARCHAR(255)",
