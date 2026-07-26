@@ -2,7 +2,7 @@ from datetime import datetime
 from io import BytesIO
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -31,11 +31,11 @@ def export_materials_daily_pdf(report_data):
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
-        pagesize=A4,
+        pagesize=landscape(A4),
         topMargin=0.45 * inch,
         bottomMargin=0.45 * inch,
-        leftMargin=0.5 * inch,
-        rightMargin=0.5 * inch,
+        leftMargin=0.4 * inch,
+        rightMargin=0.4 * inch,
     )
     styles = getSampleStyleSheet()
     elements = []
@@ -47,15 +47,6 @@ def export_materials_daily_pdf(report_data):
         textColor=colors.HexColor(f"#{BRAND_HEADER_COLOR}"),
         spaceBefore=10,
         spaceAfter=6,
-        borderPadding=4,
-    )
-    material_title = ParagraphStyle(
-        "MaterialTitle",
-        parent=styles["Heading3"],
-        fontSize=10,
-        textColor=colors.HexColor("#1F2937"),
-        spaceBefore=6,
-        spaceAfter=4,
     )
     section_label = ParagraphStyle(
         "SectionLabel",
@@ -93,16 +84,14 @@ def export_materials_daily_pdf(report_data):
     if not grouped:
         elements.append(Paragraph("No materials recorded yet.", styles["Normal"]))
     else:
+        stock_col_widths = [80, 55, 45, 55, 55, 55, 55]
+        activity_col_widths = [55, 80, 55, 55, 55, 95, 95]
+
         for idx, category in enumerate(grouped):
             if idx > 0:
                 elements.append(Spacer(1, 0.15 * inch))
 
-            elements.append(
-                Paragraph(
-                    f"CATEGORY: {category['name'].upper()}",
-                    category_title,
-                )
-            )
+            elements.append(Paragraph(f"CATEGORY: {category['name'].upper()}", category_title))
             elements.append(
                 Paragraph(
                     f"Category Total Left: <b>{category['total_left']:.1f} kg</b> &nbsp;|&nbsp; "
@@ -112,61 +101,68 @@ def export_materials_daily_pdf(report_data):
                 )
             )
 
+            stock_data = [
+                ["Material", "Size", "Micron", "Initial KG", "Stock In", "Used", "Left (KG)"]
+            ]
             for material_block in category["materials"]:
                 material = material_block["material"]
                 stock = material_block["stock"]
-                size_micron = material.size or "—"
-                if material.micron:
-                    size_micron = f"{size_micron} / {material.micron}μ"
-
-                elements.append(
-                    Paragraph(
-                        f"<b>{material.name}</b> &nbsp; <font size=8 color='#64748B'>(Size: {size_micron})</font>",
-                        material_title,
-                    )
-                )
-
-                summary_data = [
-                    ["Initial KG", "Stock In", "Used", "Left (KG)"],
+                stock_data.append(
                     [
+                        material.name,
+                        material.size or "—",
+                        material.micron or "—",
                         f"{stock['initial_kg']:.1f}",
                         f"{stock['stock_in']:.1f}",
                         f"{stock['used']:.1f}",
                         f"{stock['current']:.1f}",
-                    ],
-                ]
-                summary_table = Table(summary_data, colWidths=[90, 90, 90, 90])
-                summary_table.setStyle(_table_style())
-                elements.append(summary_table)
-                elements.append(Spacer(1, 0.08 * inch))
+                    ]
+                )
 
-                if material_block["stock_in_today"]:
-                    elements.append(Paragraph("<b>Stock In Today</b>", section_label))
-                    in_data = [["Qty (KG)", "Notes"]]
-                    for txn in material_block["stock_in_today"]:
-                        in_data.append([f"{txn.quantity:.1f}", txn.notes or "—"])
-                    in_table = Table(in_data, colWidths=[100, 260])
-                    in_table.setStyle(_table_style())
-                    elements.append(in_table)
-                    elements.append(Spacer(1, 0.06 * inch))
+            stock_table = Table(stock_data, colWidths=stock_col_widths, repeatRows=1)
+            stock_table.setStyle(_table_style())
+            elements.append(stock_table)
+            elements.append(Spacer(1, 0.1 * inch))
 
-                if material_block["stock_left_today"]:
-                    elements.append(Paragraph("<b>Stock Left / Used Today</b>", section_label))
-                    left_data = [["Used (KG)", "Left (KG)", "Where Used", "Notes"]]
-                    for txn in material_block["stock_left_today"]:
-                        left_data.append(
-                            [
-                                f"{txn.quantity:.1f}",
-                                f"{txn.quantity_left:.1f}" if txn.quantity_left is not None else "—",
-                                txn.where_used or "—",
-                                txn.notes or "—",
-                            ]
-                        )
-                    left_table = Table(left_data, colWidths=[70, 70, 110, 110])
-                    left_table.setStyle(_table_style())
-                    elements.append(left_table)
+            activity_rows = []
+            for material_block in category["materials"]:
+                material = material_block["material"]
+                size_label = material.size or "—"
+                for txn in material_block["stock_in_today"]:
+                    activity_rows.append(
+                        [
+                            "Stock In",
+                            material.name,
+                            size_label,
+                            f"{txn.quantity:.1f}",
+                            "—",
+                            "—",
+                            txn.notes or "—",
+                        ]
+                    )
+                for txn in material_block["stock_left_today"]:
+                    activity_rows.append(
+                        [
+                            "Stock Left",
+                            material.name,
+                            size_label,
+                            f"{txn.quantity:.1f}",
+                            f"{txn.quantity_left:.1f}" if txn.quantity_left is not None else "—",
+                            txn.where_used or "—",
+                            txn.notes or "—",
+                        ]
+                    )
 
-                elements.append(Spacer(1, 0.12 * inch))
+            if activity_rows:
+                elements.append(Paragraph("<b>Today's Activity</b>", section_label))
+                activity_data = [
+                    ["Type", "Material", "Size", "Qty (KG)", "Left (KG)", "Where Used", "Notes"]
+                ] + activity_rows
+                activity_table = Table(activity_data, colWidths=activity_col_widths, repeatRows=1)
+                activity_table.setStyle(_table_style())
+                elements.append(activity_table)
+
+            elements.append(Spacer(1, 0.12 * inch))
 
     doc.build(elements)
     buffer.seek(0)
