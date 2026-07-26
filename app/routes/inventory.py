@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app import db
 from app.models import InkType, InventoryTransaction
@@ -49,6 +50,12 @@ def inks_list():
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
+        except IntegrityError:
+            db.session.rollback()
+            flash("Could not save ink — a similar record may already exist.", "danger")
+        except SQLAlchemyError:
+            db.session.rollback()
+            flash("Could not save ink due to a database error. Please try again.", "danger")
         return redirect(url_for("inventory.inks_list"))
 
     inks = list_inks()

@@ -86,6 +86,82 @@ def _add_column_if_missing(table: str, column: str, col_type: str):
                 raise
 
 
+def _drop_ink_unique_constraint():
+    """Remove legacy unique index so duplicate color names are allowed."""
+    inspector = inspect(db.engine)
+    if not inspector.has_table("ink_types"):
+        return
+
+    dialect = db.engine.dialect.name
+
+    if dialect == "postgresql":
+        with db.engine.begin() as conn:
+            exists = conn.execute(
+                text(
+                    """
+                    SELECT 1
+                    FROM pg_constraint c
+                    JOIN pg_class t ON c.conrelid = t.oid
+                    WHERE t.relname = 'ink_types' AND c.conname = 'uq_company_ink'
+                    """
+                )
+            ).fetchone()
+            if exists:
+                conn.execute(text("ALTER TABLE ink_types DROP CONSTRAINT uq_company_ink"))
+        return
+
+    if dialect == "sqlite":
+        with db.engine.begin() as conn:
+            table_sql = conn.execute(
+                text(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name='ink_types'"
+                )
+            ).scalar()
+            if not table_sql or "uq_company_ink" not in table_sql:
+                return
+
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE ink_types_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        company_id INTEGER NOT NULL,
+                        ink_company VARCHAR(100) DEFAULT '',
+                        name VARCHAR(150) NOT NULL,
+                        color_code VARCHAR(50),
+                        initial_cans FLOAT DEFAULT 0,
+                        weight_per_can FLOAT DEFAULT 0,
+                        unit_type VARCHAR(20),
+                        low_stock_threshold INTEGER,
+                        created_at DATETIME NOT NULL,
+                        FOREIGN KEY(company_id) REFERENCES companies (id)
+                    )
+                    """
+                )
+            )
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO ink_types_new (
+                        id, company_id, ink_company, name, color_code,
+                        initial_cans, weight_per_can, unit_type,
+                        low_stock_threshold, created_at
+                    )
+                    SELECT
+                        id, company_id,
+                        COALESCE(ink_company, ''),
+                        name, color_code,
+                        COALESCE(initial_cans, 0),
+                        COALESCE(weight_per_can, 0),
+                        unit_type, low_stock_threshold, created_at
+                    FROM ink_types
+                    """
+                )
+            )
+            conn.execute(text("DROP TABLE ink_types"))
+            conn.execute(text("ALTER TABLE ink_types_new RENAME TO ink_types"))
+
+
 def _drop_materials_unique_constraint():
     """Remove legacy unique index so duplicate item names are allowed."""
     inspector = inspect(db.engine)
@@ -481,6 +557,7 @@ def ensure_schema():
         for column, col_type in columns.items():
             _add_column_if_missing(table, column, col_type)
 
+    _drop_ink_unique_constraint()
     _drop_materials_unique_constraint()
     _migrate_material_opening_stock()
     _ensure_materials_company_id_nullable()
