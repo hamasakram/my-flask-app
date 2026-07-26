@@ -164,7 +164,7 @@ def delete_ink_catalog(ink_id):
 @login_required
 def delete_materials_received(txn_id):
     txn = MaterialTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != MaterialTransaction.TRANSACTION_RECEIVED:
+    if txn.transaction_type != MaterialTransaction.TRANSACTION_STOCK_IN:
         abort(404)
     return _delete_entity(
         txn,
@@ -178,7 +178,7 @@ def delete_materials_received(txn_id):
 @login_required
 def delete_materials_used(txn_id):
     txn = MaterialTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != MaterialTransaction.TRANSACTION_USED:
+    if txn.transaction_type != MaterialTransaction.TRANSACTION_STOCK_LEFT:
         abort(404)
     return _delete_entity(
         txn,

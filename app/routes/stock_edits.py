@@ -312,14 +312,9 @@ def edit_materials_received(txn_id):
             flash("Invalid material selection.", "danger")
             return redirect(url_for("stock_edits.edit_materials_received", txn_id=txn_id))
 
-        weights = parse_manual_weights(request.form)
         txn.material_id = material_id
+        txn.company_id = material.company_id
         txn.quantity = quantity
-        txn.weight_per_quantity = weights["weight_per_quantity"]
-        txn.gross_weight = weights["gross_weight"]
-        txn.tw = weights["tw"]
-        txn.net_weight = weights["net_weight"]
-        txn.micron = material.micron
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
         log_audit(
@@ -354,6 +349,7 @@ def edit_materials_used(txn_id):
         quantity_left = request.form.get("quantity_left", type=float)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
+        where_used = request.form.get("where_used", "").strip()
         notes = request.form.get("notes", "").strip()
 
         if quantity_left is None or quantity_left < 0 or not quantity or quantity <= 0 or not transaction_date:
@@ -362,6 +358,7 @@ def edit_materials_used(txn_id):
 
         txn.quantity_left = quantity_left
         txn.quantity = quantity
+        txn.where_used = where_used
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
         log_audit(

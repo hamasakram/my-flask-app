@@ -169,4 +169,92 @@ def get_daily_report_data(report_date: date) -> dict:
         "stock_left_today": stock_left_today,
         "total_stock_in": sum(t.quantity for t in stock_in_today),
         "total_used": sum(t.quantity for t in stock_left_today),
+        "grouped_categories": group_report_by_category(live_stock, stock_in_today, stock_left_today),
     }
+
+
+def group_report_by_category(live_stock, stock_in_today, stock_left_today) -> list[dict]:
+    """Group stock and daily activity by category, then material."""
+    categories: dict[str, dict] = {}
+
+    def ensure_category(name: str) -> dict:
+        key = name or "Uncategorized"
+        if key not in categories:
+            categories[key] = {
+                "name": key,
+                "materials": {},
+                "total_left": 0.0,
+                "stock_in_today": 0.0,
+                "used_today": 0.0,
+            }
+        return categories[key]
+
+    for item in live_stock:
+        cat = ensure_category(item["material"].category)
+        mat_id = item["material"].id
+        if mat_id not in cat["materials"]:
+            cat["materials"][mat_id] = {
+                "material": item["material"],
+                "stock": item,
+                "stock_in_today": [],
+                "stock_left_today": [],
+            }
+        else:
+            cat["materials"][mat_id]["stock"] = item
+        cat["total_left"] += item["current"]
+
+    for txn in stock_in_today:
+        cat = ensure_category(txn.material.category)
+        mat_id = txn.material.id
+        if mat_id not in cat["materials"]:
+            cat["materials"][mat_id] = {
+                "material": txn.material,
+                "stock": {
+                    "initial_kg": float(txn.material.initial_kg),
+                    "stock_in": 0.0,
+                    "used": 0.0,
+                    "current": float(txn.material.initial_kg),
+                },
+                "stock_in_today": [],
+                "stock_left_today": [],
+            }
+        cat["materials"][mat_id]["stock_in_today"].append(txn)
+        cat["stock_in_today"] += float(txn.quantity)
+
+    for txn in stock_left_today:
+        cat = ensure_category(txn.material.category)
+        mat_id = txn.material.id
+        if mat_id not in cat["materials"]:
+            cat["materials"][mat_id] = {
+                "material": txn.material,
+                "stock": {
+                    "initial_kg": float(txn.material.initial_kg),
+                    "stock_in": 0.0,
+                    "used": 0.0,
+                    "current": float(txn.material.initial_kg),
+                },
+                "stock_in_today": [],
+                "stock_left_today": [],
+            }
+        cat["materials"][mat_id]["stock_left_today"].append(txn)
+        cat["used_today"] += float(txn.quantity)
+
+    result = []
+    for cat_name in sorted(categories.keys(), key=str.lower):
+        cat = categories[cat_name]
+        materials = []
+        for mat_id in sorted(
+            cat["materials"].keys(),
+            key=lambda mid: cat["materials"][mid]["material"].name.lower(),
+        ):
+            materials.append(cat["materials"][mat_id])
+        result.append(
+            {
+                "name": cat["name"],
+                "materials": materials,
+                "total_left": cat["total_left"],
+                "stock_in_today": cat["stock_in_today"],
+                "used_today": cat["used_today"],
+            }
+        )
+    return result

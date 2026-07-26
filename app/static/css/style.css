@@ -661,7 +661,28 @@ textarea { resize: vertical; min-height: 4rem; }
 
 .row-opening td { background: #f0fdf4; }
 
-@media (max-width: 900px) {
+.report-category-block { border-left: 4px solid var(--primary); }
+.report-category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+.report-category-header h2 { margin: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 0.04em; }
+.report-category-stats { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.88rem; color: var(--muted); }
+.report-material-block {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.report-material-block h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+.report-material-block h4 { margin: 0.75rem 0 0.35rem; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
     .sidebar {
         position: static;
         width: 100%;

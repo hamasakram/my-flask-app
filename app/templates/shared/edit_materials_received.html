@@ -1,16 +1,15 @@
 {% extends "base.html" %}
-{% from "shared/manual_weight_fields.html" import manual_weight_fields %}
-{% block title %}Edit Purchase - Materials{% endblock %}
+{% block title %}Edit Stock In - Materials{% endblock %}
 {% block content %}
 <div class="page-header">
-    <h1>Edit Stock Purchased</h1>
+    <h1>Edit Stock In</h1>
     <p class="page-subtitle">{{ txn.material.display_name }}</p>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
-    <form method="POST" class="form-grid" id="purchase-form">
-        <div class="form-group">
+    <form method="POST" class="form-grid">
+        <div class="form-group full-width">
             <label for="material_id">Material</label>
             <select id="material_id" name="material_id" required>
                 {% for material in materials %}
@@ -19,17 +18,11 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="quantity">Quantity</label>
+            <label for="quantity">Quantity (KG)</label>
             <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
         </div>
-        {{ manual_weight_fields(
-            gross_value=txn.gross_weight if txn.gross_weight is not none else '',
-            tw_value=txn.tw if txn.tw is not none else '',
-            net_value=txn.net_weight if txn.net_weight is not none else '',
-            wpq_value=txn.weight_per_quantity if txn.weight_per_quantity is not none else ''
-        ) }}
         <div class="form-group">
-            <label for="transaction_date">Purchase Date</label>
+            <label for="transaction_date">Date</label>
             <input type="date" id="transaction_date" name="transaction_date" value="{{ txn.transaction_date.isoformat() }}" required>
         </div>
         <div class="form-group full-width">

@@ -29,71 +29,70 @@
     </div>
 </div>
 
-<div class="card">
-    <h2>How Much Left — All Materials</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Category</th>
-                <th>Material</th>
-                <th>Size</th>
-                <th>Micron</th>
-                <th>Initial KG</th>
-                <th>Stock In</th>
-                <th>Used</th>
-                <th>Left (KG)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in report_data.live_stock %}
-            <tr>
-                <td>{{ item.material.category }}</td>
-                <td>{{ item.material.name }}</td>
-                <td>{{ item.material.size or '—' }}</td>
-                <td>{{ item.material.micron or '—' }}</td>
-                <td>{{ "%.1f"|format(item.initial_kg) }}</td>
-                <td>{{ "%.1f"|format(item.stock_in) }}</td>
-                <td>{{ "%.1f"|format(item.used) }}</td>
-                <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="8" class="empty">No materials added yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{% for category in report_data.grouped_categories %}
+<div class="card report-category-block">
+    <div class="report-category-header">
+        <h2>{{ category.name }}</h2>
+        <div class="report-category-stats">
+            <span>Left: <strong>{{ "%.1f"|format(category.total_left) }} kg</strong></span>
+            <span>Stock In Today: <strong>{{ "%.1f"|format(category.stock_in_today) }} kg</strong></span>
+            <span>Used Today: <strong>{{ "%.1f"|format(category.used_today) }} kg</strong></span>
+        </div>
+    </div>
 
-<div class="card">
-    <h2>Today's Activity</h2>
-    <table class="data-table">
-        <thead>
-            <tr><th>Type</th><th>Material</th><th>Qty (KG)</th><th>Left (KG)</th><th>Where Used</th><th>Notes</th></tr>
-        </thead>
-        <tbody>
-            {% for txn in report_data.stock_in_today %}
-            <tr>
-                <td><span class="badge badge-green">Stock In</span></td>
-                <td>{{ txn.material.display_name }}</td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>—</td>
-                <td>—</td>
-                <td>{{ txn.notes or '—' }}</td>
-            </tr>
-            {% endfor %}
-            {% for txn in report_data.stock_left_today %}
-            <tr>
-                <td><span class="badge badge-orange">Stock Left</span></td>
-                <td>{{ txn.material.display_name }}</td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
-                <td>{{ txn.where_used or '—' }}</td>
-                <td>{{ txn.notes or '—' }}</td>
-            </tr>
-            {% endfor %}
-            {% if not report_data.stock_in_today and not report_data.stock_left_today %}
-            <tr><td colspan="6" class="empty">No activity on this date</td></tr>
-            {% endif %}
-        </tbody>
-    </table>
+    {% for block in category.materials %}
+    <div class="report-material-block">
+        <h3>{{ block.material.name }}{% if block.material.size %} <span class="hint">· {{ block.material.size }}{% if block.material.micron %} / {{ block.material.micron }}μ{% endif %}</span>{% endif %}</h3>
+
+        <table class="data-table compact">
+            <thead>
+                <tr><th>Initial KG</th><th>Stock In</th><th>Used</th><th>Left (KG)</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>{{ "%.1f"|format(block.stock.initial_kg) }}</td>
+                    <td>{{ "%.1f"|format(block.stock.stock_in) }}</td>
+                    <td>{{ "%.1f"|format(block.stock.used) }}</td>
+                    <td><strong>{{ "%.1f"|format(block.stock.current) }}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        {% if block.stock_in_today %}
+        <h4>Stock In Today</h4>
+        <table class="data-table compact">
+            <thead><tr><th>Qty (KG)</th><th>Notes</th></tr></thead>
+            <tbody>
+                {% for txn in block.stock_in_today %}
+                <tr>
+                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                    <td>{{ txn.notes or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if block.stock_left_today %}
+        <h4>Stock Left / Used Today</h4>
+        <table class="data-table compact">
+            <thead><tr><th>Used (KG)</th><th>Left (KG)</th><th>Where Used</th><th>Notes</th></tr></thead>
+            <tbody>
+                {% for txn in block.stock_left_today %}
+                <tr>
+                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                    <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                    <td>{{ txn.where_used or '—' }}</td>
+                    <td>{{ txn.notes or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
+    {% endfor %}
 </div>
+{% else %}
+<div class="card"><p class="empty-state">No materials added yet.</p></div>
+{% endfor %}
 {% endblock %}
