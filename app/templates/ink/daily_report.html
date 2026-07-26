@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Daily Report - Ink{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Daily Report</h1>
+        <p class="page-subtitle">{{ report_data.report_date.strftime('%d %B %Y') }}</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('ink_reports.daily_report_pdf', date=selected_date) }}" class="btn btn-primary">Download PDF</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="GET" class="filter-bar">
+        <input type="date" name="date" value="{{ selected_date }}">
+        <button type="submit" class="btn btn-secondary">View Date</button>
+    </form>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Cans In Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_cans_in) }}</span>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Cans Used Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_used) }}</span>
+    </div>
+</div>
+
+{% for company in report_data.grouped_companies %}
+<div class="card report-category-block">
+    <div class="report-category-header">
+        <h2>{{ company.name }}</h2>
+        <div class="report-category-stats">
+            <span>Cans Left: <strong>{{ "%.1f"|format(company.total_cans_left) }}</strong></span>
+            <span>Weight Left: <strong>{{ "%.1f"|format(company.total_weight_left) }} kg</strong></span>
+            <span>Cans In Today: <strong>{{ "%.1f"|format(company.cans_in_today) }}</strong></span>
+            <span>Used Today: <strong>{{ "%.1f"|format(company.used_today) }}</strong></span>
+        </div>
+    </div>
+
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Color Code</th><th>Color</th><th>Init. Cans</th><th>Wt/Can</th>
+                <th>Init. Wt</th><th>Cans In</th><th>Used</th><th>Cans Left</th><th>Left Wt</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for block in company.inks %}
+            <tr>
+                <td>{{ block.ink.color_code or '—' }}</td>
+                <td>{{ block.ink.name }}</td>
+                <td>{{ "%.1f"|format(block.stock.initial_cans) }}</td>
+                <td>{{ "%.1f"|format(block.ink.weight_per_can) }}</td>
+                <td>{{ "%.1f"|format(block.stock.initial_weight) }}</td>
+                <td>{{ "%.1f"|format(block.stock.cans_in) }}</td>
+                <td>{{ "%.1f"|format(block.stock.used) }}</td>
+                <td><strong>{{ "%.1f"|format(block.stock.current_cans) }}</strong></td>
+                <td><strong>{{ "%.1f"|format(block.stock.current_weight) }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {% set has_activity = namespace(value=false) %}
+    {% for block in company.inks %}
+        {% if block.cans_in_today or block.cans_left_today %}{% set has_activity.value = true %}{% endif %}
+    {% endfor %}
+
+    {% if has_activity.value %}
+    <h4>Today's Activity</h4>
+    <table class="data-table compact">
+        <thead><tr><th>Type</th><th>Color</th><th>Code</th><th>Cans</th><th>Left</th><th>Where Used</th><th>Notes</th></tr></thead>
+        <tbody>
+            {% for block in company.inks %}
+                {% for txn in block.cans_in_today %}
+                <tr>
+                    <td><span class="badge badge-green">Cans In</span></td>
+                    <td>{{ block.ink.name }}</td>
+                    <td>{{ block.ink.color_code or '—' }}</td>
+                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                    <td>—</td><td>—</td>
+                    <td>{{ txn.notes or '—' }}</td>
+                </tr>
+                {% endfor %}
+                {% for txn in block.cans_left_today %}
+                <tr>
+                    <td><span class="badge badge-orange">Cans Left</span></td>
+                    <td>{{ block.ink.name }}</td>
+                    <td>{{ block.ink.color_code or '—' }}</td>
+                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                    <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                    <td>{{ txn.where_used or '—' }}</td>
+                    <td>{{ txn.notes or '—' }}</td>
+                </tr>
+                {% endfor %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+</div>
+{% else %}
+<div class="card"><p class="empty-state">No inks added yet.</p></div>
+{% endfor %}
+{% endblock %}

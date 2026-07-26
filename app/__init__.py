@@ -35,7 +35,7 @@ def create_app(config_class=Config):
     from app.routes.auth import auth_bp
     from app.routes.main import main_bp
     from app.routes.inventory import inventory_bp
-    from app.routes.reports import reports_bp
+    from app.routes.ink_reports import ink_reports_bp
     from app.routes.admin import admin_bp
     from app.routes.materials_main import materials_main_bp
     from app.routes.materials_inventory import materials_bp
@@ -54,7 +54,7 @@ def create_app(config_class=Config):
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(inventory_bp)
-    app.register_blueprint(reports_bp)
+    app.register_blueprint(ink_reports_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(materials_main_bp)
     app.register_blueprint(materials_bp)

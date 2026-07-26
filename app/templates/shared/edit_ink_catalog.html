@@ -3,26 +3,35 @@
 {% block content %}
 <div class="page-header">
     <h1>Edit Ink</h1>
-    <p class="page-subtitle">{{ ink.company.name }}</p>
+    <p class="page-subtitle">{{ ink.display_name }}</p>
 </div>
-<div class="card">
-    <form method="POST" class="form-grid">
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <form method="POST" class="form-grid" id="edit-ink-form">
         <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" value="{{ ink.name }}" required>
+            <label for="ink_company">Ink Company</label>
+            <input type="text" id="ink_company" name="ink_company" value="{{ ink.ink_company }}" required>
         </div>
         <div class="form-group">
             <label for="color_code">Color Code</label>
             <input type="text" id="color_code" name="color_code" value="{{ ink.color_code or '' }}">
         </div>
         <div class="form-group">
-            <label for="unit_type">Unit Type</label>
-            <select id="unit_type" name="unit_type">
-                <option value="">Select unit</option>
-                {% for unit in unit_types %}
-                <option value="{{ unit }}" {% if ink.unit_type == unit %}selected{% endif %}>{{ unit }}</option>
-                {% endfor %}
-            </select>
+            <label for="color">Color</label>
+            <input type="text" id="color" name="color" value="{{ ink.name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="total_cans">Total Cans</label>
+            <input type="number" id="total_cans" name="total_cans" step="0.1" min="0" value="{{ ink.initial_cans }}" required>
+        </div>
+        <div class="form-group">
+            <label for="weight_per_can">Weight Per Can (kg)</label>
+            <input type="number" id="weight_per_can" name="weight_per_can" step="0.01" min="0" value="{{ ink.weight_per_can }}" required>
+        </div>
+        <div class="form-group">
+            <label>Total Weight (kg)</label>
+            <input type="text" id="total_weight_preview" readonly value="{{ '%.1f'|format(ink.initial_total_weight) }}">
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -30,4 +39,18 @@
         </div>
     </form>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateTotalWeight() {
+    const cans = parseFloat(document.getElementById('total_cans')?.value) || 0;
+    const wt = parseFloat(document.getElementById('weight_per_can')?.value) || 0;
+    const preview = document.getElementById('total_weight_preview');
+    if (preview) preview.value = (cans * wt).toFixed(1);
+}
+document.getElementById('total_cans')?.addEventListener('input', updateTotalWeight);
+document.getElementById('weight_per_can')?.addEventListener('input', updateTotalWeight);
+</script>
 {% endblock %}

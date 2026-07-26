@@ -52,8 +52,11 @@ class InkType(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
+    ink_company = db.Column(db.String(100), nullable=False, default="")
     name = db.Column(db.String(150), nullable=False)
     color_code = db.Column(db.String(50))
+    initial_cans = db.Column(db.Float, nullable=False, default=0)
+    weight_per_can = db.Column(db.Float, nullable=False, default=0)
     unit_type = db.Column(db.String(20))
     low_stock_threshold = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -62,7 +65,14 @@ class InkType(db.Model):
     opening_stocks = db.relationship("OpeningStock", back_populates="ink_type", lazy="dynamic")
     transactions = db.relationship("InventoryTransaction", back_populates="ink_type", lazy="dynamic")
 
-    __table_args__ = (db.UniqueConstraint("company_id", "name", name="uq_company_ink"),)
+    @property
+    def display_name(self):
+        parts = [self.ink_company, self.color_code, self.name]
+        return " · ".join(p for p in parts if p)
+
+    @property
+    def initial_total_weight(self) -> float:
+        return float(self.initial_cans) * float(self.weight_per_can)
 
 
 class OpeningStock(db.Model):
@@ -88,10 +98,12 @@ class OpeningStock(db.Model):
 class InventoryTransaction(db.Model):
     __tablename__ = "inventory_transactions"
 
-    TRANSACTION_RECEIVED = "Stock Received"
+    TRANSACTION_CANS_IN = "Cans In"
+    TRANSACTION_CANS_LEFT = "Cans Left"
+    TRANSACTION_RECEIVED = TRANSACTION_CANS_IN
     TRANSACTION_ISSUED = "Issued to Use"
-    TRANSACTION_USED = "Stock Used"
-    TRANSACTION_TYPES = (TRANSACTION_RECEIVED, TRANSACTION_ISSUED, TRANSACTION_USED)
+    TRANSACTION_USED = TRANSACTION_CANS_LEFT
+    TRANSACTION_TYPES = (TRANSACTION_CANS_IN, TRANSACTION_CANS_LEFT)
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
@@ -103,6 +115,7 @@ class InventoryTransaction(db.Model):
     gross_weight = db.Column(db.Float, nullable=True)
     tw = db.Column(db.Float, nullable=True)
     net_weight = db.Column(db.Float, nullable=True)
+    where_used = db.Column(db.Text)
     transaction_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))

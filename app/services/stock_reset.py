@@ -1,6 +1,5 @@
 from app import db
 from app.models import (
-    Company,
     InkType,
     InventoryTransaction,
     Material,
@@ -13,24 +12,12 @@ from app.models import (
 
 def reset_ink_stock_data() -> dict:
     """Remove all ink stock data including catalog inks."""
-    company_ids = [
-        c.id for c in Company.query.filter_by(scope=Company.SCOPE_INK).all()
-    ]
-    if not company_ids:
-        return {"opening": 0, "transactions": 0, "receipts": 0, "catalog": 0}
-
     receipts = StockPurchaseReceipt.query.filter_by(
         module=StockPurchaseReceipt.MODULE_INK
     ).delete(synchronize_session=False)
-    txns = InventoryTransaction.query.filter(
-        InventoryTransaction.company_id.in_(company_ids)
-    ).delete(synchronize_session=False)
-    opening = OpeningStock.query.filter(
-        OpeningStock.company_id.in_(company_ids)
-    ).delete(synchronize_session=False)
-    catalog = InkType.query.filter(InkType.company_id.in_(company_ids)).delete(
-        synchronize_session=False
-    )
+    txns = InventoryTransaction.query.delete(synchronize_session=False)
+    opening = OpeningStock.query.delete(synchronize_session=False)
+    catalog = InkType.query.delete(synchronize_session=False)
     db.session.commit()
     return {
         "opening": opening,

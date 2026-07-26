@@ -6,6 +6,17 @@ COLUMN_MIGRATIONS = {
     "ink_types": {
         "color_code": "VARCHAR(50)",
         "unit_type": "VARCHAR(20)",
+        "ink_company": "VARCHAR(100)",
+        "initial_cans": "FLOAT DEFAULT 0",
+        "weight_per_can": "FLOAT DEFAULT 0",
+    },
+    "inventory_transactions": {
+        "quantity_left": "FLOAT",
+        "weight_per_quantity": "FLOAT",
+        "gross_weight": "FLOAT",
+        "tw": "FLOAT",
+        "net_weight": "FLOAT",
+        "where_used": "TEXT",
     },
     "materials": {
         "category": "VARCHAR(100)",
@@ -25,13 +36,6 @@ COLUMN_MIGRATIONS = {
     },
     "companies": {
         "scope": "VARCHAR(20) DEFAULT 'ink'",
-    },
-    "inventory_transactions": {
-        "quantity_left": "FLOAT",
-        "weight_per_quantity": "FLOAT",
-        "gross_weight": "FLOAT",
-        "tw": "FLOAT",
-        "net_weight": "FLOAT",
     },
     "glue_transactions": {
         "gross_weight": "FLOAT",
@@ -74,8 +78,12 @@ def _add_column_if_missing(table: str, column: str, col_type: str):
 
     columns = {col["name"] for col in inspector.get_columns(table)}
     if column not in columns:
-        with db.engine.begin() as conn:
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+        try:
+            with db.engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+        except Exception as exc:
+            if "already exists" not in str(exc).lower() and "duplicatecolumn" not in str(exc).lower():
+                raise
 
 
 def _drop_materials_unique_constraint():

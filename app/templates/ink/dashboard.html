@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Ink Dashboard - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Ink Dashboard</h1>
+        <p class="page-subtitle">Overview — {{ today.strftime('%d %B %Y') }}</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('ink_reports.daily_report') }}" class="btn btn-secondary">Daily Report</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Total Cans</span>
+        <span class="stat-value">{{ "%.1f"|format(stats.total_cans) }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Total Weight (kg)</span>
+        <span class="stat-value">{{ "%.1f"|format(stats.total_weight) }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Cans In Today</span>
+        <span class="stat-value">{{ "%.1f"|format(stats.cans_in_today) }}</span>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Cans Used Today</span>
+        <span class="stat-value">{{ "%.1f"|format(stats.used_today) }}</span>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Current Stock</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Company</th>
+                <th>Color Code</th>
+                <th>Color</th>
+                <th>Init. Cans</th>
+                <th>Wt/Can</th>
+                <th>Cans In</th>
+                <th>Used</th>
+                <th>Cans Left</th>
+                <th>Left Wt (kg)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in stats.live_stock %}
+            <tr>
+                <td>{{ item.ink.ink_company }}</td>
+                <td>{{ item.ink.color_code or '—' }}</td>
+                <td>{{ item.ink.name }}</td>
+                <td>{{ "%.1f"|format(item.initial_cans) }}</td>
+                <td>{{ "%.1f"|format(item.ink.weight_per_can) }}</td>
+                <td>{{ "%.1f"|format(item.cans_in) }}</td>
+                <td>{{ "%.1f"|format(item.used) }}</td>
+                <td><strong>{{ "%.1f"|format(item.current_cans) }}</strong></td>
+                <td><strong>{{ "%.1f"|format(item.current_weight) }}</strong></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="empty">No inks yet. Add your first ink.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Recent Activity</h2>
+    <table class="data-table compact">
+        <thead><tr><th>Date</th><th>Ink</th><th>Type</th><th>Cans</th><th>Where Used</th><th>Notes</th></tr></thead>
+        <tbody>
+            {% for txn in stats.recent_transactions %}
+            <tr>
+                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ txn.ink_type.display_name }}</td>
+                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Cans In' else 'orange' }}">{{ txn.transaction_type }}</span></td>
+                <td>{{ "%.1f"|format(txn.quantity) }}</td>
+                <td>{{ txn.where_used or '—' }}</td>
+                <td>{{ txn.notes or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty">No activity yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="quick-actions">
+    <a href="{{ url_for('inventory.inks_list') }}" class="btn btn-primary">+ Add Ink</a>
+    <a href="{{ url_for('inventory.cans_in') }}" class="btn btn-secondary">Cans In</a>
+    <a href="{{ url_for('inventory.cans_left') }}" class="btn btn-secondary">Cans Left</a>
+</div>
+{% endif %}
+{% endblock %}

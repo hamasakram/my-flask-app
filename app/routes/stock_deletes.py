@@ -73,13 +73,13 @@ def _delete_entity(entity, entity_type: str, details: str, redirect_url: str):
 @login_required
 def delete_ink_received(txn_id):
     txn = InventoryTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != InventoryTransaction.TRANSACTION_RECEIVED:
+    if txn.transaction_type != InventoryTransaction.TRANSACTION_CANS_IN:
         abort(404)
     return _delete_entity(
         txn,
         "InventoryTransaction",
-        f"Deleted received record #{txn_id}",
-        url_for("inventory.receive_stock"),
+        f"Deleted Cans In record #{txn_id}",
+        url_for("inventory.cans_in"),
     )
 
 
@@ -101,13 +101,13 @@ def delete_ink_issued(txn_id):
 @login_required
 def delete_ink_used(txn_id):
     txn = InventoryTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != InventoryTransaction.TRANSACTION_USED:
+    if txn.transaction_type != InventoryTransaction.TRANSACTION_CANS_LEFT:
         abort(404)
     return _delete_entity(
         txn,
         "InventoryTransaction",
-        f"Deleted usage record #{txn_id}",
-        url_for("inventory.use_stock"),
+        f"Deleted Cans Left record #{txn_id}",
+        url_for("inventory.cans_left"),
     )
 
 
@@ -147,13 +147,13 @@ def delete_ink_catalog(ink_id):
     require_edit_access()
     ink = InkType.query.get_or_404(ink_id)
     if ink_type_in_use(ink_id):
-        flash("Cannot delete — this ink has opening stock or transaction records.", "danger")
-        return redirect(url_for("inventory.catalog"))
+        flash("Cannot delete — this ink has transaction records.", "danger")
+        return redirect(url_for("inventory.inks_list"))
     return _delete_entity(
         ink,
         "InkType",
-        f"Deleted ink: {ink.name}",
-        url_for("inventory.catalog"),
+        f"Deleted ink: {ink.display_name}",
+        url_for("inventory.inks_list"),
     )
 
 

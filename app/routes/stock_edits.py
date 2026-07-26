@@ -72,58 +72,49 @@ def _parse_date(value: str):
 @stock_edits_bp.route("/ink/received/<int:txn_id>", methods=["GET", "POST"])
 @login_required
 def edit_ink_received(txn_id):
+    from app.services.ink_inventory import list_inks
+
     txn = InventoryTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != InventoryTransaction.TRANSACTION_RECEIVED:
+    if txn.transaction_type != InventoryTransaction.TRANSACTION_CANS_IN:
         abort(404)
 
     if request.method == "POST":
         require_edit_access()
-        company_id = request.form.get("company_id", type=int)
         ink_type_id = request.form.get("ink_type_id", type=int)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
-        if not company_id or not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
-            flash("Company, ink, valid quantity, and date are required.", "danger")
+        if not ink_type_id or not quantity or quantity <= 0 or not transaction_date:
+            flash("Ink, valid quantity, and date are required.", "danger")
             return redirect(url_for("stock_edits.edit_ink_received", txn_id=txn_id))
 
-        ink = InkType.query.filter_by(id=ink_type_id, company_id=company_id).first()
+        ink = InkType.query.filter_by(id=ink_type_id).first()
         if not ink:
-            flash("Select a valid ink for this company.", "danger")
+            flash("Select a valid ink.", "danger")
             return redirect(url_for("stock_edits.edit_ink_received", txn_id=txn_id))
 
-        try:
-            weights = parse_manual_weights(request.form)
-            txn.company_id = company_id
-            txn.ink_type_id = ink.id
-            txn.quantity = quantity
-            txn.weight_per_quantity = weights["weight_per_quantity"]
-            txn.gross_weight = weights["gross_weight"]
-            txn.tw = weights["tw"]
-            txn.net_weight = weights["net_weight"]
-            txn.transaction_date = _parse_date(transaction_date)
-            txn.notes = notes
-            log_audit(
-                current_user.id,
-                "UPDATE",
-                "InventoryTransaction",
-                txn.id,
-                f"Updated received record: {quantity} of {ink.name}",
-            )
-            db.session.commit()
-            flash("Stock received record updated.", "success")
-            return redirect(url_for("inventory.receive_stock"))
-        except ValueError as exc:
-            db.session.rollback()
-            flash(str(exc), "danger")
+        txn.company_id = ink.company_id
+        txn.ink_type_id = ink.id
+        txn.quantity = quantity
+        txn.transaction_date = _parse_date(transaction_date)
+        txn.notes = notes
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "InventoryTransaction",
+            txn.id,
+            f"Updated Cans In: {quantity} of {ink.display_name}",
+        )
+        db.session.commit()
+        flash("Cans In record updated.", "success")
+        return redirect(url_for("inventory.cans_in"))
 
     return render_template(
         "shared/edit_ink_received.html",
         txn=txn,
-        companies=get_ink_companies(),
-        unit_types=("Can", "Drum", "Tin"),
-        cancel_url=url_for("inventory.receive_stock"),
+        inks=list_inks(),
+        cancel_url=url_for("inventory.cans_in"),
     )
 
 
@@ -193,7 +184,7 @@ def edit_ink_issued(txn_id):
 @login_required
 def edit_ink_used(txn_id):
     txn = InventoryTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != InventoryTransaction.TRANSACTION_USED:
+    if txn.transaction_type != InventoryTransaction.TRANSACTION_CANS_LEFT:
         abort(404)
 
     if request.method == "POST":
@@ -201,14 +192,16 @@ def edit_ink_used(txn_id):
         quantity_left = request.form.get("quantity_left", type=float)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
+        where_used = request.form.get("where_used", "").strip()
         notes = request.form.get("notes", "").strip()
 
         if quantity_left is None or quantity_left < 0 or not quantity or quantity <= 0 or not transaction_date:
-            flash("Quantity left, used amount, and date are required.", "danger")
+            flash("Cans left, used amount, and date are required.", "danger")
             return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id))
 
         txn.quantity_left = quantity_left
         txn.quantity = quantity
+        txn.where_used = where_used
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
         log_audit(
@@ -216,16 +209,16 @@ def edit_ink_used(txn_id):
             "UPDATE",
             "InventoryTransaction",
             txn.id,
-            f"Updated usage record: {quantity} used, {quantity_left} left",
+            f"Updated Cans Left: {quantity} used, {quantity_left} left",
         )
         db.session.commit()
-        flash("Stock used record updated.", "success")
-        return redirect(url_for("inventory.use_stock"))
+        flash("Cans Left record updated.", "success")
+        return redirect(url_for("inventory.cans_left"))
 
     return render_template(
         "shared/edit_ink_used.html",
         txn=txn,
-        cancel_url=url_for("inventory.use_stock"),
+        cancel_url=url_for("inventory.cans_left"),
     )
 
 
@@ -750,36 +743,36 @@ def edit_ink_catalog(ink_id):
 
     if request.method == "POST":
         require_edit_access()
-        ink_name = request.form.get("ink_name", "").strip()
+        ink_company = request.form.get("ink_company", "").strip()
         color_code = request.form.get("color_code", "").strip()
-        unit_type = request.form.get("unit_type", "").strip()
+        color = request.form.get("color", "").strip()
+        total_cans = request.form.get("total_cans", type=float)
+        weight_per_can = request.form.get("weight_per_can", type=float)
 
-        if not ink_name:
-            flash("Ink name is required.", "danger")
+        if not ink_company or not color or total_cans is None or weight_per_can is None:
+            flash("Ink company, color, total cans, and weight per can are required.", "danger")
             return redirect(url_for("stock_edits.edit_ink_catalog", ink_id=ink_id))
 
-        existing = InkType.query.filter(
-            InkType.company_id == ink.company_id,
-            InkType.name == ink_name,
-            InkType.id != ink_id,
-        ).first()
-        if existing:
-            flash("This ink name already exists for this company.", "danger")
-            return redirect(url_for("stock_edits.edit_ink_catalog", ink_id=ink_id))
-
-        ink.name = ink_name
+        ink.ink_company = ink_company
         ink.color_code = color_code or None
-        ink.unit_type = unit_type or None
-        log_audit(current_user.id, "UPDATE", "InkType", ink.id, f"Updated ink: {ink_name}")
+        ink.name = color
+        ink.initial_cans = total_cans
+        ink.weight_per_can = weight_per_can
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "InkType",
+            ink.id,
+            f"Updated ink: {ink.display_name}",
+        )
         db.session.commit()
         flash("Ink updated.", "success")
-        return redirect(url_for("inventory.catalog"))
+        return redirect(url_for("inventory.inks_list"))
 
     return render_template(
         "shared/edit_ink_catalog.html",
         ink=ink,
-        unit_types=("Can", "Drum", "Tin"),
-        cancel_url=url_for("inventory.catalog"),
+        cancel_url=url_for("inventory.inks_list"),
     )
 
 
