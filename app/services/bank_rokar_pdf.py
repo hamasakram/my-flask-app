@@ -88,6 +88,18 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
         leading=10,
         alignment=TA_LEFT,
     )
+    bank_cell_style = ParagraphStyle(
+        "RokarBankCell",
+        parent=cell_style,
+        fontSize=7,
+        leading=9,
+    )
+    category_cell_style = ParagraphStyle(
+        "RokarCategoryCell",
+        parent=cell_style,
+        fontSize=7,
+        leading=9,
+    )
 
     header_left = Table(
         [
@@ -167,7 +179,9 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
     elements.append(Spacer(1, 0.15 * inch))
 
     txn_title = "Monthly Transactions" if data.get("is_monthly") else "Daily Transactions"
-    elements.extend(_build_transaction_table(data["transactions"], txn_title, cell_style, subtitle_style))
+    elements.extend(
+        _build_transaction_table(data["transactions"], txn_title, cell_style, bank_cell_style, category_cell_style, subtitle_style)
+    )
 
     category_sections = data.get("category_sections", {})
     for category_key in (
@@ -187,6 +201,8 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
                 section["transactions"],
                 section_title,
                 cell_style,
+                bank_cell_style,
+                category_cell_style,
                 subtitle_style,
             )
         )
@@ -207,8 +223,8 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
     for item in data["bank_balances"]:
         balance_rows.append(
             [
-                item["bank"].display_name,
-                item["bank"].account_title or "—",
+                Paragraph(item["bank"].display_name, bank_cell_style),
+                Paragraph(item["bank"].account_title or "—", cell_style),
                 f"Rs {_format_money(item['opening_today'])}",
                 f"Rs {_format_money(item['day_deposits'])}",
                 f"Rs {_format_money(item['day_withdrawals'])}",
@@ -228,7 +244,7 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
 
     balance_table = Table(
         balance_rows,
-        colWidths=[1.7 * inch, 1.35 * inch, 1.15 * inch, 1.0 * inch, 1.0 * inch, 1.15 * inch],
+        colWidths=[1.85 * inch, 1.25 * inch, 1.1 * inch, 1.0 * inch, 1.0 * inch, 1.1 * inch],
         repeatRows=1,
     )
     balance_table.setStyle(
@@ -262,7 +278,22 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
     return buffer
 
 
-def _build_transaction_table(transactions, title, cell_style, subtitle_style):
+def _format_bank_account_label(display_name: str) -> str:
+    """Break long bank account labels so PDF cells wrap cleanly."""
+    if " — " in display_name:
+        bank_name, account_ref = display_name.split(" — ", 1)
+        return f"{bank_name}<br/>{account_ref}"
+    return display_name
+
+
+def _build_transaction_table(
+    transactions,
+    title,
+    cell_style,
+    bank_cell_style,
+    category_cell_style,
+    subtitle_style,
+):
     elements = []
     txn_header = [
         "#",
@@ -280,8 +311,8 @@ def _build_transaction_table(transactions, title, cell_style, subtitle_style):
             [
                 str(index),
                 row["entry"].entry_date.strftime("%d-%b-%Y"),
-                row["bank"].display_name,
-                row["category_label"],
+                Paragraph(_format_bank_account_label(row["bank"].display_name), bank_cell_style),
+                Paragraph(row["category_label"], category_cell_style),
                 row["type_label"],
                 Paragraph(row["particulars"], cell_style),
                 f"Rs {_format_money(row['deposit'])}" if row["deposit"] else "—",
@@ -294,14 +325,14 @@ def _build_transaction_table(transactions, title, cell_style, subtitle_style):
     txn_table = Table(
         txn_rows,
         colWidths=[
-            0.3 * inch,
-            0.75 * inch,
-            1.35 * inch,
-            0.85 * inch,
-            0.75 * inch,
-            2.45 * inch,
-            0.9 * inch,
-            0.9 * inch,
+            0.25 * inch,
+            0.68 * inch,
+            1.55 * inch,
+            0.95 * inch,
+            0.68 * inch,
+            2.35 * inch,
+            0.82 * inch,
+            0.82 * inch,
         ],
         repeatRows=1,
     )
