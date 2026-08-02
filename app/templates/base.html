@@ -97,6 +97,7 @@
             <li class="nav-section">Bank Ledger</li>
             <li><a href="{{ url_for('bank_ledger.banks') }}">Bank Accounts</a></li>
             <li><a href="{{ url_for('bank_ledger.rokar') }}" class="{% if request.endpoint == 'bank_ledger.rokar' %}active{% endif %}">Daily Rokar Roznamcha</a></li>
+            <li><a href="{{ url_for('bank_ledger.rokar_monthly') }}" class="{% if request.endpoint == 'bank_ledger.rokar_monthly' %}active{% endif %}">Monthly Rokar</a></li>
             <li><a href="{{ url_for('bank_ledger.transfers') }}">Cross-Bank Transfers</a></li>
             {% endif %}
             {% endif %}

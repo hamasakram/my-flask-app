@@ -67,6 +67,7 @@ COLUMN_MIGRATIONS = {
     "bank_ledger_entries": {
         "entry_type": "VARCHAR(20) DEFAULT 'standard'",
         "transfer_id": "INTEGER",
+        "expense_category": "VARCHAR(30) DEFAULT ''",
     },
 }
 

@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Monthly Rokar Roznamcha - Bank Ledger{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Monthly Rokar Roznamcha</h1>
+        <p class="page-subtitle">Month-end summary of credits, debits, and closing balances across all bank accounts</p>
+    </div>
+    <div class="page-header-actions">
+        <a href="{{ url_for('bank_ledger.rokar_monthly_pdf', month=selected_month, year=selected_year) }}" class="btn btn-primary" target="_blank">Print Monthly PDF</a>
+        <a href="{{ url_for('bank_ledger.rokar') }}" class="btn btn-secondary">Daily Rokar</a>
+        <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">Bank Accounts</a>
+    </div>
+</div>
+
+<form method="GET" class="card filter-bar">
+    <div class="form-grid">
+        <div class="form-group">
+            <label for="month">Month</label>
+            <select id="month" name="month">
+                {% for m in range(1, 13) %}
+                <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>{{ "%02d"|format(m) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="year">Year</label>
+            <input type="number" id="year" name="year" min="2000" max="2100" value="{{ selected_year }}" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-secondary">View Month</button>
+        </div>
+    </div>
+</form>
+
+<div class="stats-grid">
+    {% if current_user.can_view_sensitive() %}
+    <div class="stat-card">
+        <span class="stat-label">Opening (Start of Month)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_opening_today) }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total Credited</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_deposits) }}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Total Debited</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_withdrawals) }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Closing (End of Month)</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_closing) }}</span>
+    </div>
+    {% else %}
+    <div class="stat-card">
+        <span class="stat-label">Transactions This Month</span>
+        <span class="stat-value">{{ rokar.transaction_count }}</span>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2>Monthly Transactions — {{ rokar.period_label }}</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Bank</th>
+                <th>Category</th>
+                <th>Type</th>
+                <th>Sent To / Particulars</th>
+                <th>Deposit</th>
+                <th>Withdrawal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rokar.transactions %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td><strong>{{ row.bank.display_name }}</strong></td>
+                <td>
+                    {% if row.expense_category == 'bilty' %}
+                    <span class="badge badge-orange">Bilty</span>
+                    {% elif row.expense_category == 'extra_expenses' %}
+                    <span class="badge badge-red">Extra Expenses</span>
+                    {% else %}
+                    <span class="badge badge-gray">General</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if row.entry.entry_type == 'transfer_in' %}
+                    <span class="badge badge-green">Transfer In</span>
+                    {% elif row.entry.entry_type == 'transfer_out' %}
+                    <span class="badge badge-orange">Transfer Out</span>
+                    {% else %}
+                    <span class="badge badge-gray">Standard</span>
+                    {% endif %}
+                </td>
+                <td>{{ row.particulars }}</td>
+                <td>{% if row.deposit %}₨ {{ "{:,.2f}".format(row.deposit) }}{% else %}—{% endif %}</td>
+                <td>{% if row.withdrawal %}₨ {{ "{:,.2f}".format(row.withdrawal) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="8" class="empty">No transactions in this month</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% for key, section in rokar.category_sections.items() %}
+{% if section.transactions %}
+<div class="card">
+    <h2>{{ section.label }}</h2>
+    <p class="field-note">
+        Deposits: ₨ {{ "{:,.2f}".format(section.total_deposits) }} ·
+        Withdrawals: ₨ {{ "{:,.2f}".format(section.total_withdrawals) }}
+    </p>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Bank</th>
+                <th>Particulars</th>
+                <th>Deposit</th>
+                <th>Withdrawal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in section.transactions %}
+            <tr>
+                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ row.bank.display_name }}</td>
+                <td>{{ row.particulars }}</td>
+                <td>{% if row.deposit %}₨ {{ "{:,.2f}".format(row.deposit) }}{% else %}—{% endif %}</td>
+                <td>{% if row.withdrawal %}₨ {{ "{:,.2f}".format(row.withdrawal) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endfor %}
+
+<div class="card">
+    <h2>Bank Account Balances — {{ rokar.period_label }}</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Bank Account</th>
+                <th>Account Title</th>
+                <th>Opening (Month Start)</th>
+                <th>Total Credited</th>
+                <th>Total Debited</th>
+                <th>Closing (Month End)</th>
+                <th>Ledger</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in rokar.bank_balances %}
+            <tr>
+                <td><strong>{{ item.bank.display_name }}</strong></td>
+                <td>{{ item.bank.account_title or '—' }}</td>
+                <td>₨ {{ "{:,.2f}".format(item.opening_today) }}</td>
+                <td>₨ {{ "{:,.2f}".format(item.day_deposits) }}</td>
+                <td>₨ {{ "{:,.2f}".format(item.day_withdrawals) }}</td>
+                <td class="{% if item.closing_balance < 0 %}text-danger{% elif item.closing_balance > 0 %}text-success{% endif %}">
+                    <strong>₨ {{ "{:,.2f}".format(item.closing_balance) }}</strong>
+                </td>
+                <td><a href="{{ url_for('bank_ledger.bank_ledger', bank_id=item.bank.id) }}" class="btn btn-sm btn-secondary">Open</a></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No bank accounts — add accounts with opening balances first</td></tr>
+            {% endfor %}
+            {% if rokar.bank_balances %}
+            <tr class="row-total">
+                <td colspan="2"><strong>Grand Total (All Accounts)</strong></td>
+                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_opening_today) }}</strong></td>
+                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_deposits) }}</strong></td>
+                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_withdrawals) }}</strong></td>
+                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_closing) }}</strong></td>
+                <td>—</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

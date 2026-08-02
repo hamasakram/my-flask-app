@@ -814,6 +814,16 @@ class BankLedgerEntry(db.Model):
     TYPE_TRANSFER_IN = "transfer_in"
     TYPE_TRANSFER_OUT = "transfer_out"
 
+    CATEGORY_GENERAL = ""
+    CATEGORY_BILTY = "bilty"
+    CATEGORY_EXTRA_EXPENSES = "extra_expenses"
+
+    EXPENSE_CATEGORIES = (
+        (CATEGORY_GENERAL, "General"),
+        (CATEGORY_BILTY, "Bilty"),
+        (CATEGORY_EXTRA_EXPENSES, "Extra Expenses"),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     bank_id = db.Column(db.Integer, db.ForeignKey("bank_accounts.id"), nullable=False)
     entry_date = db.Column(db.Date, nullable=False)
@@ -821,6 +831,7 @@ class BankLedgerEntry(db.Model):
     withdrawal = db.Column(db.Float, nullable=False, default=0)
     entry_type = db.Column(db.String(20), nullable=False, default=TYPE_STANDARD)
     transfer_id = db.Column(db.Integer, db.ForeignKey("bank_transfers.id", ondelete="CASCADE"))
+    expense_category = db.Column(db.String(30), nullable=False, default="")
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -840,6 +851,14 @@ class BankLedgerEntry(db.Model):
         if self.entry_type == self.TYPE_TRANSFER_OUT:
             return "Transfer Out"
         return "Standard"
+
+    @property
+    def expense_category_label(self) -> str:
+        labels = {
+            self.CATEGORY_BILTY: "Bilty",
+            self.CATEGORY_EXTRA_EXPENSES: "Extra Expenses",
+        }
+        return labels.get(self.expense_category or "", "General")
 
     @property
     def counterparty_bank(self):

@@ -20,6 +20,14 @@
             <label for="withdrawal">Withdrawal (money out)</label>
             <input type="number" id="withdrawal" name="withdrawal" step="0.01" min="0" value="{{ entry.withdrawal }}">
         </div>
+        <div class="form-group">
+            <label for="expense_category">Category</label>
+            <select id="expense_category" name="expense_category">
+                {% for value, label in expense_categories %}
+                <option value="{{ value }}" {% if entry.expense_category == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
             <textarea id="notes" name="notes" rows="2">{{ entry.notes or '' }}</textarea>
