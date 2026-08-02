@@ -29,6 +29,37 @@
     </div>
 </div>
 
+{% if report_data.job_production %}
+<div class="card">
+    <h2>Daily Job Production</h2>
+    {% for job in report_data.job_production %}
+    <div class="report-job-block">
+        <div class="report-job-header">
+            <h3>{{ job.name }}</h3>
+            <div class="report-job-stats">
+                <span>Printing Production: <strong>{% if job.printing_production is not none %}{{ "{:,.2f}".format(job.printing_production) }}{% else %}—{% endif %}</strong></span>
+                <span>Lamination Production: <strong>{% if job.lamination_production is not none %}{{ "{:,.2f}".format(job.lamination_production) }}{% else %}—{% endif %}</strong></span>
+            </div>
+        </div>
+        <table class="data-table compact">
+            <thead>
+                <tr><th>Material</th><th>Used (KG)</th><th>Used In</th></tr>
+            </thead>
+            <tbody>
+                {% for material in job.materials %}
+                <tr>
+                    <td>{{ material.material }}</td>
+                    <td>{{ "%.1f"|format(material.quantity) }}</td>
+                    <td>{{ material.types }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% for category in report_data.grouped_categories %}
 <div class="card report-category-block">
     <div class="report-category-header">

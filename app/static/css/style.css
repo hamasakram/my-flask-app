@@ -674,6 +674,25 @@ textarea { resize: vertical; min-height: 4rem; }
 }
 .report-category-header h2 { margin: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 0.04em; }
 .report-category-stats { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.88rem; color: var(--muted); }
+.inline-checkboxes { display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: center; }
+.checkbox-inline { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 500; }
+.report-job-block {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: #fff;
+}
+.report-job-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+.report-job-header h3 { margin: 0; color: var(--primary); }
+.report-job-stats { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.88rem; color: var(--muted); }
 .report-material-block {
     background: #f8fafc;
     border: 1px solid var(--border);

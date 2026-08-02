@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import func
 
 from app import db
-from app.models import Material, MaterialTransaction
+from app.models import Material, MaterialTransaction, ProductionJob
 from app.services.companies import get_or_create_default_materials_company
 
 
@@ -170,6 +170,7 @@ def get_daily_report_data(report_date: date) -> dict:
         "total_stock_in": sum(t.quantity for t in stock_in_today),
         "total_used": sum(t.quantity for t in stock_left_today),
         "grouped_categories": group_report_by_category(live_stock, stock_in_today, stock_left_today),
+        "job_production": group_job_production(stock_left_today),
     }
 
 
@@ -258,3 +259,91 @@ def group_report_by_category(live_stock, stock_in_today, stock_left_today) -> li
             }
         )
     return result
+
+
+def list_production_job_names() -> list[str]:
+    jobs = ProductionJob.query.order_by(ProductionJob.name.asc()).all()
+    return [job.name for job in jobs]
+
+
+def ensure_production_job(name: str) -> None:
+    cleaned = name.strip()
+    if not cleaned:
+        return
+
+    existing = ProductionJob.query.filter(
+        func.lower(ProductionJob.name) == cleaned.lower()
+    ).first()
+    if existing:
+        return
+
+    db.session.add(ProductionJob(name=cleaned))
+
+
+def parse_stock_left_usage_fields(form) -> dict:
+    where_used = form.get("where_used", "").strip()
+    used_in_printing = form.get("used_in_printing") == "on"
+    used_in_lamination = form.get("used_in_lamination") == "on"
+    total_production = form.get("total_production", type=float)
+
+    printing_production = None
+    lamination_production = None
+    if total_production is not None and total_production >= 0:
+        if used_in_printing:
+            printing_production = total_production
+        if used_in_lamination:
+            lamination_production = total_production
+
+    return {
+        "where_used": where_used,
+        "used_in_printing": used_in_printing,
+        "used_in_lamination": used_in_lamination,
+        "printing_production": printing_production,
+        "lamination_production": lamination_production,
+    }
+
+
+def group_job_production(stock_left_today) -> list[dict]:
+    """Group daily stock-left records by job for combined Printing/Lamination reporting."""
+    jobs: dict[str, dict] = {}
+
+    for txn in stock_left_today:
+        job_name = (txn.where_used or "").strip() or "Unassigned"
+        key = job_name.lower()
+        if key not in jobs:
+            jobs[key] = {
+                "name": job_name,
+                "printing_production": None,
+                "lamination_production": None,
+                "materials": [],
+            }
+
+        job = jobs[key]
+        if txn.printing_production is not None:
+            current = job["printing_production"]
+            job["printing_production"] = (
+                txn.printing_production if current is None else max(current, txn.printing_production)
+            )
+        if txn.lamination_production is not None:
+            current = job["lamination_production"]
+            job["lamination_production"] = (
+                txn.lamination_production
+                if current is None
+                else max(current, txn.lamination_production)
+            )
+
+        usage_types = []
+        if txn.used_in_printing:
+            usage_types.append("Printing")
+        if txn.used_in_lamination:
+            usage_types.append("Lamination")
+
+        job["materials"].append(
+            {
+                "material": txn.material.display_name,
+                "quantity": float(txn.quantity),
+                "types": ", ".join(usage_types) if usage_types else "—",
+            }
+        )
+
+    return sorted(jobs.values(), key=lambda item: item["name"].lower())

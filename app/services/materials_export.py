@@ -80,6 +80,54 @@ def export_materials_daily_pdf(report_data):
     )
     elements.append(Spacer(1, 0.2 * inch))
 
+    job_production = report_data.get("job_production") or []
+    if job_production:
+        elements.append(Paragraph("Daily Job Production", title_style))
+        elements.append(Spacer(1, 0.08 * inch))
+
+        for job in job_production:
+            printing_value = (
+                f"{job['printing_production']:,.2f}"
+                if job["printing_production"] is not None
+                else "—"
+            )
+            lamination_value = (
+                f"{job['lamination_production']:,.2f}"
+                if job["lamination_production"] is not None
+                else "—"
+            )
+            elements.append(
+                Paragraph(
+                    f"<b>{job['name']}</b> &nbsp;|&nbsp; "
+                    f"Printing Production: <b>{printing_value}</b> &nbsp;|&nbsp; "
+                    f"Lamination Production: <b>{lamination_value}</b>",
+                    section_label,
+                )
+            )
+
+            material_rows = [
+                ["Material", "Used (KG)", "Used In"],
+            ]
+            for material in job["materials"]:
+                material_rows.append(
+                    [
+                        material["material"],
+                        f"{material['quantity']:.1f}",
+                        material["types"],
+                    ]
+                )
+
+            material_table = Table(
+                material_rows,
+                colWidths=[180, 70, 90],
+                repeatRows=1,
+            )
+            material_table.setStyle(_table_style())
+            elements.append(material_table)
+            elements.append(Spacer(1, 0.1 * inch))
+
+        elements.append(Spacer(1, 0.12 * inch))
+
     grouped = report_data.get("grouped_categories") or []
     if not grouped:
         elements.append(Paragraph("No materials recorded yet.", styles["Normal"]))

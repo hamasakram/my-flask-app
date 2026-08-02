@@ -30,6 +30,10 @@ COLUMN_MIGRATIONS = {
         "net_weight": "FLOAT",
         "micron": "VARCHAR(50)",
         "where_used": "TEXT",
+        "used_in_printing": "BOOLEAN DEFAULT FALSE",
+        "used_in_lamination": "BOOLEAN DEFAULT FALSE",
+        "printing_production": "FLOAT",
+        "lamination_production": "FLOAT",
     },
     "material_opening_stock": {
         "material_name": "VARCHAR(255)",
@@ -553,6 +557,43 @@ def _clear_materials_opening_stock():
     db.session.commit()
 
 
+def _seed_production_jobs_from_transactions():
+    """Backfill saved job names from existing Stock Left records."""
+    from app.models import MaterialTransaction, ProductionJob
+
+    if not inspect(db.engine).has_table("production_jobs"):
+        return
+    if not inspect(db.engine).has_table("material_transactions"):
+        return
+
+    existing = {
+        name.lower()
+        for (name,) in db.session.query(ProductionJob.name).all()
+        if name
+    }
+    names = (
+        db.session.query(MaterialTransaction.where_used)
+        .filter(
+            MaterialTransaction.transaction_type == MaterialTransaction.TRANSACTION_STOCK_LEFT,
+            MaterialTransaction.where_used.isnot(None),
+            MaterialTransaction.where_used != "",
+        )
+        .distinct()
+        .all()
+    )
+    added = False
+    for (raw_name,) in names:
+        cleaned = (raw_name or "").strip()
+        if not cleaned or cleaned.lower() in existing:
+            continue
+        db.session.add(ProductionJob(name=cleaned))
+        existing.add(cleaned.lower())
+        added = True
+
+    if added:
+        db.session.commit()
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
@@ -565,6 +606,7 @@ def ensure_schema():
     _remove_materials_companies()
     _clear_materials_opening_stock()
     _remove_auto_synced_purchase_ledger_entries()
+    _seed_production_jobs_from_transactions()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

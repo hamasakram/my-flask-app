@@ -48,7 +48,12 @@ from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
-from app.services.materials_inventory import list_materials
+from app.services.materials_inventory import (
+    ensure_production_job,
+    list_materials,
+    list_production_job_names,
+    parse_stock_left_usage_fields,
+)
 
 from pathlib import Path
 
@@ -342,16 +347,22 @@ def edit_materials_used(txn_id):
         quantity_left = request.form.get("quantity_left", type=float)
         quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
-        where_used = request.form.get("where_used", "").strip()
         notes = request.form.get("notes", "").strip()
+        usage_fields = parse_stock_left_usage_fields(request.form)
+        where_used = usage_fields["where_used"]
 
         if quantity_left is None or quantity_left < 0 or not quantity or quantity <= 0 or not transaction_date:
             flash("Quantity left, used amount, and date are required.", "danger")
             return redirect(url_for("stock_edits.edit_materials_used", txn_id=txn_id))
 
+        ensure_production_job(where_used)
         txn.quantity_left = quantity_left
         txn.quantity = quantity
         txn.where_used = where_used
+        txn.used_in_printing = usage_fields["used_in_printing"]
+        txn.used_in_lamination = usage_fields["used_in_lamination"]
+        txn.printing_production = usage_fields["printing_production"]
+        txn.lamination_production = usage_fields["lamination_production"]
         txn.transaction_date = _parse_date(transaction_date)
         txn.notes = notes
         log_audit(
@@ -369,6 +380,7 @@ def edit_materials_used(txn_id):
         "shared/edit_materials_used.html",
         txn=txn,
         cancel_url=url_for("materials.stock_left"),
+        job_names=list_production_job_names(),
     )
 
 

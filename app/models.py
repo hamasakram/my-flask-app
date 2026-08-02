@@ -194,6 +194,10 @@ class MaterialTransaction(db.Model):
     net_weight = db.Column(db.Float, nullable=True)
     micron = db.Column(db.String(50))
     where_used = db.Column(db.Text)
+    used_in_printing = db.Column(db.Boolean, default=False, nullable=False)
+    used_in_lamination = db.Column(db.Boolean, default=False, nullable=False)
+    printing_production = db.Column(db.Float, nullable=True)
+    lamination_production = db.Column(db.Float, nullable=True)
     transaction_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -202,6 +206,16 @@ class MaterialTransaction(db.Model):
     company = db.relationship("Company", back_populates="material_transactions")
     material = db.relationship("Material", back_populates="transactions")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class ProductionJob(db.Model):
+    """Saved job names for Stock Left 'Where Used' autocomplete."""
+
+    __tablename__ = "production_jobs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
 
 class StockPurchaseReceipt(db.Model):

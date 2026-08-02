@@ -10,9 +10,12 @@ from app.services.materials_inventory import (
     calculate_live_stock,
     calculate_used_from_left,
     create_material,
+    ensure_production_job,
     get_current_stock,
     get_material_options,
     list_materials,
+    list_production_job_names,
+    parse_stock_left_usage_fields,
 )
 
 materials_bp = Blueprint("materials", __name__, url_prefix="/materials/inventory")
@@ -123,9 +126,10 @@ def stock_left():
         require_edit_access()
         material_id = request.form.get("material_id", type=int)
         quantity_left = request.form.get("quantity_left", type=float)
-        where_used = request.form.get("where_used", "").strip()
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
+        usage_fields = parse_stock_left_usage_fields(request.form)
+        where_used = usage_fields["where_used"]
 
         if (
             material_id is None
@@ -152,6 +156,7 @@ def stock_left():
             return redirect(url_for("materials.stock_left"))
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
+        ensure_production_job(where_used)
         txn = MaterialTransaction(
             company_id=material.company_id,
             material_id=material.id,
@@ -159,6 +164,10 @@ def stock_left():
             quantity=quantity_used,
             quantity_left=quantity_left,
             where_used=where_used,
+            used_in_printing=usage_fields["used_in_printing"],
+            used_in_lamination=usage_fields["used_in_lamination"],
+            printing_production=usage_fields["printing_production"],
+            lamination_production=usage_fields["lamination_production"],
             transaction_date=parsed_date,
             notes=notes,
             created_by_id=current_user.id,
@@ -188,7 +197,10 @@ def stock_left():
         .all()
     )
     return render_template(
-        "materials/stock_left.html", materials=materials, recent=recent
+        "materials/stock_left.html",
+        materials=materials,
+        recent=recent,
+        job_names=list_production_job_names(),
     )
 
 
