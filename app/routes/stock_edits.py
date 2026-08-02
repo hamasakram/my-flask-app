@@ -39,7 +39,7 @@ from app.services.companies import (
     get_glue_companies,
     get_ink_companies,
 )
-from app.services.bank_ledger import bank_account_exists, update_bank_transfer
+from app.services.bank_ledger import normalize_expense_category, update_bank_transfer
 from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
@@ -1581,6 +1581,9 @@ def edit_bank_ledger_entry(entry_id):
         entry.deposit = deposit
         entry.withdrawal = withdrawal
         entry.notes = notes or None
+        entry.expense_category = normalize_expense_category(
+            request.form.get("expense_category")
+        )
         log_audit(
             current_user.id,
             "UPDATE",
@@ -1596,6 +1599,7 @@ def edit_bank_ledger_entry(entry_id):
         "bank_ledger/edit_entry.html",
         entry=entry,
         cancel_url=url_for("bank_ledger.bank_ledger", bank_id=entry.bank_id),
+        expense_categories=BankLedgerEntry.EXPENSE_CATEGORIES,
     )
 
 

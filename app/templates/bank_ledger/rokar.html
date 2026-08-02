@@ -8,7 +8,8 @@
         <p class="page-subtitle">Day-to-day bank charges, transfers, and closing balances across all accounts</p>
     </div>
     <div class="page-header-actions">
-        <a href="{{ url_for('bank_ledger.rokar_pdf', date=selected_date.isoformat()) }}" class="btn btn-primary" target="_blank">Print PDF</a>
+        <a href="{{ url_for('bank_ledger.rokar_pdf', date=selected_date.isoformat()) }}" class="btn btn-primary" target="_blank">Print Daily PDF</a>
+        <a href="{{ url_for('bank_ledger.rokar_monthly') }}" class="btn btn-secondary">Monthly Rokar</a>
         <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">Bank Accounts</a>
     </div>
 </div>
@@ -85,6 +86,14 @@
             <label for="withdrawal">Withdrawal (money out)</label>
             <input type="number" id="withdrawal" name="withdrawal" step="0.01" min="0" value="0">
         </div>
+        <div class="form-group">
+            <label for="expense_category">Category</label>
+            <select id="expense_category" name="expense_category">
+                {% for value, label in expense_categories %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <div class="form-group full-width">
             <label for="notes">Sent To / Particulars</label>
             <textarea id="notes" name="notes" rows="2" placeholder="Supplier name, expense, cheque no., etc."></textarea>
@@ -151,6 +160,7 @@
             <tr>
                 <th>#</th>
                 <th>Bank</th>
+                <th>Category</th>
                 <th>Type</th>
                 <th>Sent To / Particulars</th>
                 <th>Deposit</th>
@@ -163,6 +173,15 @@
             <tr>
                 <td>{{ loop.index }}</td>
                 <td><strong>{{ row.bank.display_name }}</strong></td>
+                <td>
+                    {% if row.expense_category == 'bilty' %}
+                    <span class="badge badge-orange">Bilty</span>
+                    {% elif row.expense_category == 'extra_expenses' %}
+                    <span class="badge badge-red">Extra Expenses</span>
+                    {% else %}
+                    <span class="badge badge-gray">General</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if row.entry.entry_type == 'transfer_in' %}
                     <span class="badge badge-green">Transfer In</span>
@@ -190,11 +209,43 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No transactions on this date</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No transactions on this date</td></tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+
+{% for key, section in rokar.category_sections.items() %}
+{% if section.transactions %}
+<div class="card">
+    <h2>{{ section.label }} — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
+    <p class="field-note">
+        Deposits: ₨ {{ "{:,.2f}".format(section.total_deposits) }} ·
+        Withdrawals: ₨ {{ "{:,.2f}".format(section.total_withdrawals) }}
+    </p>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Bank</th>
+                <th>Particulars</th>
+                <th>Deposit</th>
+                <th>Withdrawal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in section.transactions %}
+            <tr>
+                <td>{{ row.bank.display_name }}</td>
+                <td>{{ row.particulars }}</td>
+                <td>{% if row.deposit %}₨ {{ "{:,.2f}".format(row.deposit) }}{% else %}—{% endif %}</td>
+                <td>{% if row.withdrawal %}₨ {{ "{:,.2f}".format(row.withdrawal) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endfor %}
 
 <div class="card">
     <h2>Bank Account Balances — {{ selected_date.strftime('%d-%m-%Y') }}</h2>

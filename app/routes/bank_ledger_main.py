@@ -12,8 +12,10 @@ from app.services.bank_ledger import (
     get_bank_ledger_rows,
     get_dashboard_stats,
     get_rokar_day_data,
+    get_rokar_month_data,
+    normalize_expense_category,
 )
-from app.services.bank_rokar_pdf import generate_rokar_pdf
+from app.services.bank_rokar_pdf import generate_rokar_monthly_pdf, generate_rokar_pdf
 from app.services.inventory import log_audit
 
 bank_ledger_bp = Blueprint("bank_ledger", __name__, url_prefix="/bank-ledger")
@@ -236,6 +238,7 @@ def bank_ledger(bank_id):
             deposit=deposit,
             withdrawal=withdrawal,
             entry_type=BankLedgerEntry.TYPE_STANDARD,
+            expense_category=normalize_expense_category(request.form.get("expense_category")),
             notes=notes or None,
             created_by_id=current_user.id,
         )
@@ -260,6 +263,7 @@ def bank_ledger(bank_id):
         ledger_rows=ledger_rows,
         current_balance=current_balance,
         other_banks=other_banks,
+        expense_categories=BankLedgerEntry.EXPENSE_CATEGORIES,
     )
 
 
@@ -352,6 +356,7 @@ def rokar():
             deposit=deposit,
             withdrawal=withdrawal,
             entry_type=BankLedgerEntry.TYPE_STANDARD,
+            expense_category=normalize_expense_category(request.form.get("expense_category")),
             notes=notes or None,
             created_by_id=current_user.id,
         )
@@ -374,6 +379,7 @@ def rokar():
         banks=all_banks,
         rokar=rokar_data,
         selected_date=selected_date,
+        expense_categories=BankLedgerEntry.EXPENSE_CATEGORIES,
     )
 
 
@@ -390,6 +396,42 @@ def rokar_pdf():
 
     output = generate_rokar_pdf(entry_date)
     filename = f"rokar_roznamcha_{entry_date.strftime('%Y%m%d')}.pdf"
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=filename,
+        mimetype="application/pdf",
+    )
+
+
+@bank_ledger_bp.route("/rokar/monthly", methods=["GET"])
+@login_required
+def rokar_monthly():
+    month = request.args.get("month", type=int) or date.today().month
+    year = request.args.get("year", type=int) or date.today().year
+    if month < 1 or month > 12:
+        month = date.today().month
+
+    rokar_data = get_rokar_month_data(year, month)
+    return render_template(
+        "bank_ledger/rokar_monthly.html",
+        banks=_all_banks(),
+        rokar=rokar_data,
+        selected_month=month,
+        selected_year=year,
+    )
+
+
+@bank_ledger_bp.route("/rokar/monthly/pdf")
+@login_required
+def rokar_monthly_pdf():
+    month = request.args.get("month", type=int) or date.today().month
+    year = request.args.get("year", type=int) or date.today().year
+    if month < 1 or month > 12:
+        abort(400)
+
+    output = generate_rokar_monthly_pdf(year, month)
+    filename = f"rokar_roznamcha_{year}{month:02d}.pdf"
     return send_file(
         output,
         as_attachment=False,

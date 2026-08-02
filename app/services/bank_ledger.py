@@ -1,4 +1,5 @@
-from datetime import date
+from calendar import monthrange
+from datetime import date, timedelta
 
 from app import db
 from app.models import BankAccount, BankLedgerEntry, BankTransfer
@@ -6,6 +7,56 @@ from app.models import BankAccount, BankLedgerEntry, BankTransfer
 
 def _format_money(value: float) -> str:
     return f"{value:,.2f}"
+
+
+def normalize_expense_category(value: str | None) -> str:
+    cleaned = (value or "").strip().lower()
+    allowed = {
+        BankLedgerEntry.CATEGORY_GENERAL,
+        BankLedgerEntry.CATEGORY_BILTY,
+        BankLedgerEntry.CATEGORY_EXTRA_EXPENSES,
+    }
+    return cleaned if cleaned in allowed else BankLedgerEntry.CATEGORY_GENERAL
+
+
+def _serialize_rokar_entry(entry: BankLedgerEntry) -> dict:
+    deposit = float(entry.deposit or 0)
+    withdrawal = float(entry.withdrawal or 0)
+    return {
+        "entry": entry,
+        "bank": entry.bank,
+        "particulars": format_entry_particulars(entry),
+        "deposit": deposit,
+        "withdrawal": withdrawal,
+        "type_label": entry.type_label,
+        "category_label": entry.expense_category_label,
+        "expense_category": entry.expense_category or "",
+    }
+
+
+def _category_sections(transactions: list[dict]) -> dict:
+    sections = {
+        BankLedgerEntry.CATEGORY_BILTY: {
+            "label": "Bilty",
+            "transactions": [],
+            "total_deposits": 0.0,
+            "total_withdrawals": 0.0,
+        },
+        BankLedgerEntry.CATEGORY_EXTRA_EXPENSES: {
+            "label": "Extra Expenses",
+            "transactions": [],
+            "total_deposits": 0.0,
+            "total_withdrawals": 0.0,
+        },
+    }
+    for row in transactions:
+        category = row.get("expense_category") or ""
+        if category not in sections:
+            continue
+        sections[category]["transactions"].append(row)
+        sections[category]["total_deposits"] += row["deposit"]
+        sections[category]["total_withdrawals"] += row["withdrawal"]
+    return sections
 
 
 def format_entry_particulars(entry: BankLedgerEntry) -> str:
@@ -41,57 +92,93 @@ def get_rokar_day_data(entry_date: date) -> dict:
         .order_by(BankLedgerEntry.id.asc())
         .all()
     )
+    return _build_rokar_report(
+        entries=entries,
+        period_label=entry_date.strftime("%d-%b-%Y"),
+        start_date=entry_date,
+        end_date=entry_date,
+    )
+
+
+def get_rokar_month_data(year: int, month: int) -> dict:
+    start_date = date(year, month, 1)
+    end_date = date(year, month, monthrange(year, month)[1])
+    entries = (
+        BankLedgerEntry.query.join(BankAccount)
+        .filter(
+            BankLedgerEntry.entry_date >= start_date,
+            BankLedgerEntry.entry_date <= end_date,
+        )
+        .order_by(BankLedgerEntry.entry_date.asc(), BankLedgerEntry.id.asc())
+        .all()
+    )
+    return _build_rokar_report(
+        entries=entries,
+        period_label=start_date.strftime("%B %Y"),
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+
+def _build_rokar_report(
+    entries: list[BankLedgerEntry],
+    period_label: str,
+    start_date: date,
+    end_date: date,
+) -> dict:
     banks = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
 
     transactions = []
     total_deposits = 0.0
     total_withdrawals = 0.0
     for entry in entries:
-        deposit = float(entry.deposit or 0)
-        withdrawal = float(entry.withdrawal or 0)
-        total_deposits += deposit
-        total_withdrawals += withdrawal
-        transactions.append(
-            {
-                "entry": entry,
-                "bank": entry.bank,
-                "particulars": format_entry_particulars(entry),
-                "deposit": deposit,
-                "withdrawal": withdrawal,
-                "type_label": entry.type_label,
-            }
-        )
+        row = _serialize_rokar_entry(entry)
+        total_deposits += row["deposit"]
+        total_withdrawals += row["withdrawal"]
+        transactions.append(row)
 
     bank_balances = []
     total_closing = 0.0
-    total_opening_today = 0.0
+    total_opening = 0.0
+    opening_reference = start_date - timedelta(days=1)
+
     for bank in banks:
-        closing = get_bank_balance_as_of(bank, entry_date)
-        day_entries = [e for e in entries if e.bank_id == bank.id]
-        day_deposits = sum(float(e.deposit or 0) for e in day_entries)
-        day_withdrawals = sum(float(e.withdrawal or 0) for e in day_entries)
-        opening_today = closing - day_deposits + day_withdrawals
+        closing = get_bank_balance_as_of(bank, end_date)
+        period_entries = [e for e in entries if e.bank_id == bank.id]
+        period_deposits = sum(float(e.deposit or 0) for e in period_entries)
+        period_withdrawals = sum(float(e.withdrawal or 0) for e in period_entries)
+
+        if start_date == end_date:
+            opening = closing - period_deposits + period_withdrawals
+        else:
+            opening = get_bank_balance_as_of(bank, opening_reference)
+
         bank_balances.append(
             {
                 "bank": bank,
-                "opening_today": opening_today,
-                "day_deposits": day_deposits,
-                "day_withdrawals": day_withdrawals,
+                "opening_today": opening,
+                "day_deposits": period_deposits,
+                "day_withdrawals": period_withdrawals,
                 "closing_balance": closing,
             }
         )
         total_closing += closing
-        total_opening_today += opening_today
+        total_opening += opening
 
     return {
-        "entry_date": entry_date,
+        "period_label": period_label,
+        "start_date": start_date,
+        "end_date": end_date,
+        "entry_date": end_date,
         "transactions": transactions,
         "bank_balances": bank_balances,
-        "total_opening_today": total_opening_today,
+        "total_opening_today": total_opening,
         "total_deposits": total_deposits,
         "total_withdrawals": total_withdrawals,
         "total_closing": total_closing,
         "transaction_count": len(transactions),
+        "category_sections": _category_sections(transactions),
+        "is_monthly": start_date != end_date,
     }
 
 

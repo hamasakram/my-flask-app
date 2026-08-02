@@ -9,7 +9,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.services.bank_ledger import _format_money, get_rokar_day_data
+from app.models import BankLedgerEntry
+from app.services.bank_ledger import _format_money, get_rokar_day_data, get_rokar_month_data
 
 LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "images" / "rn-colour-logo.png"
 BRAND_RED = colors.HexColor("#B21E22")
@@ -21,6 +22,26 @@ ALT_ROW = colors.HexColor("#F9FAFB")
 
 def generate_rokar_pdf(entry_date: date) -> BytesIO:
     data = get_rokar_day_data(entry_date)
+    return _build_rokar_pdf(
+        data,
+        title="DAILY ROKAR ROZNAMCHA",
+        subtitle=f"Date: {entry_date.strftime('%d-%b-%Y').upper()}",
+    )
+
+
+def generate_rokar_monthly_pdf(year: int, month: int) -> BytesIO:
+    data = get_rokar_month_data(year, month)
+    return _build_rokar_pdf(
+        data,
+        title="MONTHLY ROKAR ROZNAMCHA",
+        subtitle=(
+            f"Period: {data['start_date'].strftime('%d-%b-%Y')} – "
+            f"{data['end_date'].strftime('%d-%b-%Y')}"
+        ),
+    )
+
+
+def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -70,9 +91,9 @@ def generate_rokar_pdf(entry_date: date) -> BytesIO:
 
     header_left = Table(
         [
-            [Paragraph("DAILY ROKAR ROZNAMCHA", title_style)],
+            [Paragraph(title, title_style)],
             [Paragraph("RN COLOUR — Bank Ledger", subtitle_style)],
-            [Paragraph(f"Date: {entry_date.strftime('%d-%b-%Y').upper()}", subtitle_style)],
+            [Paragraph(subtitle, subtitle_style)],
         ],
         colWidths=[5.5 * inch],
     )
@@ -115,13 +136,16 @@ def generate_rokar_pdf(entry_date: date) -> BytesIO:
     elements.append(top_table)
     elements.append(Spacer(1, 0.15 * inch))
 
+    opening_label = "Opening (Start of Month)" if data.get("is_monthly") else "Opening (Start of Day)"
+    closing_label = "Closing (End of Month)" if data.get("is_monthly") else "Closing (All Accounts)"
+
     summary_data = [
-        ["Opening (Start of Day)", f"Rs {_format_money(data['total_opening_today'])}"],
-        ["Total Deposits", f"Rs {_format_money(data['total_deposits'])}"],
-        ["Total Withdrawals", f"Rs {_format_money(data['total_withdrawals'])}"],
-        ["Closing (All Accounts)", f"Rs {_format_money(data['total_closing'])}"],
+        [opening_label, f"Rs {_format_money(data['total_opening_today'])}"],
+        ["Total Credited (Deposits)", f"Rs {_format_money(data['total_deposits'])}"],
+        ["Total Debited (Withdrawals)", f"Rs {_format_money(data['total_withdrawals'])}"],
+        [closing_label, f"Rs {_format_money(data['total_closing'])}"],
     ]
-    summary_table = Table(summary_data, colWidths=[1.8 * inch, 1.35 * inch], hAlign="LEFT")
+    summary_table = Table(summary_data, colWidths=[1.9 * inch, 1.35 * inch], hAlign="LEFT")
     summary_table.setStyle(
         TableStyle(
             [
@@ -142,58 +166,40 @@ def generate_rokar_pdf(entry_date: date) -> BytesIO:
     elements.append(summary_table)
     elements.append(Spacer(1, 0.15 * inch))
 
-    txn_header = ["#", "Bank Account", "Type", "Sent To / Particulars", "Deposit", "Withdrawal"]
-    txn_rows = [txn_header]
-    for index, row in enumerate(data["transactions"], start=1):
-        txn_rows.append(
-            [
-                str(index),
-                row["bank"].display_name,
-                row["type_label"],
-                Paragraph(row["particulars"], cell_style),
-                f"Rs {_format_money(row['deposit'])}" if row["deposit"] else "—",
-                f"Rs {_format_money(row['withdrawal'])}" if row["withdrawal"] else "—",
-            ]
-        )
-    if len(txn_rows) == 1:
-        txn_rows.append(["—", "No transactions on this date", "", "", "—", "—"])
+    txn_title = "Monthly Transactions" if data.get("is_monthly") else "Daily Transactions"
+    elements.extend(_build_transaction_table(data["transactions"], txn_title, cell_style, subtitle_style))
 
-    txn_table = Table(
-        txn_rows,
-        colWidths=[0.35 * inch, 1.55 * inch, 0.85 * inch, 3.35 * inch, 1.0 * inch, 1.0 * inch],
-        repeatRows=1,
-    )
-    txn_style = [
-        ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("TEXTCOLOR", (0, 1), (-1, -1), BRAND_BLACK),
-        ("BOX", (0, 0), (-1, -1), 0.6, BORDER_GREY),
-        ("INNERGRID", (0, 0), (-1, -1), 0.4, BORDER_GREY),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN", (0, 0), (0, -1), "CENTER"),
-        ("ALIGN", (4, 0), (-1, -1), "RIGHT"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]
-    for row_index in range(1, len(txn_rows)):
-        if row_index % 2 == 0:
-            txn_style.append(("BACKGROUND", (0, row_index), (-1, row_index), ALT_ROW))
-    txn_table.setStyle(TableStyle(txn_style))
-    elements.append(Paragraph("Daily Transactions", subtitle_style))
-    elements.append(Spacer(1, 0.05 * inch))
-    elements.append(txn_table)
+    category_sections = data.get("category_sections", {})
+    for category_key in (
+        BankLedgerEntry.CATEGORY_BILTY,
+        BankLedgerEntry.CATEGORY_EXTRA_EXPENSES,
+    ):
+        section = category_sections.get(category_key)
+        if not section or not section["transactions"]:
+            continue
+        elements.append(Spacer(1, 0.12 * inch))
+        section_title = (
+            f"{section['label']} — Deposits: Rs {_format_money(section['total_deposits'])} · "
+            f"Withdrawals: Rs {_format_money(section['total_withdrawals'])}"
+        )
+        elements.extend(
+            _build_transaction_table(
+                section["transactions"],
+                section_title,
+                cell_style,
+                subtitle_style,
+            )
+        )
+
     elements.append(Spacer(1, 0.18 * inch))
 
+    opening_col = "Opening" if data.get("is_monthly") else "Opening Today"
+    period_col = "Period Deposits" if data.get("is_monthly") else "Deposits"
     balance_header = [
         "Bank Account",
         "Account Title",
-        "Opening Today",
-        "Deposits",
+        opening_col,
+        period_col,
         "Withdrawals",
         "Closing Balance",
     ]
@@ -246,10 +252,81 @@ def generate_rokar_pdf(entry_date: date) -> BytesIO:
             ]
         )
     )
-    elements.append(Paragraph("Bank Account Balances", subtitle_style))
+    balance_title = "Bank Account Balances (Monthly)" if data.get("is_monthly") else "Bank Account Balances"
+    elements.append(Paragraph(balance_title, subtitle_style))
     elements.append(Spacer(1, 0.05 * inch))
     elements.append(balance_table)
 
     doc.build(elements)
     buffer.seek(0)
     return buffer
+
+
+def _build_transaction_table(transactions, title, cell_style, subtitle_style):
+    elements = []
+    txn_header = [
+        "#",
+        "Date",
+        "Bank Account",
+        "Category",
+        "Type",
+        "Sent To / Particulars",
+        "Deposit",
+        "Withdrawal",
+    ]
+    txn_rows = [txn_header]
+    for index, row in enumerate(transactions, start=1):
+        txn_rows.append(
+            [
+                str(index),
+                row["entry"].entry_date.strftime("%d-%b-%Y"),
+                row["bank"].display_name,
+                row["category_label"],
+                row["type_label"],
+                Paragraph(row["particulars"], cell_style),
+                f"Rs {_format_money(row['deposit'])}" if row["deposit"] else "—",
+                f"Rs {_format_money(row['withdrawal'])}" if row["withdrawal"] else "—",
+            ]
+        )
+    if len(txn_rows) == 1:
+        txn_rows.append(["—", "—", "No transactions in this period", "", "", "", "—", "—"])
+
+    txn_table = Table(
+        txn_rows,
+        colWidths=[
+            0.3 * inch,
+            0.75 * inch,
+            1.35 * inch,
+            0.85 * inch,
+            0.75 * inch,
+            2.45 * inch,
+            0.9 * inch,
+            0.9 * inch,
+        ],
+        repeatRows=1,
+    )
+    txn_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("TEXTCOLOR", (0, 1), (-1, -1), BRAND_BLACK),
+        ("BOX", (0, 0), (-1, -1), 0.6, BORDER_GREY),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, BORDER_GREY),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (6, 0), (-1, -1), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]
+    for row_index in range(1, len(txn_rows)):
+        if row_index % 2 == 0:
+            txn_style.append(("BACKGROUND", (0, row_index), (-1, row_index), ALT_ROW))
+    txn_table.setStyle(TableStyle(txn_style))
+    elements.append(Paragraph(title, subtitle_style))
+    elements.append(Spacer(1, 0.05 * inch))
+    elements.append(txn_table)
+    return elements
