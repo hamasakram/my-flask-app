@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Edit Used Ink Stock - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit Used Ink Stock</h1>
+    <p class="page-subtitle">{{ record.ink_name }}{% if record.shade_name %} · {{ record.shade_name }}{% endif %}</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="ink_name">Ink Name</label>
+            <input type="text" id="ink_name" name="ink_name" list="ink-names-list" value="{{ record.ink_name }}" required>
+            <datalist id="ink-names-list">
+                {% for name in ink_names %}
+                <option value="{{ name }}"></option>
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="shade_name">Shade Name</label>
+            <input type="text" id="shade_name" name="shade_name" list="shade-names-list" value="{{ record.shade_name or '' }}">
+            <datalist id="shade-names-list">
+                {% for name in shade_names %}
+                <option value="{{ name }}"></option>
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="quantity_total">Quantity Total</label>
+            <input type="number" id="quantity_total" name="quantity_total" step="0.1" min="0.1" value="{{ record.quantity_total }}" required>
+        </div>
+        <div class="form-group">
+            <label for="entry_date">Date</label>
+            <input type="date" id="entry_date" name="entry_date" value="{{ record.entry_date.isoformat() }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes" value="{{ record.notes or '' }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

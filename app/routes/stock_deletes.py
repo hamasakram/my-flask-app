@@ -28,6 +28,7 @@ from app.models import (
     ShLedgerEntry,
     ShOpeningBalance,
     ShGatePassScreenshot,
+    UsedInkStock,
     ShPaymentScreenshot,
     ShPartnerCompany,
     ShPurchase,
@@ -101,13 +102,28 @@ def delete_ink_issued(txn_id):
 @login_required
 def delete_ink_used(txn_id):
     txn = InventoryTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != InventoryTransaction.TRANSACTION_CANS_LEFT:
+    if txn.transaction_type not in (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left"):
         abort(404)
+    linked = UsedInkStock.query.filter_by(source_transaction_id=txn.id).all()
+    for record in linked:
+        db.session.delete(record)
     return _delete_entity(
         txn,
         "InventoryTransaction",
-        f"Deleted Cans Left record #{txn_id}",
-        url_for("inventory.cans_left"),
+        f"Deleted Cans Out record #{txn_id}",
+        url_for("inventory.cans_out"),
+    )
+
+
+@stock_deletes_bp.route("/used-ink-stock/<int:record_id>", methods=["POST"])
+@login_required
+def delete_used_ink_stock(record_id):
+    record = UsedInkStock.query.get_or_404(record_id)
+    return _delete_entity(
+        record,
+        "UsedInkStock",
+        f"Deleted used ink stock #{record_id}",
+        url_for("inventory.used_inks_stock", date=record.entry_date.isoformat()),
     )
 
 

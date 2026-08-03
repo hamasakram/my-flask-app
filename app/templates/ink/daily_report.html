@@ -34,7 +34,7 @@
     <div class="report-category-header">
         <h2>{{ company.name }}</h2>
         <div class="report-category-stats">
-            <span>Cans Left: <strong>{{ "%.1f"|format(company.total_cans_left) }}</strong></span>
+            <span>Current Cans: <strong>{{ "%.1f"|format(company.total_cans_left) }}</strong></span>
             <span>Weight Left: <strong>{{ "%.1f"|format(company.total_weight_left) }} kg</strong></span>
             <span>Cans In Today: <strong>{{ "%.1f"|format(company.cans_in_today) }}</strong></span>
             <span>Used Today: <strong>{{ "%.1f"|format(company.used_today) }}</strong></span>
@@ -45,7 +45,7 @@
         <thead>
             <tr>
                 <th>Color Code</th><th>Color</th><th>Init. Cans</th><th>Wt/Can</th>
-                <th>Init. Wt</th><th>Cans In</th><th>Used</th><th>Cans Left</th><th>Left Wt</th>
+                <th>Init. Wt</th><th>Cans In</th><th>Cans Out</th><th>Current Cans</th><th>Current Wt</th>
             </tr>
         </thead>
         <tbody>
@@ -67,13 +67,13 @@
 
     {% set has_activity = namespace(value=false) %}
     {% for block in company.inks %}
-        {% if block.cans_in_today or block.cans_left_today %}{% set has_activity.value = true %}{% endif %}
+        {% if block.cans_in_today or block.cans_out_today or block.cans_left_today %}{% set has_activity.value = true %}{% endif %}
     {% endfor %}
 
     {% if has_activity.value %}
     <h4>Today's Activity</h4>
     <table class="data-table compact">
-        <thead><tr><th>Type</th><th>Color</th><th>Code</th><th>Cans</th><th>Left</th><th>Where Used</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Type</th><th>Color</th><th>Code</th><th>Cans Out</th><th>Remaining</th><th>Where Used</th><th>Notes</th></tr></thead>
         <tbody>
             {% for block in company.inks %}
                 {% for txn in block.cans_in_today %}
@@ -86,9 +86,9 @@
                     <td>{{ txn.notes or '—' }}</td>
                 </tr>
                 {% endfor %}
-                {% for txn in block.cans_left_today %}
+                {% for txn in block.cans_out_today or block.cans_left_today %}
                 <tr>
-                    <td><span class="badge badge-orange">Cans Left</span></td>
+                    <td><span class="badge badge-orange">Cans Out</span></td>
                     <td>{{ block.ink.name }}</td>
                     <td>{{ block.ink.color_code or '—' }}</td>
                     <td>{{ "%.1f"|format(txn.quantity) }}</td>

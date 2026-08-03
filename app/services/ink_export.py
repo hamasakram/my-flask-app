@@ -94,7 +94,7 @@ def export_ink_daily_pdf(report_data):
             elements.append(Paragraph(f"INK COMPANY: {company['name'].upper()}", company_title))
             elements.append(
                 Paragraph(
-                    f"Cans Left: <b>{company['total_cans_left']:.1f}</b> &nbsp;|&nbsp; "
+                    f"Current Cans: <b>{company['total_cans_left']:.1f}</b> &nbsp;|&nbsp; "
                     f"Weight Left: <b>{company['total_weight_left']:.1f} kg</b> &nbsp;|&nbsp; "
                     f"Cans In Today: <b>{company['cans_in_today']:.1f}</b> &nbsp;|&nbsp; "
                     f"Used Today: <b>{company['used_today']:.1f}</b>",
@@ -110,8 +110,8 @@ def export_ink_daily_pdf(report_data):
                     "Wt/Can",
                     "Init. Wt",
                     "Cans In",
-                    "Used",
-                    "Cans Left",
+                    "Cans Out",
+                    "Current Cans",
                     "Left Wt",
                 ]
             ]
@@ -152,10 +152,10 @@ def export_ink_daily_pdf(report_data):
                             txn.notes or "—",
                         ]
                     )
-                for txn in ink_block["cans_left_today"]:
+                for txn in ink_block.get("cans_out_today") or ink_block.get("cans_left_today") or []:
                     activity_rows.append(
                         [
-                            "Cans Left",
+                            "Cans Out",
                             ink.name,
                             ink.color_code or "—",
                             f"{txn.quantity:.1f}",
@@ -175,6 +175,102 @@ def export_ink_daily_pdf(report_data):
                 elements.append(activity_table)
 
             elements.append(Spacer(1, 0.1 * inch))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+
+def export_used_inks_pdf(report_data):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        topMargin=0.45 * inch,
+        bottomMargin=0.45 * inch,
+        leftMargin=0.4 * inch,
+        rightMargin=0.4 * inch,
+    )
+    styles = getSampleStyleSheet()
+    elements = []
+
+    title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=16, spaceAfter=6)
+    section_label = ParagraphStyle(
+        "SectionLabel",
+        parent=styles["Normal"],
+        fontSize=9,
+        textColor=colors.HexColor("#475569"),
+        spaceAfter=4,
+    )
+
+    if LOGO_PATH.exists():
+        logo = Image(str(LOGO_PATH), width=2.0 * inch, height=0.75 * inch, kind="proportional")
+        elements.append(logo)
+        elements.append(Spacer(1, 0.12 * inch))
+
+    report_date = report_data.get("report_date")
+    date_label = report_date.strftime("%d %B %Y") if report_date else "All Dates"
+    elements.append(Paragraph("Used Inks Stock Report", title_style))
+    elements.append(
+        Paragraph(
+            f"<b>Date:</b> {date_label} &nbsp;&nbsp; "
+            f"<b>Generated:</b> {datetime.now().strftime('%d-%m-%Y %H:%M')}",
+            styles["Normal"],
+        )
+    )
+    elements.append(
+        Paragraph(
+            f"<b>Total Used Cans:</b> {report_data['total_cans']:.1f} &nbsp;&nbsp; "
+            f"<b>Total Used Weight:</b> {report_data['total_weight']:.1f} kg",
+            styles["Normal"],
+        )
+    )
+    elements.append(Spacer(1, 0.18 * inch))
+
+    summary = report_data.get("summary") or []
+    if not summary:
+        elements.append(Paragraph("No used ink stock recorded.", styles["Normal"]))
+    else:
+        summary_data = [["Ink Name", "Shade Name", "Total Cans", "Wt/Can", "Total Weight (kg)"]]
+        for row in summary:
+            summary_data.append(
+                [
+                    row["ink_name"],
+                    row["shade_name"],
+                    f"{row['quantity_total']:.1f}",
+                    f"{row['weight_per_can']:.1f}" if row["weight_per_can"] else "—",
+                    f"{row['total_weight']:.1f}" if row["total_weight"] else "—",
+                ]
+            )
+        summary_table = Table(
+            summary_data,
+            colWidths=[120, 90, 70, 60, 90],
+            repeatRows=1,
+        )
+        summary_table.setStyle(_table_style())
+        elements.append(Paragraph("<b>Used Inks Summary</b>", section_label))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 0.15 * inch))
+
+        detail_data = [["Date", "Ink Name", "Shade Name", "Quantity", "Notes"]]
+        for entry in report_data.get("entries") or []:
+            detail_data.append(
+                [
+                    entry.entry_date.strftime("%d-%b-%Y"),
+                    entry.ink_name,
+                    entry.shade_name or "—",
+                    f"{entry.quantity_total:.1f}",
+                    entry.notes or "—",
+                ]
+            )
+        detail_table = Table(
+            detail_data,
+            colWidths=[70, 110, 90, 60, 140],
+            repeatRows=1,
+        )
+        detail_table.setStyle(_table_style())
+        elements.append(Paragraph("<b>Daily Used Ink Entries</b>", section_label))
+        elements.append(detail_table)
 
     doc.build(elements)
     buffer.seek(0)

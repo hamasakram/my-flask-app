@@ -31,19 +31,17 @@
 </div>
 
 <div class="card">
-    <h2>Current Stock</h2>
+    <h2>Current Stock <a href="{{ url_for('inventory.current_stock') }}" class="btn btn-secondary btn-sm">View Full Page</a></h2>
     <table class="data-table">
         <thead>
             <tr>
                 <th>Company</th>
-                <th>Color Code</th>
-                <th>Color</th>
-                <th>Init. Cans</th>
-                <th>Wt/Can</th>
+                <th>Shade</th>
+                <th>Ink Name</th>
                 <th>Cans In</th>
-                <th>Used</th>
-                <th>Cans Left</th>
-                <th>Left Wt (kg)</th>
+                <th>Cans Out</th>
+                <th>Current Cans</th>
+                <th>Current Wt (kg)</th>
             </tr>
         </thead>
         <tbody>
@@ -52,15 +50,13 @@
                 <td>{{ item.ink.ink_company }}</td>
                 <td>{{ item.ink.color_code or '—' }}</td>
                 <td>{{ item.ink.name }}</td>
-                <td>{{ "%.1f"|format(item.initial_cans) }}</td>
-                <td>{{ "%.1f"|format(item.ink.weight_per_can) }}</td>
                 <td>{{ "%.1f"|format(item.cans_in) }}</td>
                 <td>{{ "%.1f"|format(item.used) }}</td>
                 <td><strong>{{ "%.1f"|format(item.current_cans) }}</strong></td>
                 <td><strong>{{ "%.1f"|format(item.current_weight) }}</strong></td>
             </tr>
             {% else %}
-            <tr><td colspan="9" class="empty">No inks yet. Add your first ink.</td></tr>
+            <tr><td colspan="7" class="empty">No inks yet. Add your first ink.</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -90,8 +86,10 @@
 {% if current_user.can_edit() %}
 <div class="quick-actions">
     <a href="{{ url_for('inventory.inks_list') }}" class="btn btn-primary">+ Add Ink</a>
+    <a href="{{ url_for('inventory.current_stock') }}" class="btn btn-secondary">Current Stock</a>
     <a href="{{ url_for('inventory.cans_in') }}" class="btn btn-secondary">Cans In</a>
-    <a href="{{ url_for('inventory.cans_left') }}" class="btn btn-secondary">Cans Left</a>
+    <a href="{{ url_for('inventory.cans_out') }}" class="btn btn-secondary">Cans Out</a>
+    <a href="{{ url_for('inventory.used_inks_stock') }}" class="btn btn-secondary">Used Inks Stock</a>
 </div>
 {% endif %}
 {% endblock %}

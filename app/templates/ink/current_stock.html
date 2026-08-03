@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Current Stock - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Current Stock</h1>
+    <p class="page-subtitle">Live ink inventory updated by Cans In and Cans Out</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total Current Cans</span>
+        <span class="stat-value">{{ "%.1f"|format(live_stock | sum(attribute='current_cans')) }}</span>
+    </div>
+    <div class="stat-card accent-blue">
+        <span class="stat-label">Total Current Weight</span>
+        <span class="stat-value">{{ "%.1f"|format(live_stock | sum(attribute='current_weight')) }} kg</span>
+    </div>
+</div>
+
+<div class="card">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Company</th>
+                <th>Color Code</th>
+                <th>Color</th>
+                <th>Initial Cans</th>
+                <th>Cans In</th>
+                <th>Cans Out</th>
+                <th>Current Cans</th>
+                <th>Wt/Can</th>
+                <th>Current Weight</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in live_stock %}
+            <tr>
+                <td>{{ item.ink.ink_company }}</td>
+                <td>{{ item.ink.color_code or '—' }}</td>
+                <td>{{ item.ink.name }}</td>
+                <td>{{ "%.1f"|format(item.initial_cans) }}</td>
+                <td>{{ "%.1f"|format(item.cans_in) }}</td>
+                <td>{{ "%.1f"|format(item.used) }}</td>
+                <td><strong>{{ "%.1f"|format(item.current_cans) }}</strong></td>
+                <td>{{ "%.1f"|format(item.ink.weight_per_can) }}</td>
+                <td><strong>{{ "%.1f"|format(item.current_weight) }} kg</strong></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="empty">No inks in stock yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

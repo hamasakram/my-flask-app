@@ -30,8 +30,10 @@
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Ink Management</li>
             <li><a href="{{ url_for('inventory.inks_list') }}">Inks</a></li>
+            <li><a href="{{ url_for('inventory.current_stock') }}">Current Stock</a></li>
             <li><a href="{{ url_for('inventory.cans_in') }}">Cans In</a></li>
-            <li><a href="{{ url_for('inventory.cans_left') }}">Cans Left</a></li>
+            <li><a href="{{ url_for('inventory.cans_out') }}">Cans Out</a></li>
+            <li><a href="{{ url_for('inventory.used_inks_stock') }}">Used Inks Stock</a></li>
             <li><a href="{{ url_for('ink_reports.daily_report') }}">Daily Report</a></li>
             {% endif %}
             {% elif active_module == 'materials' %}

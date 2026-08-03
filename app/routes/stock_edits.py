@@ -33,6 +33,7 @@ from app.models import (
     ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
+    UsedInkStock,
 )
 from app.services.companies import (
     get_chemical_companies,
@@ -53,6 +54,13 @@ from app.services.materials_inventory import (
     list_materials,
     list_production_job_names,
     parse_stock_left_usage_fields,
+)
+from app.services.ink_used_stock import (
+    ensure_used_ink_name,
+    ensure_used_ink_shade,
+    list_used_ink_names,
+    list_used_ink_shades,
+    sync_used_ink_from_cans_out,
 )
 
 from pathlib import Path
@@ -189,41 +197,92 @@ def edit_ink_issued(txn_id):
 @login_required
 def edit_ink_used(txn_id):
     txn = InventoryTransaction.query.get_or_404(txn_id)
-    if txn.transaction_type != InventoryTransaction.TRANSACTION_CANS_LEFT:
+    if txn.transaction_type not in (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left"):
         abort(404)
 
     if request.method == "POST":
         require_edit_access()
+        cans_out = request.form.get("cans_out", type=float)
         quantity_left = request.form.get("quantity_left", type=float)
-        quantity = request.form.get("quantity", type=float)
         transaction_date = request.form.get("transaction_date")
         where_used = request.form.get("where_used", "").strip()
         notes = request.form.get("notes", "").strip()
 
-        if quantity_left is None or quantity_left < 0 or not quantity or quantity <= 0 or not transaction_date:
-            flash("Cans left, used amount, and date are required.", "danger")
+        if cans_out is None or cans_out <= 0 or quantity_left is None or quantity_left < 0 or not transaction_date:
+            flash("Cans out, remaining cans, and date are required.", "danger")
             return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id))
 
+        parsed_date = _parse_date(transaction_date)
+        txn.quantity = cans_out
         txn.quantity_left = quantity_left
-        txn.quantity = quantity
         txn.where_used = where_used
-        txn.transaction_date = _parse_date(transaction_date)
+        txn.transaction_date = parsed_date
         txn.notes = notes
+        txn.transaction_type = InventoryTransaction.TRANSACTION_CANS_OUT
+        sync_used_ink_from_cans_out(
+            txn.ink_type,
+            cans_out,
+            parsed_date,
+            txn.id,
+            created_by_id=current_user.id,
+        )
         log_audit(
             current_user.id,
             "UPDATE",
             "InventoryTransaction",
             txn.id,
-            f"Updated Cans Left: {quantity} used, {quantity_left} left",
+            f"Updated Cans Out: {cans_out} used, {quantity_left} remaining",
         )
         db.session.commit()
-        flash("Cans Left record updated.", "success")
-        return redirect(url_for("inventory.cans_left"))
+        flash("Cans Out record updated.", "success")
+        return redirect(url_for("inventory.cans_out"))
 
     return render_template(
         "shared/edit_ink_used.html",
         txn=txn,
-        cancel_url=url_for("inventory.cans_left"),
+        cancel_url=url_for("inventory.cans_out"),
+    )
+
+
+@stock_edits_bp.route("/used-ink-stock/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_used_ink_stock(record_id):
+    record = UsedInkStock.query.get_or_404(record_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        ink_name = request.form.get("ink_name", "").strip()
+        shade_name = request.form.get("shade_name", "").strip()
+        quantity_total = request.form.get("quantity_total", type=float)
+        entry_date = request.form.get("entry_date")
+        notes = request.form.get("notes", "").strip()
+
+        if not ink_name or quantity_total is None or quantity_total <= 0 or not entry_date:
+            flash("Ink name, quantity total, and date are required.", "danger")
+            return redirect(url_for("stock_edits.edit_used_ink_stock", record_id=record_id))
+
+        record.ink_name = ensure_used_ink_name(ink_name)
+        record.shade_name = ensure_used_ink_shade(shade_name) if shade_name else ""
+        record.quantity_total = quantity_total
+        record.entry_date = _parse_date(entry_date)
+        record.notes = notes
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "UsedInkStock",
+            record.id,
+            f"Updated used ink stock: {record.ink_name} / {record.shade_name or '—'}",
+        )
+        db.session.commit()
+        flash("Used ink stock updated.", "success")
+        return redirect(url_for("inventory.used_inks_stock", date=record.entry_date.isoformat()))
+
+    return render_template(
+        "shared/edit_used_ink_stock.html",
+        record=record,
+        ink_names=list_used_ink_names(),
+        shade_names=list_used_ink_shades(),
+        cancel_url=url_for("inventory.used_inks_stock", date=record.entry_date.isoformat()),
     )
 
 

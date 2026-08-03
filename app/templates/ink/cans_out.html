@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
-{% block title %}Cans Left - RN COLOUR{% endblock %}
+{% block title %}Cans Out - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
-    <h1>Cans Left</h1>
-    <p class="page-subtitle">Record remaining cans — system calculates cans used automatically</p>
+    <h1>Cans Out</h1>
+    <p class="page-subtitle">Record cans taken out for use — automatically added to Used Inks Stock</p>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
-    <h2>Record Cans Left</h2>
+    <h2>Record Cans Out</h2>
     {% if not inks %}
     <p class="empty-state">Add inks first in <a href="{{ url_for('inventory.inks_list') }}">Inks</a>.</p>
     {% else %}
@@ -25,8 +25,8 @@
             <small id="current-stock-hint" class="field-note"></small>
         </div>
         <div class="form-group">
-            <label for="quantity_left">Cans Left</label>
-            <input type="number" id="quantity_left" name="quantity_left" step="0.1" min="0" required>
+            <label for="cans_out">Cans Out</label>
+            <input type="number" id="cans_out" name="cans_out" step="0.1" min="0.1" required>
         </div>
         <div class="form-group">
             <label for="transaction_date">Date</label>
@@ -41,7 +41,7 @@
             <input type="text" id="notes" name="notes" placeholder="Optional">
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Cans Left</button>
+            <button type="submit" class="btn btn-primary">Save Cans Out</button>
         </div>
     </form>
     {% endif %}
@@ -49,11 +49,11 @@
 {% endif %}
 
 <div class="card">
-    <h2>Recent Cans Left</h2>
+    <h2>Recent Cans Out</h2>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Date</th><th>Ink</th><th>Used</th><th>Left</th><th>Where Used</th><th>Notes</th>
+                <th>Date</th><th>Ink</th><th>Cans Out</th><th>Remaining</th><th>Where Used</th><th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>

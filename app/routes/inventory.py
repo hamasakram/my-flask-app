@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -8,11 +8,20 @@ from app import db
 from app.models import InkType, InventoryTransaction
 from app.services.ink_inventory import (
     calculate_live_stock,
-    calculate_used_from_left,
+    calculate_remaining_from_out,
     create_ink,
     get_current_cans,
     get_ink_options,
     list_inks,
+)
+from app.services.ink_export import export_used_inks_pdf
+from app.services.ink_used_stock import (
+    get_used_ink_report_data,
+    get_used_ink_stock_entries,
+    list_used_ink_names,
+    list_used_ink_shades,
+    record_used_ink_stock,
+    sync_used_ink_from_cans_out,
 )
 from app.services.inventory import log_audit
 
@@ -59,8 +68,14 @@ def inks_list():
         return redirect(url_for("inventory.inks_list"))
 
     inks = list_inks()
-    live_stock = {item["ink"].id: item for item in calculate_live_stock()}
-    return render_template("ink/inks.html", inks=inks, live_stock=live_stock)
+    return render_template("ink/inks.html", inks=inks)
+
+
+@inventory_bp.route("/current-stock")
+@login_required
+def current_stock():
+    live_stock = calculate_live_stock()
+    return render_template("ink/current_stock.html", live_stock=live_stock)
 
 
 @inventory_bp.route("/cans-in", methods=["GET", "POST"])
@@ -118,43 +133,39 @@ def cans_in():
     return render_template("ink/cans_in.html", inks=inks, recent=recent)
 
 
-@inventory_bp.route("/cans-left", methods=["GET", "POST"])
+@inventory_bp.route("/cans-out", methods=["GET", "POST"])
 @login_required
-def cans_left():
+def cans_out():
     inks = list_inks()
 
     if request.method == "POST":
         require_edit_access()
         ink_type_id = request.form.get("ink_type_id", type=int)
-        quantity_left = request.form.get("quantity_left", type=float)
+        cans_out_qty = request.form.get("cans_out", type=float)
         where_used = request.form.get("where_used", "").strip()
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
 
-        if ink_type_id is None or quantity_left is None or quantity_left < 0 or not transaction_date:
-            flash("Ink, cans left, and date are required.", "danger")
-            return redirect(url_for("inventory.cans_left"))
+        if ink_type_id is None or cans_out_qty is None or cans_out_qty <= 0 or not transaction_date:
+            flash("Ink, cans out, and date are required.", "danger")
+            return redirect(url_for("inventory.cans_out"))
 
         ink = db.session.get(InkType, ink_type_id)
         if not ink:
             flash("Invalid ink.", "danger")
-            return redirect(url_for("inventory.cans_left"))
+            return redirect(url_for("inventory.cans_out"))
 
         try:
-            quantity_used = calculate_used_from_left(ink.id, quantity_left)
+            quantity_used, quantity_left = calculate_remaining_from_out(ink.id, cans_out_qty)
         except ValueError as exc:
             flash(str(exc), "danger")
-            return redirect(url_for("inventory.cans_left"))
-
-        if quantity_used <= 0:
-            flash("No cans were used — left count matches current stock.", "info")
-            return redirect(url_for("inventory.cans_left"))
+            return redirect(url_for("inventory.cans_out"))
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = InventoryTransaction(
             company_id=ink.company_id,
             ink_type_id=ink.id,
-            transaction_type=InventoryTransaction.TRANSACTION_CANS_LEFT,
+            transaction_type=InventoryTransaction.TRANSACTION_CANS_OUT,
             quantity=quantity_used,
             quantity_left=quantity_left,
             where_used=where_used,
@@ -164,29 +175,120 @@ def cans_left():
         )
         db.session.add(txn)
         db.session.flush()
+        sync_used_ink_from_cans_out(
+            ink,
+            quantity_used,
+            parsed_date,
+            txn.id,
+            created_by_id=current_user.id,
+        )
         log_audit(
             current_user.id,
             "CREATE",
             "InventoryTransaction",
             txn.id,
-            f"Cans Left {quantity_left} ({quantity_used} used) of {ink.display_name}",
+            f"Cans Out {quantity_used} of {ink.display_name}",
         )
         db.session.commit()
         flash(
-            f"Cans Left recorded: {quantity_used:.1f} cans used, {quantity_left:.1f} cans remaining.",
+            f"Cans Out recorded: {quantity_used:.1f} cans used, {quantity_left:.1f} cans remaining.",
             "success",
         )
-        return redirect(url_for("inventory.cans_left"))
+        return redirect(url_for("inventory.cans_out"))
 
     recent = (
-        InventoryTransaction.query.filter_by(
-            transaction_type=InventoryTransaction.TRANSACTION_CANS_LEFT
+        InventoryTransaction.query.filter(
+            InventoryTransaction.transaction_type.in_(
+                (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
+            )
         )
         .order_by(InventoryTransaction.transaction_date.desc(), InventoryTransaction.id.desc())
         .limit(20)
         .all()
     )
-    return render_template("ink/cans_left.html", inks=inks, recent=recent)
+    return render_template("ink/cans_out.html", inks=inks, recent=recent)
+
+
+@inventory_bp.route("/cans-left")
+@login_required
+def cans_left_redirect():
+    return redirect(url_for("inventory.cans_out"))
+
+
+@inventory_bp.route("/used-inks-stock", methods=["GET", "POST"])
+@login_required
+def used_inks_stock():
+    selected_date = request.args.get("date") or request.form.get("entry_date")
+    if selected_date:
+        filter_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+    else:
+        filter_date = date.today()
+
+    if request.method == "POST":
+        require_edit_access()
+        ink_name = request.form.get("ink_name", "").strip()
+        shade_name = request.form.get("shade_name", "").strip()
+        quantity_total = request.form.get("quantity_total", type=float)
+        entry_date = request.form.get("entry_date")
+        notes = request.form.get("notes", "").strip()
+
+        if not ink_name or quantity_total is None or quantity_total <= 0 or not entry_date:
+            flash("Ink name, quantity total, and date are required.", "danger")
+            return redirect(url_for("inventory.used_inks_stock", date=filter_date.isoformat()))
+
+        parsed_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
+        try:
+            record_used_ink_stock(
+                ink_name=ink_name,
+                shade_name=shade_name,
+                quantity=quantity_total,
+                entry_date=parsed_date,
+                notes=notes,
+                created_by_id=current_user.id,
+            )
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "UsedInkStock",
+                None,
+                f"Used ink stock: {ink_name} / {shade_name or '—'} = {quantity_total} cans",
+            )
+            db.session.commit()
+            flash("Used ink stock recorded.", "success")
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        return redirect(url_for("inventory.used_inks_stock", date=parsed_date.isoformat()))
+
+    entries = get_used_ink_stock_entries(filter_date)
+    report_data = get_used_ink_report_data(filter_date)
+    return render_template(
+        "ink/used_inks_stock.html",
+        entries=entries,
+        report_data=report_data,
+        selected_date=filter_date.isoformat(),
+        ink_names=list_used_ink_names(),
+        shade_names=list_used_ink_shades(),
+    )
+
+
+@inventory_bp.route("/used-inks-stock/pdf")
+@login_required
+def used_inks_stock_pdf():
+    selected_date = request.args.get("date")
+    filter_date = datetime.strptime(selected_date, "%Y-%m-%d").date() if selected_date else None
+    report_data = get_used_ink_report_data(filter_date)
+    output = export_used_inks_pdf(report_data)
+    if filter_date:
+        filename = f"used_inks_stock_{filter_date.strftime('%Y-%m-%d')}.pdf"
+    else:
+        filename = "used_inks_stock_all.pdf"
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/pdf",
+    )
 
 
 @inventory_bp.route("/api/inks")

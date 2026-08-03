@@ -99,11 +99,12 @@ class InventoryTransaction(db.Model):
     __tablename__ = "inventory_transactions"
 
     TRANSACTION_CANS_IN = "Cans In"
-    TRANSACTION_CANS_LEFT = "Cans Left"
+    TRANSACTION_CANS_OUT = "Cans Out"
+    TRANSACTION_CANS_LEFT = TRANSACTION_CANS_OUT
     TRANSACTION_RECEIVED = TRANSACTION_CANS_IN
     TRANSACTION_ISSUED = "Issued to Use"
-    TRANSACTION_USED = TRANSACTION_CANS_LEFT
-    TRANSACTION_TYPES = (TRANSACTION_CANS_IN, TRANSACTION_CANS_LEFT)
+    TRANSACTION_USED = TRANSACTION_CANS_OUT
+    TRANSACTION_TYPES = (TRANSACTION_CANS_IN, TRANSACTION_CANS_OUT)
 
     id = db.Column(db.Integer, primary_key=True)
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=False)
@@ -123,6 +124,48 @@ class InventoryTransaction(db.Model):
 
     company = db.relationship("Company", back_populates="transactions")
     ink_type = db.relationship("InkType", back_populates="transactions")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class UsedInkName(db.Model):
+    """Saved ink names for Used Inks Stock dropdown."""
+
+    __tablename__ = "used_ink_names"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+
+class UsedInkShade(db.Model):
+    """Saved shade names for Used Inks Stock dropdown."""
+
+    __tablename__ = "used_ink_shades"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+
+class UsedInkStock(db.Model):
+    """Tracks used/opened ink stock separately from current inventory."""
+
+    __tablename__ = "used_ink_stock"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ink_name = db.Column(db.String(150), nullable=False)
+    shade_name = db.Column(db.String(150), nullable=False, default="")
+    quantity_total = db.Column(db.Float, nullable=False, default=0)
+    entry_date = db.Column(db.Date, nullable=False)
+    notes = db.Column(db.Text)
+    source_transaction_id = db.Column(
+        db.Integer, db.ForeignKey("inventory_transactions.id"), nullable=True
+    )
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    source_transaction = db.relationship("InventoryTransaction", foreign_keys=[source_transaction_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 

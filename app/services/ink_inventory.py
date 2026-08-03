@@ -59,9 +59,11 @@ def get_cans_in_total(ink_id: int) -> float:
 def get_cans_used_total(ink_id: int) -> float:
     return float(
         db.session.query(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
-        .filter_by(
-            ink_type_id=ink_id,
-            transaction_type=InventoryTransaction.TRANSACTION_CANS_LEFT,
+        .filter(
+            InventoryTransaction.ink_type_id == ink_id,
+            InventoryTransaction.transaction_type.in_(
+                (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
+            ),
         )
         .scalar()
     )
@@ -108,9 +110,24 @@ def calculate_used_from_left(ink_id: int, cans_left: float) -> float:
     current_cans = get_current_cans(ink)
     if cans_left > current_cans:
         raise ValueError(
-            f"Cans left ({cans_left}) cannot exceed current cans ({current_cans:.1f})."
+            f"Cans remaining ({cans_left}) cannot exceed current cans ({current_cans:.1f})."
         )
     return current_cans - cans_left
+
+
+def calculate_remaining_from_out(ink_id: int, cans_out: float) -> tuple[float, float]:
+    ink = db.session.get(InkType, ink_id)
+    if not ink:
+        raise ValueError("Ink not found.")
+
+    current_cans = get_current_cans(ink)
+    if cans_out <= 0:
+        raise ValueError("Cans out must be greater than zero.")
+    if cans_out > current_cans:
+        raise ValueError(
+            f"Cans out ({cans_out}) cannot exceed current cans ({current_cans:.1f})."
+        )
+    return cans_out, current_cans - cans_out
 
 
 def get_dashboard_stats(today: date) -> dict:
@@ -129,7 +146,9 @@ def get_dashboard_stats(today: date) -> dict:
     used_today = float(
         db.session.query(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
         .filter(
-            InventoryTransaction.transaction_type == InventoryTransaction.TRANSACTION_CANS_LEFT,
+            InventoryTransaction.transaction_type.in_(
+                (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
+            ),
             InventoryTransaction.transaction_date == today,
         )
         .scalar()
@@ -165,22 +184,25 @@ def get_daily_report_data(report_date: date) -> dict:
     cans_in_today = [
         t for t in day_txns if t.transaction_type == InventoryTransaction.TRANSACTION_CANS_IN
     ]
-    cans_left_today = [
-        t for t in day_txns if t.transaction_type == InventoryTransaction.TRANSACTION_CANS_LEFT
+    cans_out_today = [
+        t
+        for t in day_txns
+        if t.transaction_type in (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
     ]
 
     return {
         "report_date": report_date,
         "live_stock": live_stock,
         "cans_in_today": cans_in_today,
-        "cans_left_today": cans_left_today,
+        "cans_out_today": cans_out_today,
+        "cans_left_today": cans_out_today,
         "total_cans_in": sum(t.quantity for t in cans_in_today),
-        "total_used": sum(t.quantity for t in cans_left_today),
-        "grouped_companies": group_report_by_company(live_stock, cans_in_today, cans_left_today),
+        "total_used": sum(t.quantity for t in cans_out_today),
+        "grouped_companies": group_report_by_company(live_stock, cans_in_today, cans_out_today),
     }
 
 
-def group_report_by_company(live_stock, cans_in_today, cans_left_today) -> list[dict]:
+def group_report_by_company(live_stock, cans_in_today, cans_out_today) -> list[dict]:
     companies: dict[str, dict] = {}
 
     def ensure_company(name: str) -> dict:
@@ -189,7 +211,7 @@ def group_report_by_company(live_stock, cans_in_today, cans_left_today) -> list[
             companies[key] = {
                 "name": key,
                 "inks": {},
-                "total_cans_left": 0.0,
+                "total_current_cans": 0.0,
                 "total_weight_left": 0.0,
                 "cans_in_today": 0.0,
                 "used_today": 0.0,
@@ -204,11 +226,12 @@ def group_report_by_company(live_stock, cans_in_today, cans_left_today) -> list[
                 "ink": item["ink"],
                 "stock": item,
                 "cans_in_today": [],
+                "cans_out_today": [],
                 "cans_left_today": [],
             }
         else:
             comp["inks"][ink_id]["stock"] = item
-        comp["total_cans_left"] += item["current_cans"]
+        comp["total_current_cans"] += item["current_cans"]
         comp["total_weight_left"] += item["current_weight"]
 
     for txn in cans_in_today:
@@ -226,12 +249,13 @@ def group_report_by_company(live_stock, cans_in_today, cans_left_today) -> list[
                     "current_weight": float(txn.ink_type.initial_total_weight),
                 },
                 "cans_in_today": [],
+                "cans_out_today": [],
                 "cans_left_today": [],
             }
         comp["inks"][ink_id]["cans_in_today"].append(txn)
         comp["cans_in_today"] += float(txn.quantity)
 
-    for txn in cans_left_today:
+    for txn in cans_out_today:
         comp = ensure_company(txn.ink_type.ink_company)
         ink_id = txn.ink_type.id
         if ink_id not in comp["inks"]:
@@ -246,8 +270,10 @@ def group_report_by_company(live_stock, cans_in_today, cans_left_today) -> list[
                     "current_weight": float(txn.ink_type.initial_total_weight),
                 },
                 "cans_in_today": [],
+                "cans_out_today": [],
                 "cans_left_today": [],
             }
+        comp["inks"][ink_id]["cans_out_today"].append(txn)
         comp["inks"][ink_id]["cans_left_today"].append(txn)
         comp["used_today"] += float(txn.quantity)
 
@@ -264,7 +290,8 @@ def group_report_by_company(live_stock, cans_in_today, cans_left_today) -> list[
             {
                 "name": comp["name"],
                 "inks": inks,
-                "total_cans_left": comp["total_cans_left"],
+                "total_current_cans": comp["total_current_cans"],
+                "total_cans_left": comp["total_current_cans"],
                 "total_weight_left": comp["total_weight_left"],
                 "cans_in_today": comp["cans_in_today"],
                 "used_today": comp["used_today"],

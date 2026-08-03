@@ -594,6 +594,53 @@ def _seed_production_jobs_from_transactions():
         db.session.commit()
 
 
+def _migrate_cans_left_to_cans_out():
+    if not inspect(db.engine).has_table("inventory_transactions"):
+        return
+
+    with db.engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE inventory_transactions SET transaction_type = 'Cans Out' "
+                "WHERE transaction_type = 'Cans Left'"
+            )
+        )
+
+
+def _seed_used_ink_catalog_from_inks():
+    from app.models import InkType, UsedInkName, UsedInkShade
+
+    if not inspect(db.engine).has_table("used_ink_names"):
+        return
+    if not inspect(db.engine).has_table("ink_types"):
+        return
+
+    existing_names = {
+        name.lower()
+        for (name,) in db.session.query(UsedInkName.name).all()
+        if name
+    }
+    existing_shades = {
+        name.lower()
+        for (name,) in db.session.query(UsedInkShade.name).all()
+        if name
+    }
+    added = False
+    for ink in InkType.query.all():
+        if ink.name and ink.name.lower() not in existing_names:
+            db.session.add(UsedInkName(name=ink.name.strip()))
+            existing_names.add(ink.name.lower())
+            added = True
+        shade = (ink.color_code or "").strip()
+        if shade and shade.lower() not in existing_shades:
+            db.session.add(UsedInkShade(name=shade))
+            existing_shades.add(shade.lower())
+            added = True
+
+    if added:
+        db.session.commit()
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
@@ -607,6 +654,8 @@ def ensure_schema():
     _clear_materials_opening_stock()
     _remove_auto_synced_purchase_ledger_entries()
     _seed_production_jobs_from_transactions()
+    _migrate_cans_left_to_cans_out()
+    _seed_used_ink_catalog_from_inks()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

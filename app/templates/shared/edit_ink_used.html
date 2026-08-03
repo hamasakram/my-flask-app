@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Edit Cans Left - RN COLOUR{% endblock %}
+{% block title %}Edit Cans Out - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
-    <h1>Edit Cans Left</h1>
+    <h1>Edit Cans Out</h1>
     <p class="page-subtitle">{{ txn.ink_type.display_name }}</p>
 </div>
 
@@ -10,12 +10,12 @@
 <div class="card highlight-card">
     <form method="POST" class="form-grid">
         <div class="form-group">
-            <label for="quantity_left">Cans Left</label>
-            <input type="number" id="quantity_left" name="quantity_left" step="0.1" min="0" value="{{ txn.quantity_left }}" required>
+            <label for="cans_out">Cans Out</label>
+            <input type="number" id="cans_out" name="cans_out" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
         </div>
         <div class="form-group">
-            <label for="quantity">Cans Used</label>
-            <input type="number" id="quantity" name="quantity" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
+            <label for="quantity_left">Remaining Cans</label>
+            <input type="number" id="quantity_left" name="quantity_left" step="0.1" min="0" value="{{ txn.quantity_left }}" required>
         </div>
         <div class="form-group">
             <label for="transaction_date">Date</label>
