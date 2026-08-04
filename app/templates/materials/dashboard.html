@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
 {% block title %}Printing Materials - RN COLOUR{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -43,6 +44,7 @@
                 <th>Stock In</th>
                 <th>Used</th>
                 <th>Left (KG)</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -56,9 +58,10 @@
                 <td>{{ "%.1f"|format(item.stock_in) }}</td>
                 <td>{{ "%.1f"|format(item.used) }}</td>
                 <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
+                {{ row_actions(url_for('stock_edits.edit_materials_current_stock', material_id=item.material.id)) }}
             </tr>
             {% else %}
-            <tr><td colspan="8" class="empty">No materials yet. Add materials first.</td></tr>
+            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No materials yet. Add materials first.</td></tr>
             {% endfor %}
         </tbody>
     </table>

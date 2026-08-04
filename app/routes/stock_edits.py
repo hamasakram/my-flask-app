@@ -53,7 +53,11 @@ from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
 from app.services.weights import parse_manual_weights
 from app.services.materials_inventory import (
+    adjust_current_stock,
     ensure_production_job,
+    get_current_stock,
+    get_stock_in_total,
+    get_stock_used_total,
     list_materials,
     list_production_job_names,
     parse_stock_left_usage_fields,
@@ -1016,6 +1020,50 @@ def edit_materials_catalog(material_id):
         "shared/edit_material_catalog.html",
         material=material,
         cancel_url=url_for("materials.materials_list"),
+    )
+
+
+@stock_edits_bp.route("/materials/current-stock/<int:material_id>", methods=["GET", "POST"])
+@login_required
+def edit_materials_current_stock(material_id):
+    material = Material.query.get_or_404(material_id)
+    stock_in = get_stock_in_total(material.id)
+    used = get_stock_used_total(material.id)
+    current = get_current_stock(material)
+
+    if request.method == "POST":
+        require_edit_access()
+        current_kg = request.form.get("current_kg", type=float)
+
+        if current_kg is None or current_kg < 0:
+            flash("Enter a valid current stock amount.", "danger")
+            return redirect(
+                url_for("stock_edits.edit_materials_current_stock", material_id=material_id)
+            )
+
+        try:
+            adjust_current_stock(material.id, current_kg)
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "Material",
+                material.id,
+                f"Adjusted current stock for {material.display_name}: {current:.1f} → {current_kg:.1f} kg",
+            )
+            db.session.commit()
+            flash(f"Current stock updated to {current_kg:.1f} kg.", "success")
+            return redirect(url_for("materials_main.dashboard"))
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+
+    return render_template(
+        "shared/edit_materials_current_stock.html",
+        material=material,
+        stock_in=stock_in,
+        used=used,
+        current=current,
+        cancel_url=url_for("materials_main.dashboard"),
     )
 
 

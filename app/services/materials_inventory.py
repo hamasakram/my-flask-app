@@ -73,6 +73,21 @@ def get_current_stock(material: Material) -> float:
     )
 
 
+def adjust_current_stock(material_id: int, new_current_kg: float) -> Material:
+    """Set live stock by adjusting initial_kg; stock in and used history stay unchanged."""
+    material = db.session.get(Material, material_id)
+    if not material:
+        raise ValueError("Material not found.")
+    if new_current_kg < 0:
+        raise ValueError("Current stock cannot be negative.")
+
+    stock_in = get_stock_in_total(material.id)
+    used = get_stock_used_total(material.id)
+    material.initial_kg = new_current_kg - stock_in + used
+    db.session.flush()
+    return material
+
+
 def calculate_live_stock(material_id: Optional[int] = None) -> list[dict]:
     query = Material.query
     if material_id:
