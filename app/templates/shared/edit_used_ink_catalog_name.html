@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ label }} - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit {{ label }}</h1>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="name">{{ label }}</label>
+            <input type="text" id="name" name="name" value="{{ record.name }}" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

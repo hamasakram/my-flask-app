@@ -16,12 +16,15 @@ from app.services.ink_inventory import (
 )
 from app.services.ink_export import export_used_inks_pdf
 from app.services.ink_used_stock import (
+    create_catalog_ink_name,
+    create_catalog_shade_name,
     get_used_ink_report_data,
     get_used_ink_stock_entries,
+    list_used_ink_name_records,
     list_used_ink_names,
+    list_used_ink_shade_records,
     list_used_ink_shades,
     record_used_ink_stock,
-    sync_used_ink_from_cans_out,
 )
 from app.services.inventory import log_audit
 
@@ -137,6 +140,11 @@ def cans_in():
 @login_required
 def cans_out():
     inks = list_inks()
+    selected_date = request.args.get("date") or request.form.get("transaction_date")
+    if selected_date:
+        filter_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
+    else:
+        filter_date = date.today()
 
     if request.method == "POST":
         require_edit_access()
@@ -145,21 +153,29 @@ def cans_out():
         where_used = request.form.get("where_used", "").strip()
         transaction_date = request.form.get("transaction_date")
         notes = request.form.get("notes", "").strip()
+        link_used_ink = request.form.get("link_used_ink") == "on"
+        used_ink_name = request.form.get("used_ink_name", "").strip()
+        used_ink_shade = request.form.get("used_ink_shade", "").strip()
 
+        redirect_date = transaction_date or filter_date.isoformat()
         if ink_type_id is None or cans_out_qty is None or cans_out_qty <= 0 or not transaction_date:
             flash("Ink, cans out, and date are required.", "danger")
-            return redirect(url_for("inventory.cans_out"))
+            return redirect(url_for("inventory.cans_out", date=redirect_date))
+
+        if link_used_ink and not used_ink_name:
+            flash("Select a used ink name when linking to Used Ink Stock.", "danger")
+            return redirect(url_for("inventory.cans_out", date=redirect_date))
 
         ink = db.session.get(InkType, ink_type_id)
         if not ink:
             flash("Invalid ink.", "danger")
-            return redirect(url_for("inventory.cans_out"))
+            return redirect(url_for("inventory.cans_out", date=redirect_date))
 
         try:
             quantity_used, quantity_left = calculate_remaining_from_out(ink.id, cans_out_qty)
         except ValueError as exc:
             flash(str(exc), "danger")
-            return redirect(url_for("inventory.cans_out"))
+            return redirect(url_for("inventory.cans_out", date=redirect_date))
 
         parsed_date = datetime.strptime(transaction_date, "%Y-%m-%d").date()
         txn = InventoryTransaction(
@@ -175,13 +191,19 @@ def cans_out():
         )
         db.session.add(txn)
         db.session.flush()
-        sync_used_ink_from_cans_out(
-            ink,
-            quantity_used,
-            parsed_date,
-            txn.id,
-            created_by_id=current_user.id,
-        )
+
+        if link_used_ink:
+            record_used_ink_stock(
+                ink_name=used_ink_name,
+                shade_name=used_ink_shade,
+                quantity=quantity_used,
+                entry_date=parsed_date,
+                source_transaction_id=txn.id,
+                notes=notes or where_used,
+                created_by_id=current_user.id,
+                merge_same_day=False,
+            )
+
         log_audit(
             current_user.id,
             "CREATE",
@@ -194,25 +216,77 @@ def cans_out():
             f"Cans Out recorded: {quantity_used:.1f} cans used, {quantity_left:.1f} cans remaining.",
             "success",
         )
-        return redirect(url_for("inventory.cans_out"))
+        return redirect(url_for("inventory.cans_out", date=parsed_date.isoformat()))
 
     recent = (
         InventoryTransaction.query.filter(
             InventoryTransaction.transaction_type.in_(
                 (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
-            )
+            ),
+            InventoryTransaction.transaction_date == filter_date,
         )
-        .order_by(InventoryTransaction.transaction_date.desc(), InventoryTransaction.id.desc())
-        .limit(20)
+        .order_by(InventoryTransaction.id.desc())
         .all()
     )
-    return render_template("ink/cans_out.html", inks=inks, recent=recent)
+    report_data = get_used_ink_report_data(filter_date)
+    return render_template(
+        "ink/cans_out.html",
+        inks=inks,
+        recent=recent,
+        report_data=report_data,
+        selected_date=filter_date.isoformat(),
+        ink_names=list_used_ink_names(),
+        shade_names=list_used_ink_shades(),
+    )
 
 
 @inventory_bp.route("/cans-left")
 @login_required
 def cans_left_redirect():
     return redirect(url_for("inventory.cans_out"))
+
+
+@inventory_bp.route("/used-ink-names-setup", methods=["GET", "POST"])
+@login_required
+def used_ink_names_setup():
+    if request.method == "POST":
+        require_edit_access()
+        form_type = request.form.get("form_type", "")
+        try:
+            if form_type == "ink_name":
+                name = create_catalog_ink_name(request.form.get("ink_name", ""))
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "UsedInkName",
+                    name.id,
+                    f"Added used ink name: {name.name}",
+                )
+                flash(f"Ink name '{name.name}' added.", "success")
+            elif form_type == "shade_name":
+                name = create_catalog_shade_name(request.form.get("shade_name", ""))
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "UsedInkShade",
+                    name.id,
+                    f"Added used ink shade: {name.name}",
+                )
+                flash(f"Shade name '{name.name}' added.", "success")
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+        except SQLAlchemyError:
+            db.session.rollback()
+            flash("Could not save name.", "danger")
+        return redirect(url_for("inventory.used_ink_names_setup"))
+
+    return render_template(
+        "ink/used_ink_names_setup.html",
+        ink_names=list_used_ink_name_records(),
+        shade_names=list_used_ink_shade_records(),
+    )
 
 
 @inventory_bp.route("/used-inks-stock", methods=["GET", "POST"])

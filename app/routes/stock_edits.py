@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import func
 
 from app import db
 from app.models import (
@@ -33,6 +34,8 @@ from app.models import (
     ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
+    UsedInkName,
+    UsedInkShade,
     UsedInkStock,
 )
 from app.services.companies import (
@@ -56,11 +59,14 @@ from app.services.materials_inventory import (
     parse_stock_left_usage_fields,
 )
 from app.services.ink_used_stock import (
+    catalog_ink_name_in_use,
+    catalog_shade_name_in_use,
     ensure_used_ink_name,
     ensure_used_ink_shade,
+    get_linked_used_ink_stock,
     list_used_ink_names,
     list_used_ink_shades,
-    sync_used_ink_from_cans_out,
+    record_used_ink_stock,
 )
 
 from pathlib import Path
@@ -77,6 +83,12 @@ def require_edit_access():
 
 def _parse_date(value: str):
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _used_ink_return_url(return_to: str, entry_date: str) -> str:
+    if return_to == "cans_out":
+        return url_for("inventory.cans_out", date=entry_date)
+    return url_for("inventory.used_inks_stock", date=entry_date)
 
 
 # --- Ink ---
@@ -200,6 +212,10 @@ def edit_ink_used(txn_id):
     if txn.transaction_type not in (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left"):
         abort(404)
 
+    return_to = request.args.get("return_to", request.form.get("return_to", ""))
+    return_date = request.args.get("date", request.form.get("return_date", txn.transaction_date.isoformat()))
+    linked = get_linked_used_ink_stock(txn.id)
+
     if request.method == "POST":
         require_edit_access()
         cans_out = request.form.get("cans_out", type=float)
@@ -207,10 +223,17 @@ def edit_ink_used(txn_id):
         transaction_date = request.form.get("transaction_date")
         where_used = request.form.get("where_used", "").strip()
         notes = request.form.get("notes", "").strip()
+        link_used_ink = request.form.get("link_used_ink") == "on"
+        used_ink_name = request.form.get("used_ink_name", "").strip()
+        used_ink_shade = request.form.get("used_ink_shade", "").strip()
 
         if cans_out is None or cans_out <= 0 or quantity_left is None or quantity_left < 0 or not transaction_date:
             flash("Cans out, remaining cans, and date are required.", "danger")
-            return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id))
+            return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id, return_to=return_to, date=return_date))
+
+        if link_used_ink and not used_ink_name:
+            flash("Select a used ink name when linking to Used Ink Stock.", "danger")
+            return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id, return_to=return_to, date=return_date))
 
         parsed_date = _parse_date(transaction_date)
         txn.quantity = cans_out
@@ -219,13 +242,21 @@ def edit_ink_used(txn_id):
         txn.transaction_date = parsed_date
         txn.notes = notes
         txn.transaction_type = InventoryTransaction.TRANSACTION_CANS_OUT
-        sync_used_ink_from_cans_out(
-            txn.ink_type,
-            cans_out,
-            parsed_date,
-            txn.id,
-            created_by_id=current_user.id,
-        )
+
+        if link_used_ink:
+            record_used_ink_stock(
+                ink_name=used_ink_name,
+                shade_name=used_ink_shade,
+                quantity=cans_out,
+                entry_date=parsed_date,
+                source_transaction_id=txn.id,
+                notes=notes or where_used,
+                created_by_id=current_user.id,
+                merge_same_day=False,
+            )
+        elif linked:
+            db.session.delete(linked)
+
         log_audit(
             current_user.id,
             "UPDATE",
@@ -235,12 +266,17 @@ def edit_ink_used(txn_id):
         )
         db.session.commit()
         flash("Cans Out record updated.", "success")
-        return redirect(url_for("inventory.cans_out"))
+        return redirect(_used_ink_return_url(return_to, parsed_date.isoformat()))
 
     return render_template(
         "shared/edit_ink_used.html",
         txn=txn,
-        cancel_url=url_for("inventory.cans_out"),
+        linked=linked,
+        ink_names=list_used_ink_names(),
+        shade_names=list_used_ink_shades(),
+        cancel_url=_used_ink_return_url(return_to, return_date),
+        return_to=return_to,
+        return_date=return_date,
     )
 
 
@@ -248,6 +284,10 @@ def edit_ink_used(txn_id):
 @login_required
 def edit_used_ink_stock(record_id):
     record = UsedInkStock.query.get_or_404(record_id)
+    return_to = request.args.get("return_to", request.form.get("return_to", ""))
+    return_date = request.args.get(
+        "date", request.form.get("return_date", record.entry_date.isoformat())
+    )
 
     if request.method == "POST":
         require_edit_access()
@@ -259,13 +299,27 @@ def edit_used_ink_stock(record_id):
 
         if not ink_name or quantity_total is None or quantity_total <= 0 or not entry_date:
             flash("Ink name, quantity total, and date are required.", "danger")
-            return redirect(url_for("stock_edits.edit_used_ink_stock", record_id=record_id))
+            return redirect(
+                url_for(
+                    "stock_edits.edit_used_ink_stock",
+                    record_id=record_id,
+                    return_to=return_to,
+                    date=return_date,
+                )
+            )
 
         record.ink_name = ensure_used_ink_name(ink_name)
         record.shade_name = ensure_used_ink_shade(shade_name) if shade_name else ""
         record.quantity_total = quantity_total
-        record.entry_date = _parse_date(entry_date)
+        parsed_date = _parse_date(entry_date)
+        record.entry_date = parsed_date
         record.notes = notes
+
+        if record.source_transaction_id:
+            txn = db.session.get(InventoryTransaction, record.source_transaction_id)
+            if txn:
+                txn.quantity = quantity_total
+
         log_audit(
             current_user.id,
             "UPDATE",
@@ -275,14 +329,92 @@ def edit_used_ink_stock(record_id):
         )
         db.session.commit()
         flash("Used ink stock updated.", "success")
-        return redirect(url_for("inventory.used_inks_stock", date=record.entry_date.isoformat()))
+        return redirect(_used_ink_return_url(return_to, parsed_date.isoformat()))
 
     return render_template(
         "shared/edit_used_ink_stock.html",
         record=record,
         ink_names=list_used_ink_names(),
         shade_names=list_used_ink_shades(),
-        cancel_url=url_for("inventory.used_inks_stock", date=record.entry_date.isoformat()),
+        cancel_url=_used_ink_return_url(return_to, return_date),
+        return_to=return_to,
+        return_date=return_date,
+    )
+
+
+@stock_edits_bp.route("/used-ink-name/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_used_ink_name(record_id):
+    record = UsedInkName.query.get_or_404(record_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("name", "").strip()
+        if not name:
+            flash("Name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_used_ink_name", record_id=record_id))
+
+        duplicate = UsedInkName.query.filter(
+            func.lower(UsedInkName.name) == name.lower(),
+            UsedInkName.id != record_id,
+        ).first()
+        if duplicate:
+            flash("This ink name already exists.", "danger")
+            return redirect(url_for("stock_edits.edit_used_ink_name", record_id=record_id))
+
+        old_name = record.name
+        record.name = name
+        UsedInkStock.query.filter(func.lower(UsedInkStock.ink_name) == old_name.lower()).update(
+            {"ink_name": name}, synchronize_session=False
+        )
+        log_audit(current_user.id, "UPDATE", "UsedInkName", record.id, f"Renamed used ink name to {name}")
+        db.session.commit()
+        flash("Ink name updated.", "success")
+        return redirect(url_for("inventory.used_ink_names_setup"))
+
+    return render_template(
+        "shared/edit_used_ink_catalog_name.html",
+        record=record,
+        label="Ink Name",
+        cancel_url=url_for("inventory.used_ink_names_setup"),
+    )
+
+
+@stock_edits_bp.route("/used-ink-shade/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_used_ink_shade(record_id):
+    record = UsedInkShade.query.get_or_404(record_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        name = request.form.get("name", "").strip()
+        if not name:
+            flash("Name is required.", "danger")
+            return redirect(url_for("stock_edits.edit_used_ink_shade", record_id=record_id))
+
+        duplicate = UsedInkShade.query.filter(
+            func.lower(UsedInkShade.name) == name.lower(),
+            UsedInkShade.id != record_id,
+        ).first()
+        if duplicate:
+            flash("This shade name already exists.", "danger")
+            return redirect(url_for("stock_edits.edit_used_ink_shade", record_id=record_id))
+
+        old_name = record.name
+        record.name = name
+        UsedInkStock.query.filter(func.lower(UsedInkStock.shade_name) == old_name.lower()).update(
+            {"shade_name": name}, synchronize_session=False
+        )
+        log_audit(current_user.id, "UPDATE", "UsedInkShade", record.id, f"Renamed used ink shade to {name}")
+        db.session.commit()
+        flash("Shade name updated.", "success")
+        return redirect(url_for("inventory.used_ink_names_setup"))
+
+    return render_template(
+        "shared/edit_used_ink_catalog_name.html",
+        record=record,
+        label="Shade Name",
+        cancel_url=url_for("inventory.used_ink_names_setup"),
     )
 
 

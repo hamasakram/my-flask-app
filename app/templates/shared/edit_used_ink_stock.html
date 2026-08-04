@@ -9,6 +9,8 @@
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
     <form method="POST" class="form-grid">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
+        <input type="hidden" name="return_date" value="{{ return_date }}">
         <div class="form-group">
             <label for="ink_name">Ink Name</label>
             <input type="text" id="ink_name" name="ink_name" list="ink-names-list" value="{{ record.ink_name }}" required>

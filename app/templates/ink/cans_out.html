@@ -4,7 +4,25 @@
 {% block content %}
 <div class="page-header">
     <h1>Cans Out</h1>
-    <p class="page-subtitle">Record cans taken out for use — automatically added to Used Inks Stock</p>
+    <p class="page-subtitle">Record cans taken out for use — optionally link to Used Ink Stock</p>
+</div>
+
+<div class="card">
+    <form method="GET" class="filter-bar">
+        <input type="date" name="date" value="{{ selected_date }}">
+        <button type="submit" class="btn btn-secondary">View Date</button>
+    </form>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Used Cans Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_cans) }}</span>
+    </div>
+    <div class="stat-card accent-blue">
+        <span class="stat-label">Used Weight Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_weight) }} kg</span>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
@@ -30,11 +48,44 @@
         </div>
         <div class="form-group">
             <label for="transaction_date">Date</label>
-            <input type="date" id="transaction_date" name="transaction_date" required>
+            <input type="date" id="transaction_date" name="transaction_date" value="{{ selected_date }}" required>
         </div>
         <div class="form-group full-width">
             <label for="where_used">Where Used</label>
             <input type="text" id="where_used" name="where_used" placeholder="Machine, job, etc.">
+        </div>
+        <div class="form-group full-width">
+            <label class="checkbox-label">
+                <input type="checkbox" id="link_used_ink" name="link_used_ink">
+                Add to Used Ink Stock (link to setup name)
+            </label>
+        </div>
+        <div class="form-group full-width" id="used-ink-link-group" hidden>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="used_ink_name">Used Ink Name</label>
+                    {% if ink_names %}
+                    <select id="used_ink_name" name="used_ink_name">
+                        <option value="">Select ink name</option>
+                        {% for name in ink_names %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% else %}
+                    <p class="empty-state">No names yet. Add them in <a href="{{ url_for('inventory.used_ink_names_setup') }}">Used Ink Names &amp; Setup</a>.</p>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="used_ink_shade">Shade Name</label>
+                    <select id="used_ink_shade" name="used_ink_shade">
+                        <option value="">No shade</option>
+                        {% for name in shade_names %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <small class="field-note">Manage names in <a href="{{ url_for('inventory.used_ink_names_setup') }}">Used Ink Names &amp; Setup</a>.</small>
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>
@@ -49,30 +100,83 @@
 {% endif %}
 
 <div class="card">
-    <h2>Recent Cans Out</h2>
+    <h2>Cans Out — {{ selected_date }}</h2>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Date</th><th>Ink</th><th>Cans Out</th><th>Remaining</th><th>Where Used</th><th>Notes</th>
+                <th>Ink</th><th>Cans Out</th><th>Remaining</th><th>Where Used</th><th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for txn in recent %}
             <tr>
-                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ txn.ink_type.display_name }}</td>
                 <td>{{ "%.1f"|format(txn.quantity) }}</td>
                 <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
                 <td>{{ txn.where_used or '—' }}</td>
                 <td>{{ txn.notes or '—' }}</td>
                 {{ row_actions(
-                    url_for('stock_edits.edit_ink_used', txn_id=txn.id),
-                    url_for('stock_deletes.delete_ink_used', txn_id=txn.id)
+                    url_for('stock_edits.edit_ink_used', txn_id=txn.id, return_to='cans_out', date=selected_date),
+                    url_for('stock_deletes.delete_ink_used', txn_id=txn.id, return_to='cans_out', date=selected_date)
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No records yet</td></tr>
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No cans out for this date</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Used Inks Summary — {{ selected_date }}</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Ink Name</th><th>Shade Name</th><th>Total Cans</th><th>Total Weight</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report_data.summary %}
+            <tr>
+                <td>{{ row.ink_name }}</td>
+                <td>{{ row.shade_name }}</td>
+                <td><strong>{{ "%.1f"|format(row.quantity_total) }}</strong></td>
+                <td>{% if row.total_weight %}{{ "%.1f"|format(row.total_weight) }} kg{% else %}—{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="empty">No used ink stock for this date</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Daily Used Ink Entries</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Ink Name</th><th>Shade Name</th><th>Quantity</th><th>Source</th><th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in report_data.entries %}
+            <tr>
+                <td>{{ entry.ink_name }}</td>
+                <td>{{ entry.shade_name or '—' }}</td>
+                <td>{{ "%.1f"|format(entry.quantity_total) }}</td>
+                <td>{% if entry.source_transaction_id %}Cans Out{% else %}Manual{% endif %}</td>
+                <td>{{ entry.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_used_ink_stock', record_id=entry.id, return_to='cans_out', date=selected_date),
+                    url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id, return_to='cans_out', date=selected_date)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No used ink entries for this date</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -83,6 +187,9 @@
 <script>
 const inkSelect = document.getElementById('ink_type_id');
 const hint = document.getElementById('current-stock-hint');
+const linkCheckbox = document.getElementById('link_used_ink');
+const linkGroup = document.getElementById('used-ink-link-group');
+
 inkSelect?.addEventListener('change', async function() {
     hint.textContent = '';
     if (!this.value) return;
@@ -90,6 +197,9 @@ inkSelect?.addEventListener('change', async function() {
     const data = await res.json();
     hint.textContent = `Current: ${data.current_cans.toFixed(1)} cans (${data.current_weight.toFixed(1)} kg)`;
 });
-document.getElementById('transaction_date').valueAsDate = new Date();
+
+linkCheckbox?.addEventListener('change', function() {
+    if (linkGroup) linkGroup.hidden = !this.checked;
+});
 </script>
 {% endblock %}

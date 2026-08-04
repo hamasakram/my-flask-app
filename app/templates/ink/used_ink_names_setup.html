@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Used Ink Names & Setup - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Used Ink Names &amp; Setup</h1>
+    <p class="page-subtitle">Manage ink names and shades for Used Ink Stock</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Ink Name</h2>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="form_type" value="ink_name">
+        <div class="form-group">
+            <label for="ink_name">Ink Name</label>
+            <input type="text" id="ink_name" name="ink_name" required placeholder="e.g. Process Cyan">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Ink Name</button>
+        </div>
+    </form>
+</div>
+
+<div class="card highlight-card">
+    <h2>Add Shade Name</h2>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="form_type" value="shade_name">
+        <div class="form-group">
+            <label for="shade_name">Shade Name</label>
+            <input type="text" id="shade_name" name="shade_name" required placeholder="e.g. Light Blue">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Shade Name</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Ink Names</h2>
+    <table class="data-table">
+        <thead>
+            <tr><th>Name</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr>
+        </thead>
+        <tbody>
+            {% for item in ink_names %}
+            <tr>
+                <td>{{ item.name }}</td>
+                {{ row_actions(
+                    url_for('stock_edits.edit_used_ink_name', record_id=item.id),
+                    url_for('stock_deletes.delete_used_ink_name', record_id=item.id)
+                ) }}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 2 if current_user.can_edit() else 1 }}" class="empty">No ink names yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Shade Names</h2>
+    <table class="data-table">
+        <thead>
+            <tr><th>Name</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr>
+        </thead>
+        <tbody>
+            {% for item in shade_names %}
+            <tr>
+                <td>{{ item.name }}</td>
+                {{ row_actions(
+                    url_for('stock_edits.edit_used_ink_shade', record_id=item.id),
+                    url_for('stock_deletes.delete_used_ink_shade', record_id=item.id)
+                ) }}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 2 if current_user.can_edit() else 1 }}" class="empty">No shade names yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

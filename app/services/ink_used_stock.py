@@ -15,6 +15,56 @@ def list_used_ink_shades() -> list[str]:
     return [row.name for row in UsedInkShade.query.order_by(UsedInkShade.name.asc()).all()]
 
 
+def list_used_ink_name_records() -> list[UsedInkName]:
+    return UsedInkName.query.order_by(UsedInkName.name.asc()).all()
+
+
+def list_used_ink_shade_records() -> list[UsedInkShade]:
+    return UsedInkShade.query.order_by(UsedInkShade.name.asc()).all()
+
+
+def create_catalog_ink_name(raw_name: str) -> UsedInkName:
+    cleaned = (raw_name or "").strip()
+    if not cleaned:
+        raise ValueError("Ink name is required.")
+    existing = UsedInkName.query.filter(func.lower(UsedInkName.name) == cleaned.lower()).first()
+    if existing:
+        raise ValueError("This ink name already exists.")
+    record = UsedInkName(name=cleaned)
+    db.session.add(record)
+    db.session.flush()
+    return record
+
+
+def create_catalog_shade_name(raw_name: str) -> UsedInkShade:
+    cleaned = (raw_name or "").strip()
+    if not cleaned:
+        raise ValueError("Shade name is required.")
+    existing = UsedInkShade.query.filter(func.lower(UsedInkShade.name) == cleaned.lower()).first()
+    if existing:
+        raise ValueError("This shade name already exists.")
+    record = UsedInkShade(name=cleaned)
+    db.session.add(record)
+    db.session.flush()
+    return record
+
+
+def catalog_ink_name_in_use(name: str) -> bool:
+    return (
+        UsedInkStock.query.filter(func.lower(UsedInkStock.ink_name) == name.lower()).count() > 0
+    )
+
+
+def catalog_shade_name_in_use(name: str) -> bool:
+    return (
+        UsedInkStock.query.filter(func.lower(UsedInkStock.shade_name) == name.lower()).count() > 0
+    )
+
+
+def get_linked_used_ink_stock(transaction_id: int) -> Optional[UsedInkStock]:
+    return UsedInkStock.query.filter_by(source_transaction_id=transaction_id).first()
+
+
 def _resolve_catalog_name(model, raw_name: str) -> str:
     cleaned = (raw_name or "").strip()
     if not cleaned:

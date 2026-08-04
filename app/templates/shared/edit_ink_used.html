@@ -9,6 +9,8 @@
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
     <form method="POST" class="form-grid">
+        <input type="hidden" name="return_to" value="{{ return_to }}">
+        <input type="hidden" name="return_date" value="{{ return_date }}">
         <div class="form-group">
             <label for="cans_out">Cans Out</label>
             <input type="number" id="cans_out" name="cans_out" step="0.1" min="0.1" value="{{ txn.quantity }}" required>
@@ -26,6 +28,34 @@
             <input type="text" id="where_used" name="where_used" value="{{ txn.where_used or '' }}">
         </div>
         <div class="form-group full-width">
+            <label class="checkbox-label">
+                <input type="checkbox" id="link_used_ink" name="link_used_ink" {% if linked %}checked{% endif %}>
+                Link to Used Ink Stock
+            </label>
+        </div>
+        <div class="form-group full-width" id="used-ink-link-group" {% if not linked %}hidden{% endif %}>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="used_ink_name">Used Ink Name</label>
+                    <select id="used_ink_name" name="used_ink_name">
+                        <option value="">Select ink name</option>
+                        {% for name in ink_names %}
+                        <option value="{{ name }}" {% if linked and linked.ink_name == name %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="used_ink_shade">Shade Name</label>
+                    <select id="used_ink_shade" name="used_ink_shade">
+                        <option value="">No shade</option>
+                        {% for name in shade_names %}
+                        <option value="{{ name }}" {% if linked and linked.shade_name == name %}selected{% endif %}>{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="form-group full-width">
             <label for="notes">Notes</label>
             <input type="text" id="notes" name="notes" value="{{ txn.notes or '' }}">
         </div>
@@ -36,4 +66,14 @@
     </form>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const linkCheckbox = document.getElementById('link_used_ink');
+const linkGroup = document.getElementById('used-ink-link-group');
+linkCheckbox?.addEventListener('change', function() {
+    if (linkGroup) linkGroup.hidden = !this.checked;
+});
+</script>
 {% endblock %}

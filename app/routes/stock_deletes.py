@@ -28,12 +28,15 @@ from app.models import (
     ShLedgerEntry,
     ShOpeningBalance,
     ShGatePassScreenshot,
+    UsedInkName,
+    UsedInkShade,
     UsedInkStock,
     ShPaymentScreenshot,
     ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
 )
+from app.services.ink_used_stock import catalog_ink_name_in_use, catalog_shade_name_in_use
 from app.services.inventory import log_audit
 from app.services.record_delete import (
     chemical_item_in_use,
@@ -50,6 +53,12 @@ from app.services.sh_uploads import delete_gate_pass_screenshot, delete_payment_
 from app.services.bank_ledger import bank_has_transfers
 
 stock_deletes_bp = Blueprint("stock_deletes", __name__, url_prefix="/stock-delete")
+
+
+def _used_ink_return_url(return_to: str, entry_date: str) -> str:
+    if return_to == "cans_out":
+        return url_for("inventory.cans_out", date=entry_date)
+    return url_for("inventory.used_inks_stock", date=entry_date)
 
 
 def require_edit_access():
@@ -107,11 +116,13 @@ def delete_ink_used(txn_id):
     linked = UsedInkStock.query.filter_by(source_transaction_id=txn.id).all()
     for record in linked:
         db.session.delete(record)
+    return_date = request.args.get("date", txn.transaction_date.isoformat())
+    return_to = request.args.get("return_to", "")
     return _delete_entity(
         txn,
         "InventoryTransaction",
         f"Deleted Cans Out record #{txn_id}",
-        url_for("inventory.cans_out"),
+        _used_ink_return_url(return_to, return_date),
     )
 
 
@@ -119,11 +130,45 @@ def delete_ink_used(txn_id):
 @login_required
 def delete_used_ink_stock(record_id):
     record = UsedInkStock.query.get_or_404(record_id)
+    return_date = request.args.get("date", record.entry_date.isoformat())
+    return_to = request.args.get("return_to", "")
     return _delete_entity(
         record,
         "UsedInkStock",
         f"Deleted used ink stock #{record_id}",
-        url_for("inventory.used_inks_stock", date=record.entry_date.isoformat()),
+        _used_ink_return_url(return_to, return_date),
+    )
+
+
+@stock_deletes_bp.route("/used-ink-name/<int:record_id>", methods=["POST"])
+@login_required
+def delete_used_ink_name(record_id):
+    require_edit_access()
+    record = UsedInkName.query.get_or_404(record_id)
+    if catalog_ink_name_in_use(record.name):
+        flash("Cannot delete — this ink name has used ink stock records.", "danger")
+        return redirect(url_for("inventory.used_ink_names_setup"))
+    return _delete_entity(
+        record,
+        "UsedInkName",
+        f"Deleted used ink name: {record.name}",
+        url_for("inventory.used_ink_names_setup"),
+    )
+
+
+@stock_deletes_bp.route("/used-ink-shade/<int:record_id>", methods=["POST"])
+@login_required
+def delete_used_ink_shade(record_id):
+    require_edit_access()
+    record = UsedInkShade.query.get_or_404(record_id)
+    if catalog_shade_name_in_use(record.name):
+        flash("Cannot delete — this shade name has used ink stock records.", "danger")
+        return redirect(url_for("inventory.used_ink_names_setup"))
+    return _delete_entity(
+        record,
+        "UsedInkShade",
+        f"Deleted used ink shade: {record.name}",
+        url_for("inventory.used_ink_names_setup"),
     )
 
 
