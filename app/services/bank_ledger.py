@@ -19,6 +19,11 @@ def normalize_expense_category(value: str | None) -> str:
     return cleaned if cleaned in allowed else BankLedgerEntry.CATEGORY_GENERAL
 
 
+def _is_standard_entry(entry: BankLedgerEntry) -> bool:
+    """Daily entries only — excludes cross-bank transfer ledger rows."""
+    return entry.entry_type == BankLedgerEntry.TYPE_STANDARD
+
+
 def _serialize_rokar_entry(entry: BankLedgerEntry) -> dict:
     deposit = float(entry.deposit or 0)
     withdrawal = float(entry.withdrawal or 0)
@@ -133,8 +138,9 @@ def _build_rokar_report(
     total_withdrawals = 0.0
     for entry in entries:
         row = _serialize_rokar_entry(entry)
-        total_deposits += row["deposit"]
-        total_withdrawals += row["withdrawal"]
+        if _is_standard_entry(entry):
+            total_deposits += row["deposit"]
+            total_withdrawals += row["withdrawal"]
         transactions.append(row)
 
     bank_balances = []
@@ -145,11 +151,17 @@ def _build_rokar_report(
     for bank in banks:
         closing = get_bank_balance_as_of(bank, end_date)
         period_entries = [e for e in entries if e.bank_id == bank.id]
-        period_deposits = sum(float(e.deposit or 0) for e in period_entries)
-        period_withdrawals = sum(float(e.withdrawal or 0) for e in period_entries)
+        period_deposits_all = sum(float(e.deposit or 0) for e in period_entries)
+        period_withdrawals_all = sum(float(e.withdrawal or 0) for e in period_entries)
+        period_deposits = sum(
+            float(e.deposit or 0) for e in period_entries if _is_standard_entry(e)
+        )
+        period_withdrawals = sum(
+            float(e.withdrawal or 0) for e in period_entries if _is_standard_entry(e)
+        )
 
         if start_date == end_date:
-            opening = closing - period_deposits + period_withdrawals
+            opening = closing - period_deposits_all + period_withdrawals_all
         else:
             opening = get_bank_balance_as_of(bank, opening_reference)
 
