@@ -35,7 +35,9 @@ def materials_list():
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
-        initial_kg = request.form.get("initial_kg", type=float) or 0
+        initial_kg = request.form.get("left_kg", type=float)
+        if initial_kg is None:
+            initial_kg = request.form.get("initial_kg", type=float) or 0
 
         try:
             material = create_material(category, material_name, size, micron, initial_kg)
@@ -44,7 +46,7 @@ def materials_list():
                 "CREATE",
                 "Material",
                 material.id,
-                f"Material added: {material.display_name} ({initial_kg} kg)",
+                f"Material added: {material.display_name} ({initial_kg:.1f} kg left)",
             )
             db.session.commit()
             flash(f"Material '{material.display_name}' added.", "success")

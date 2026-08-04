@@ -26,8 +26,17 @@
             <input type="text" id="micron" name="micron" value="{{ material.micron or '' }}">
         </div>
         <div class="form-group">
-            <label for="initial_kg">KG</label>
-            <input type="number" id="initial_kg" name="initial_kg" step="0.1" min="0" value="{{ material.initial_kg }}" required>
+            <label>Stock In</label>
+            <input type="text" readonly value="{{ '%.1f'|format(stock_in) }}">
+        </div>
+        <div class="form-group">
+            <label>Used</label>
+            <input type="text" readonly value="{{ '%.1f'|format(used) }}">
+        </div>
+        <div class="form-group">
+            <label for="left_kg">Left (KG)</label>
+            <input type="number" id="left_kg" name="left_kg" step="0.1" value="{{ current }}" required>
+            <small class="field-note">Stock left is saved everywhere — Stock In and Used records stay unchanged.</small>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Changes</button>

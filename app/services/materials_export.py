@@ -132,7 +132,7 @@ def export_materials_daily_pdf(report_data):
     if not grouped:
         elements.append(Paragraph("No materials recorded yet.", styles["Normal"]))
     else:
-        stock_col_widths = [80, 55, 45, 55, 55, 55, 55]
+        stock_col_widths = [90, 60, 50, 60, 60, 60]
         activity_col_widths = [55, 80, 55, 55, 55, 95, 95]
 
         for idx, category in enumerate(grouped):
@@ -150,7 +150,7 @@ def export_materials_daily_pdf(report_data):
             )
 
             stock_data = [
-                ["Material", "Size", "Micron", "Initial KG", "Stock In", "Used", "Left (KG)"]
+                ["Material", "Size", "Micron", "Stock In", "Used", "Left (KG)"]
             ]
             for material_block in category["materials"]:
                 material = material_block["material"]
@@ -160,7 +160,6 @@ def export_materials_daily_pdf(report_data):
                         material.name,
                         material.size or "—",
                         material.micron or "—",
-                        f"{stock['initial_kg']:.1f}",
                         f"{stock['stock_in']:.1f}",
                         f"{stock['used']:.1f}",
                         f"{stock['current']:.1f}",

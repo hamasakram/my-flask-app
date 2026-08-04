@@ -10,10 +10,6 @@
 <div class="card highlight-card">
     <form method="POST" class="form-grid">
         <div class="form-group">
-            <label>Initial KG</label>
-            <input type="text" readonly value="{{ '%.1f'|format(material.initial_kg) }}">
-        </div>
-        <div class="form-group">
             <label>Stock In</label>
             <input type="text" readonly value="{{ '%.1f'|format(stock_in) }}">
         </div>
@@ -23,8 +19,8 @@
         </div>
         <div class="form-group">
             <label for="current_kg">Left (KG)</label>
-            <input type="number" id="current_kg" name="current_kg" step="0.1" min="0" value="{{ current }}" required>
-            <small class="field-note">Update current stock directly — Stock In and Used records stay unchanged.</small>
+            <input type="number" id="current_kg" name="current_kg" step="0.1" value="{{ current }}" required>
+            <small class="field-note">Update stock left — Stock In and Used records stay unchanged.</small>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Current Stock</button>

@@ -987,6 +987,9 @@ def edit_ink_catalog(ink_id):
 @login_required
 def edit_materials_catalog(material_id):
     material = Material.query.get_or_404(material_id)
+    stock_in = get_stock_in_total(material.id)
+    used = get_stock_used_total(material.id)
+    current = get_current_stock(material)
 
     if request.method == "POST":
         require_edit_access()
@@ -994,23 +997,23 @@ def edit_materials_catalog(material_id):
         material_name = request.form.get("material_name", "").strip()
         size = request.form.get("size", "").strip()
         micron = request.form.get("micron", "").strip()
-        initial_kg = request.form.get("initial_kg", type=float)
+        left_kg = request.form.get("left_kg", type=float)
 
-        if not category or not material_name or initial_kg is None:
-            flash("Category, material name, and KG are required.", "danger")
+        if not category or not material_name or left_kg is None:
+            flash("Category, material name, and left stock are required.", "danger")
             return redirect(url_for("stock_edits.edit_materials_catalog", material_id=material_id))
 
         material.category = category
         material.name = material_name
         material.size = size
         material.micron = micron or None
-        material.initial_kg = initial_kg
+        adjust_current_stock(material.id, left_kg)
         log_audit(
             current_user.id,
             "UPDATE",
             "Material",
             material.id,
-            f"Updated material: {material.display_name}",
+            f"Updated material: {material.display_name} (left {left_kg:.1f} kg)",
         )
         db.session.commit()
         flash("Material updated.", "success")
@@ -1019,6 +1022,9 @@ def edit_materials_catalog(material_id):
     return render_template(
         "shared/edit_material_catalog.html",
         material=material,
+        stock_in=stock_in,
+        used=used,
+        current=current,
         cancel_url=url_for("materials.materials_list"),
     )
 
@@ -1035,7 +1041,7 @@ def edit_materials_current_stock(material_id):
         require_edit_access()
         current_kg = request.form.get("current_kg", type=float)
 
-        if current_kg is None or current_kg < 0:
+        if current_kg is None:
             flash("Enter a valid current stock amount.", "danger")
             return redirect(
                 url_for("stock_edits.edit_materials_current_stock", material_id=material_id)

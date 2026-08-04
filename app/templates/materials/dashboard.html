@@ -40,7 +40,6 @@
                 <th>Material</th>
                 <th>Size</th>
                 <th>Micron</th>
-                <th>Initial KG</th>
                 <th>Stock In</th>
                 <th>Used</th>
                 <th>Left (KG)</th>
@@ -54,14 +53,13 @@
                 <td>{{ item.material.name }}</td>
                 <td>{{ item.material.size or '—' }}</td>
                 <td>{{ item.material.micron or '—' }}</td>
-                <td>{{ "%.1f"|format(item.initial_kg) }}</td>
                 <td>{{ "%.1f"|format(item.stock_in) }}</td>
                 <td>{{ "%.1f"|format(item.used) }}</td>
                 <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
                 {{ row_actions(url_for('stock_edits.edit_materials_current_stock', material_id=item.material.id)) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No materials yet. Add materials first.</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No materials yet. Add materials first.</td></tr>
             {% endfor %}
         </tbody>
     </table>

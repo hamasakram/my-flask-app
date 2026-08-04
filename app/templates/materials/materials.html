@@ -28,9 +28,9 @@
             <input type="text" id="micron" name="micron" placeholder="e.g. 12, 15">
         </div>
         <div class="form-group">
-            <label for="initial_kg">KG</label>
-            <input type="number" id="initial_kg" name="initial_kg" step="0.1" min="0" value="0" required>
-            <small class="field-note">Starting stock in kg when material is first added.</small>
+            <label for="left_kg">Left (KG)</label>
+            <input type="number" id="left_kg" name="left_kg" step="0.1" value="0" required>
+            <small class="field-note">Current stock left in kg.</small>
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save Material</button>
@@ -48,7 +48,6 @@
                 <th>Material Name</th>
                 <th>Size</th>
                 <th>Micron</th>
-                <th>KG</th>
                 <th>Left (KG)</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -60,7 +59,6 @@
                 <td>{{ material.name }}</td>
                 <td>{{ material.size or '—' }}</td>
                 <td>{{ material.micron or '—' }}</td>
-                <td>{{ "%.1f"|format(material.initial_kg) }}</td>
                 <td><strong>{{ "%.1f"|format(live_stock.get(material.id, material.initial_kg)) }}</strong></td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
@@ -70,7 +68,7 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No materials yet. Add your first material above.</td></tr>
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No materials yet. Add your first material above.</td></tr>
             {% endfor %}
         </tbody>
     </table>

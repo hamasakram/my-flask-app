@@ -77,7 +77,6 @@
                 <th>Material</th>
                 <th>Size</th>
                 <th>Micron</th>
-                <th>Initial KG</th>
                 <th>Stock In</th>
                 <th>Used</th>
                 <th>Left (KG)</th>
@@ -89,7 +88,6 @@
                 <td>{{ block.material.name }}</td>
                 <td>{{ block.material.size or '—' }}</td>
                 <td>{{ block.material.micron or '—' }}</td>
-                <td>{{ "%.1f"|format(block.stock.initial_kg) }}</td>
                 <td>{{ "%.1f"|format(block.stock.stock_in) }}</td>
                 <td>{{ "%.1f"|format(block.stock.used) }}</td>
                 <td><strong>{{ "%.1f"|format(block.stock.current) }}</strong></td>

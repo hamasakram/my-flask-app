@@ -78,8 +78,6 @@ def adjust_current_stock(material_id: int, new_current_kg: float) -> Material:
     material = db.session.get(Material, material_id)
     if not material:
         raise ValueError("Material not found.")
-    if new_current_kg < 0:
-        raise ValueError("Current stock cannot be negative.")
 
     stock_in = get_stock_in_total(material.id)
     used = get_stock_used_total(material.id)
