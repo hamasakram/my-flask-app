@@ -15,6 +15,7 @@ def normalize_expense_category(value: str | None) -> str:
         BankLedgerEntry.CATEGORY_GENERAL,
         BankLedgerEntry.CATEGORY_BILTY,
         BankLedgerEntry.CATEGORY_EXTRA_EXPENSES,
+        BankLedgerEntry.CATEGORY_LOADING_KHARCHA,
     }
     return cleaned if cleaned in allowed else BankLedgerEntry.CATEGORY_GENERAL
 
@@ -49,6 +50,12 @@ def _category_sections(transactions: list[dict]) -> dict:
         },
         BankLedgerEntry.CATEGORY_EXTRA_EXPENSES: {
             "label": "Extra Expenses",
+            "transactions": [],
+            "total_deposits": 0.0,
+            "total_withdrawals": 0.0,
+        },
+        BankLedgerEntry.CATEGORY_LOADING_KHARCHA: {
+            "label": "Loading Kharcha",
             "transactions": [],
             "total_deposits": 0.0,
             "total_withdrawals": 0.0,

@@ -187,6 +187,7 @@ def _build_rokar_pdf(data: dict, title: str, subtitle: str) -> BytesIO:
     for category_key in (
         BankLedgerEntry.CATEGORY_BILTY,
         BankLedgerEntry.CATEGORY_EXTRA_EXPENSES,
+        BankLedgerEntry.CATEGORY_LOADING_KHARCHA,
     ):
         section = category_sections.get(category_key)
         if not section or not section["transactions"]:

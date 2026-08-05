@@ -874,11 +874,13 @@ class BankLedgerEntry(db.Model):
     CATEGORY_GENERAL = ""
     CATEGORY_BILTY = "bilty"
     CATEGORY_EXTRA_EXPENSES = "extra_expenses"
+    CATEGORY_LOADING_KHARCHA = "loading_kharcha"
 
     EXPENSE_CATEGORIES = (
         (CATEGORY_GENERAL, "General"),
         (CATEGORY_BILTY, "Bilty"),
         (CATEGORY_EXTRA_EXPENSES, "Extra Expenses"),
+        (CATEGORY_LOADING_KHARCHA, "Loading Kharcha"),
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -914,6 +916,7 @@ class BankLedgerEntry(db.Model):
         labels = {
             self.CATEGORY_BILTY: "Bilty",
             self.CATEGORY_EXTRA_EXPENSES: "Extra Expenses",
+            self.CATEGORY_LOADING_KHARCHA: "Loading Kharcha",
         }
         return labels.get(self.expense_category or "", "General")
 
