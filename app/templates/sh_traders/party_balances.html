@@ -22,9 +22,9 @@
 
 <p class="field-note balance-note">
     Each advance stock purchase appears on its own row.
-    Supplier balance = Purchase Total − Paid on record − Ledger/screenshot payments linked to that purchase.
-    Client balance = Client Total − Ledger receipts linked to that purchase.
-    Record payments in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> and link them to the purchase when possible.
+    Supplier balance = Purchase Total − Paid on record − Ledger/screenshot payments (purchase-linked first, then party-level payments applied oldest purchase first).
+    Client balance = Client Total − Ledger receipts (purchase-linked first, then party-level receipts applied oldest purchase first).
+    Record payments in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> with the supplier or client selected.
 </p>
 
 <div class="grid-2">

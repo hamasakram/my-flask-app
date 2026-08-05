@@ -1,5 +1,6 @@
+from collections import defaultdict
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy import func, or_
 
@@ -211,6 +212,83 @@ def get_current_ledger_balance() -> float:
     return float(opening.amount) if opening else 0.0
 
 
+def _ledger_sum_by_purchase(purchase_ids: list[int], amount_attr: str) -> dict[int, float]:
+    """Sum ledger debits/credits already linked to specific purchases."""
+    if not purchase_ids:
+        return {}
+    amount_col = getattr(ShLedgerEntry, amount_attr)
+    rows = (
+        db.session.query(
+            ShLedgerEntry.purchase_id,
+            func.coalesce(func.sum(amount_col), 0),
+        )
+        .filter(ShLedgerEntry.purchase_id.in_(purchase_ids))
+        .group_by(ShLedgerEntry.purchase_id)
+        .all()
+    )
+    return {purchase_id: float(amount) for purchase_id, amount in rows}
+
+
+def _party_level_ledger_pool(
+    party_ids: list[int], party_attr: str, amount_attr: str
+) -> dict[int, float]:
+    """Sum party-level ledger amounts (no purchase link) per supplier/client."""
+    if not party_ids:
+        return {}
+    party_col = getattr(ShLedgerEntry, party_attr)
+    amount_col = getattr(ShLedgerEntry, amount_attr)
+    rows = (
+        db.session.query(
+            party_col,
+            func.coalesce(func.sum(amount_col), 0),
+        )
+        .filter(
+            ShLedgerEntry.purchase_id.is_(None),
+            party_col.in_(party_ids),
+            amount_col > 0,
+        )
+        .group_by(party_col)
+        .all()
+    )
+    return {party_id: float(amount) for party_id, amount in rows}
+
+
+def _fifo_allocate_party_ledger(
+    purchases: list[ShPurchase],
+    party_id_fn: Callable[[ShPurchase], Optional[int]],
+    direct_by_purchase: dict[int, float],
+    party_pool: dict[int, float],
+    due_before_party_ledger_fn: Callable[[ShPurchase], float],
+) -> dict[int, float]:
+    """Apply party-level ledger to purchases oldest-first (FIFO)."""
+    allocated = {purchase.id: direct_by_purchase.get(purchase.id, 0.0) for purchase in purchases}
+    by_party: dict[int, list[ShPurchase]] = defaultdict(list)
+    for purchase in purchases:
+        party_id = party_id_fn(purchase)
+        if party_id is not None:
+            by_party[party_id].append(purchase)
+
+    for party_id, party_purchases in by_party.items():
+        remaining_pool = party_pool.get(party_id, 0.0)
+        if remaining_pool <= 0:
+            continue
+        for purchase in sorted(
+            party_purchases,
+            key=lambda p: (p.date_purchased, p.id),
+        ):
+            if remaining_pool <= 0:
+                break
+            already_applied = allocated.get(purchase.id, 0.0)
+            due = due_before_party_ledger_fn(purchase) - already_applied
+            if due <= 0:
+                continue
+            applied = min(due, remaining_pool)
+            allocated[purchase.id] = already_applied + applied
+            remaining_pool -= applied
+
+    return allocated
+
+
 def get_supplier_party_balances() -> list[dict]:
     """Amount to pay each supplier — auto from purchases minus ledger payments."""
     return get_supplier_purchase_balance_rows()
@@ -223,23 +301,53 @@ def get_supplier_purchase_balance_rows() -> list[dict]:
         .order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc())
         .all()
     )
+    purchase_ids = [purchase.id for purchase in purchases]
+    supplier_ids = list({purchase.supplier_company_id for purchase in purchases})
+
+    direct_ledger = _ledger_sum_by_purchase(purchase_ids, "debit")
+    party_ledger_pool = _party_level_ledger_pool(
+        supplier_ids, "supplier_company_id", "debit"
+    )
+
+    screenshot_by_purchase: dict[int, float] = {}
+    if purchase_ids:
+        screenshot_rows = (
+            db.session.query(
+                ShPaymentScreenshot.purchase_id,
+                func.coalesce(func.sum(ShPaymentScreenshot.amount_paid), 0),
+            )
+            .filter(ShPaymentScreenshot.purchase_id.in_(purchase_ids))
+            .group_by(ShPaymentScreenshot.purchase_id)
+            .all()
+        )
+        screenshot_by_purchase = {
+            purchase_id: float(amount) for purchase_id, amount in screenshot_rows
+        }
+
+    def due_before_party_ledger(purchase: ShPurchase) -> float:
+        total_purchased = float(purchase.total_amount or 0)
+        paid_on_purchase = float(purchase.paid_amount or 0)
+        screenshot_payments = screenshot_by_purchase.get(purchase.id, 0.0)
+        return max(
+            0.0,
+            total_purchased - paid_on_purchase - screenshot_payments,
+        )
+
+    ledger_allocated = _fifo_allocate_party_ledger(
+        purchases,
+        lambda purchase: purchase.supplier_company_id,
+        direct_ledger,
+        party_ledger_pool,
+        due_before_party_ledger,
+    )
+
     rows = []
     for purchase in purchases:
-        ledger_payments = (
-            db.session.query(func.coalesce(func.sum(ShLedgerEntry.debit), 0))
-            .filter(ShLedgerEntry.purchase_id == purchase.id)
-            .scalar()
-            or 0
-        )
-        screenshot_payments = (
-            db.session.query(func.coalesce(func.sum(ShPaymentScreenshot.amount_paid), 0))
-            .filter(ShPaymentScreenshot.purchase_id == purchase.id)
-            .scalar()
-            or 0
-        )
         paid_on_purchase = float(purchase.paid_amount or 0)
         total_purchased = float(purchase.total_amount or 0)
-        total_paid = paid_on_purchase + float(ledger_payments) + float(screenshot_payments)
+        ledger_payments = ledger_allocated.get(purchase.id, 0.0)
+        screenshot_payments = screenshot_by_purchase.get(purchase.id, 0.0)
+        total_paid = paid_on_purchase + ledger_payments + screenshot_payments
         balance_to_pay = max(0.0, total_purchased - total_paid)
 
         rows.append(
@@ -249,11 +357,11 @@ def get_supplier_purchase_balance_rows() -> list[dict]:
                 "client": purchase.client,
                 "total_purchased": total_purchased,
                 "paid_on_purchases": paid_on_purchase,
-                "ledger_payments": float(ledger_payments),
-                "screenshot_payments": float(screenshot_payments),
-                "total_paid": float(total_paid),
+                "ledger_payments": ledger_payments,
+                "screenshot_payments": screenshot_payments,
+                "total_paid": total_paid,
                 "purchase_due_on_records": float(purchase.amount_due),
-                "balance_to_pay": float(balance_to_pay),
+                "balance_to_pay": balance_to_pay,
             }
         )
     return rows
@@ -272,16 +380,26 @@ def get_client_purchase_balance_rows() -> list[dict]:
         .order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc())
         .all()
     )
+    purchase_ids = [purchase.id for purchase in purchases]
+    client_ids = list({purchase.client_company_id for purchase in purchases})
+
+    direct_ledger = _ledger_sum_by_purchase(purchase_ids, "credit")
+    party_ledger_pool = _party_level_ledger_pool(
+        client_ids, "client_company_id", "credit"
+    )
+    ledger_allocated = _fifo_allocate_party_ledger(
+        purchases,
+        lambda purchase: purchase.client_company_id,
+        direct_ledger,
+        party_ledger_pool,
+        lambda purchase: float(purchase.client_total_amount or 0),
+    )
+
     rows = []
     for purchase in purchases:
         client_total = float(purchase.client_total_amount or 0)
-        ledger_received = (
-            db.session.query(func.coalesce(func.sum(ShLedgerEntry.credit), 0))
-            .filter(ShLedgerEntry.purchase_id == purchase.id)
-            .scalar()
-            or 0
-        )
-        balance_to_receive = max(0.0, client_total - float(ledger_received))
+        ledger_received = ledger_allocated.get(purchase.id, 0.0)
+        balance_to_receive = max(0.0, client_total - ledger_received)
 
         rows.append(
             {
@@ -289,9 +407,9 @@ def get_client_purchase_balance_rows() -> list[dict]:
                 "party": purchase.client,
                 "supplier": purchase.supplier,
                 "purchase_billed": client_total,
-                "ledger_received": float(ledger_received),
+                "ledger_received": ledger_received,
                 "total_billed": client_total,
-                "balance_to_receive": float(balance_to_receive),
+                "balance_to_receive": balance_to_receive,
             }
         )
     return rows
