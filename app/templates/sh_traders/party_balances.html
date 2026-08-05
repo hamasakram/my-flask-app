@@ -2,7 +2,7 @@
 {% from "sh_traders/macros.html" import sh_page_header %}
 {% block title %}Party Balances - SH Traders{% endblock %}
 {% block content %}
-{{ sh_page_header('Party Balances', 'Amounts to pay suppliers and receive from clients — updated automatically') }}
+{{ sh_page_header('Party Balances', 'One row per advance stock purchase — amounts to pay and receive') }}
 
 <div class="stats-grid">
     <div class="stat-card accent-red">
@@ -21,29 +21,35 @@
 </div>
 
 <p class="field-note balance-note">
-    Supplier balance = Total Purchased − Paid on purchases − Ledger payments − Payment screenshots.
-    Client balance to receive is based on <strong>Advance Stock Purchased</strong> (client totals).
-    <strong>Sale Invoices</strong> are listed separately for reference — they are not added again to avoid double counting.
-    Ledger receipts in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> reduce the client balance.
+    Each advance stock purchase appears on its own row.
+    Supplier balance = Purchase Total − Paid on record − Ledger/screenshot payments linked to that purchase.
+    Client balance = Client Total − Ledger receipts linked to that purchase.
+    Record payments in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> and link them to the purchase when possible.
 </p>
 
 <div class="grid-2">
     <div class="card">
         <h2>Suppliers — Amount To Pay</h2>
-        <table class="data-table">
+        <table class="data-table compact">
             <thead>
                 <tr>
+                    <th>Date</th>
                     <th>Supplier</th>
-                    <th>Total Purchased</th>
-                    <th>Paid (Purchases)</th>
-                    <th>Ledger Paid</th>
+                    <th>Material</th>
+                    <th>Purchased For</th>
+                    <th>Total</th>
+                    <th>Paid</th>
+                    <th>Ledger</th>
                     <th>Balance To Pay</th>
                 </tr>
             </thead>
             <tbody>
                 {% for row in party_totals.supplier_rows %}
                 <tr>
+                    <td>{{ row.purchase.date_purchased.strftime('%d-%m-%Y') }}</td>
                     <td><strong>{{ row.party.name }}</strong></td>
+                    <td>{{ row.purchase.material_name }}{% if row.purchase.size %} · {{ row.purchase.size }}{% endif %}</td>
+                    <td>{{ row.client.name if row.client else '—' }}</td>
                     <td>₨ {{ "{:,.2f}".format(row.total_purchased) }}</td>
                     <td>₨ {{ "{:,.2f}".format(row.paid_on_purchases) }}</td>
                     <td>₨ {{ "{:,.2f}".format(row.ledger_payments) }}</td>
@@ -52,7 +58,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="5" class="empty">No suppliers yet</td></tr>
+                <tr><td colspan="8" class="empty">No purchases yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -60,31 +66,33 @@
 
     <div class="card">
         <h2>Clients — Amount To Receive</h2>
-        <table class="data-table">
+        <table class="data-table compact">
             <thead>
                 <tr>
+                    <th>Date</th>
                     <th>Client</th>
-                    <th>Purchases Billed</th>
-                    <th>Invoices Billed</th>
-                    <th>Total Billed</th>
-                    <th>Received (Ledger)</th>
+                    <th>Material</th>
+                    <th>Supplier</th>
+                    <th>Client Total</th>
+                    <th>Received</th>
                     <th>Balance To Receive</th>
                 </tr>
             </thead>
             <tbody>
                 {% for row in party_totals.client_rows %}
                 <tr>
+                    <td>{{ row.purchase.date_purchased.strftime('%d-%m-%Y') }}</td>
                     <td><strong>{{ row.party.name }}</strong></td>
-                    <td>₨ {{ "{:,.2f}".format(row.purchase_billed) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(row.invoice_billed) }}{% if row.invoice_count %} <small class="field-note">({{ row.invoice_count }})</small>{% endif %}</td>
-                    <td><strong>₨ {{ "{:,.2f}".format(row.total_billed) }}</strong></td>
+                    <td>{{ row.purchase.material_name }}{% if row.purchase.size %} · {{ row.purchase.size }}{% endif %}</td>
+                    <td>{{ row.supplier.name if row.supplier else '—' }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.total_billed) }}</td>
                     <td>₨ {{ "{:,.2f}".format(row.ledger_received) }}</td>
                     <td class="{% if row.balance_to_receive > 0 %}text-success{% endif %}">
                         <strong>₨ {{ "{:,.2f}".format(row.balance_to_receive) }}</strong>
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="empty">No clients yet</td></tr>
+                <tr><td colspan="7" class="empty">No client billings yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>

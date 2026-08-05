@@ -213,85 +213,85 @@ def get_current_ledger_balance() -> float:
 
 def get_supplier_party_balances() -> list[dict]:
     """Amount to pay each supplier — auto from purchases minus ledger payments."""
-    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
-    rows = []
-    for supplier in suppliers:
-        purchases = ShPurchase.query.filter_by(supplier_company_id=supplier.id).all()
-        total_purchased = sum(float(p.total_amount or 0) for p in purchases)
-        paid_on_purchases = sum(float(p.paid_amount or 0) for p in purchases)
-        purchase_due = sum(float(p.amount_due) for p in purchases)
+    return get_supplier_purchase_balance_rows()
 
+
+def get_supplier_purchase_balance_rows() -> list[dict]:
+    """One row per advance stock purchase — supplier amount still due."""
+    purchases = (
+        ShPurchase.query.join(ShSupplierCompany)
+        .order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc())
+        .all()
+    )
+    rows = []
+    for purchase in purchases:
         ledger_payments = (
             db.session.query(func.coalesce(func.sum(ShLedgerEntry.debit), 0))
-            .filter(ShLedgerEntry.supplier_company_id == supplier.id)
+            .filter(ShLedgerEntry.purchase_id == purchase.id)
             .scalar()
             or 0
         )
         screenshot_payments = (
             db.session.query(func.coalesce(func.sum(ShPaymentScreenshot.amount_paid), 0))
-            .filter(ShPaymentScreenshot.supplier_company_id == supplier.id)
+            .filter(ShPaymentScreenshot.purchase_id == purchase.id)
             .scalar()
             or 0
         )
-
-        total_paid = float(paid_on_purchases) + float(ledger_payments) + float(screenshot_payments)
-        balance_to_pay = max(0.0, float(total_purchased) - total_paid)
+        paid_on_purchase = float(purchase.paid_amount or 0)
+        total_purchased = float(purchase.total_amount or 0)
+        total_paid = paid_on_purchase + float(ledger_payments) + float(screenshot_payments)
+        balance_to_pay = max(0.0, total_purchased - total_paid)
 
         rows.append(
             {
-                "party": supplier,
-                "total_purchased": float(total_purchased),
-                "paid_on_purchases": float(paid_on_purchases),
+                "purchase": purchase,
+                "party": purchase.supplier,
+                "client": purchase.client,
+                "total_purchased": total_purchased,
+                "paid_on_purchases": paid_on_purchase,
                 "ledger_payments": float(ledger_payments),
                 "screenshot_payments": float(screenshot_payments),
                 "total_paid": float(total_paid),
-                "purchase_due_on_records": float(purchase_due),
+                "purchase_due_on_records": float(purchase.amount_due),
                 "balance_to_pay": float(balance_to_pay),
-                "purchase_count": len(purchases),
             }
         )
     return rows
 
 
 def get_client_party_balances() -> list[dict]:
-    """Amount to receive from each client — purchases, sale invoices, minus ledger receipts."""
-    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    """Amount to receive from each client — one row per advance stock purchase."""
+    return get_client_purchase_balance_rows()
+
+
+def get_client_purchase_balance_rows() -> list[dict]:
+    """One row per advance stock purchase — client amount still to receive."""
+    purchases = (
+        ShPurchase.query.join(ShClientCompany)
+        .filter(ShPurchase.client_total_amount.isnot(None))
+        .order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc())
+        .all()
+    )
     rows = []
-    for client in clients:
-        purchases = ShPurchase.query.filter_by(client_company_id=client.id).all()
-        purchase_billed = sum(float(p.client_total_amount or 0) for p in purchases)
-
-        invoice_billed = (
-            db.session.query(func.coalesce(func.sum(ShSaleInvoice.total_amount), 0))
-            .filter(ShSaleInvoice.sold_to_client_id == client.id)
-            .scalar()
-            or 0
-        )
-        invoice_count = ShSaleInvoice.query.filter_by(sold_to_client_id=client.id).count()
-
-        # Advance stock client totals already bill the client; sale invoices are
-        # shown separately and must not be added again to avoid double counting.
-        total_billed = float(purchase_billed)
-
+    for purchase in purchases:
+        client_total = float(purchase.client_total_amount or 0)
         ledger_received = (
             db.session.query(func.coalesce(func.sum(ShLedgerEntry.credit), 0))
-            .filter(ShLedgerEntry.client_company_id == client.id)
+            .filter(ShLedgerEntry.purchase_id == purchase.id)
             .scalar()
             or 0
         )
-
-        balance_to_receive = max(0.0, float(total_billed) - float(ledger_received))
+        balance_to_receive = max(0.0, client_total - float(ledger_received))
 
         rows.append(
             {
-                "party": client,
-                "purchase_billed": float(purchase_billed),
-                "invoice_billed": float(invoice_billed),
-                "total_billed": float(total_billed),
+                "purchase": purchase,
+                "party": purchase.client,
+                "supplier": purchase.supplier,
+                "purchase_billed": client_total,
                 "ledger_received": float(ledger_received),
+                "total_billed": client_total,
                 "balance_to_receive": float(balance_to_receive),
-                "purchase_count": len(purchases),
-                "invoice_count": invoice_count,
             }
         )
     return rows
