@@ -23,6 +23,7 @@ from app.models import (
     OpeningStock,
     StockPurchaseReceipt,
     ShClientCompany,
+    ShClientLedgerEntry,
     ShGatePass,
     ShSaleInvoice,
     ShLedgerEntry,
@@ -35,6 +36,7 @@ from app.models import (
     ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
+    ShSupplierLedgerEntry,
 )
 from app.services.ink_used_stock import catalog_ink_name_in_use, catalog_shade_name_in_use
 from app.services.inventory import log_audit
@@ -523,7 +525,31 @@ def delete_sh_ledger(entry_id):
         entry,
         "ShLedgerEntry",
         f"Deleted SH ledger entry #{entry_id}",
-        url_for("sh_main.payments"),
+        url_for("sh_main.partners"),
+    )
+
+
+@stock_deletes_bp.route("/sh/client-ledger/<int:entry_id>", methods=["POST"])
+@login_required
+def delete_sh_client_ledger(entry_id):
+    entry = ShClientLedgerEntry.query.get_or_404(entry_id)
+    return _delete_entity(
+        entry,
+        "ShClientLedgerEntry",
+        f"Deleted client ledger entry #{entry_id}",
+        url_for("sh_main.client_ledger"),
+    )
+
+
+@stock_deletes_bp.route("/sh/supplier-ledger/<int:entry_id>", methods=["POST"])
+@login_required
+def delete_sh_supplier_ledger(entry_id):
+    entry = ShSupplierLedgerEntry.query.get_or_404(entry_id)
+    return _delete_entity(
+        entry,
+        "ShSupplierLedgerEntry",
+        f"Deleted supplier ledger entry #{entry_id}",
+        url_for("sh_main.supplier_ledger"),
     )
 
 

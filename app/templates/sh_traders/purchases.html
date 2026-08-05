@@ -225,8 +225,8 @@
     </table>
     <p class="field-note">
         <strong>Due (on record)</strong> = Total − Paid on that row only.
-        Payments recorded in <a href="{{ url_for('sh_main.payments') }}">Payments &amp; Ledger</a> are not shown here —
-        see <a href="{{ url_for('sh_main.party_balances') }}">Party Balances</a> for the supplier’s net balance after all payments.
+        Use <a href="{{ url_for('sh_main.supplier_ledger') }}">Supplier Ledger</a> and
+        <a href="{{ url_for('sh_main.client_ledger') }}">Client Ledger</a> for manual payment tracking.
     </p>
 </div>
 {% endblock %}

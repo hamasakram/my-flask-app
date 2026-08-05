@@ -26,6 +26,7 @@ from app.models import (
     InventoryTransaction,
     StockPurchaseReceipt,
     ShClientCompany,
+    ShClientLedgerEntry,
     ShSaleInvoice,
     ShLedgerEntry,
     ShOpeningBalance,
@@ -34,6 +35,7 @@ from app.models import (
     ShPartnerCompany,
     ShPurchase,
     ShSupplierCompany,
+    ShSupplierLedgerEntry,
     UsedInkName,
     UsedInkShade,
     UsedInkStock,
@@ -46,6 +48,7 @@ from app.services.companies import (
 from app.services.bank_ledger import normalize_expense_category, update_bank_transfer
 from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
+from app.services.sh_manual_ledger import save_client_ledger_lines, save_supplier_ledger_lines
 from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
 from app.services.sh_traders import calculate_total_amount
 from app.services.sh_partnership import apply_partnership_from_form
@@ -1423,12 +1426,12 @@ def edit_sh_opening():
         )
         db.session.commit()
         flash("Opening balance updated.", "success")
-        return redirect(url_for("sh_main.payments"))
+        return redirect(url_for("sh_main.banks"))
 
     return render_template(
         "sh_traders/edit_opening.html",
         opening=opening,
-        cancel_url=url_for("sh_main.payments"),
+        cancel_url=url_for("sh_main.banks"),
     )
 
 
@@ -1475,7 +1478,7 @@ def edit_sh_ledger(entry_id):
         )
         db.session.commit()
         flash("Ledger entry updated.", "success")
-        return redirect(url_for("sh_main.payments"))
+        return redirect(url_for("sh_main.partners"))
 
     return render_template(
         "sh_traders/edit_ledger.html",
@@ -1483,7 +1486,7 @@ def edit_sh_ledger(entry_id):
         suppliers=ShSupplierCompany.query.order_by(ShSupplierCompany.name).all(),
         clients=ShClientCompany.query.order_by(ShClientCompany.name).all(),
         partners=ShPartnerCompany.query.order_by(ShPartnerCompany.name).all(),
-        cancel_url=url_for("sh_main.payments"),
+        cancel_url=url_for("sh_main.partners"),
     )
 
 
@@ -1663,6 +1666,144 @@ def edit_sh_sale_invoice(invoice_id):
         invoice=invoice,
         clients=clients,
         cancel_url=url_for("sh_main.sale_invoices"),
+    )
+
+
+@stock_edits_bp.route("/sh/client-ledger/<int:entry_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_client_ledger(entry_id):
+    entry = ShClientLedgerEntry.query.get_or_404(entry_id)
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        entry_date = request.form.get("entry_date")
+        reference = request.form.get("reference_number", "").strip()
+        factory_challan_no = request.form.get("factory_challan_no", "").strip()
+        sold_to_id = request.form.get("sold_to_client_id", type=int)
+        location = request.form.get("location", "MULTAN").strip() or "MULTAN"
+        previous_balance = request.form.get("previous_balance", type=float) or 0.0
+        previous_balance_type = request.form.get("previous_balance_type", "DR").strip() or "DR"
+        current_balance_override = request.form.get("current_balance", type=float)
+        current_balance_type = request.form.get("current_balance_type", "DR").strip() or "DR"
+        notes = request.form.get("notes", "").strip()
+
+        if not entry_date or not sold_to_id or not reference:
+            flash("Date, reference, and client are required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_client_ledger", entry_id=entry_id))
+
+        try:
+            entry.entry_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
+            lines = parse_invoice_lines(request.form)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("stock_edits.edit_sh_client_ledger", entry_id=entry_id))
+
+        entry.reference_number = reference
+        entry.factory_challan_no = factory_challan_no or None
+        entry.sold_to_client_id = sold_to_id
+        entry.location = location
+        entry.previous_balance = previous_balance
+        entry.previous_balance_type = previous_balance_type
+        entry.current_balance_type = current_balance_type
+        entry.notes = notes or None
+
+        total_amount = save_client_ledger_lines(entry, lines)
+        entry.total_amount = total_amount
+        if current_balance_override is not None and not request.form.get("auto_current_balance"):
+            entry.current_balance = current_balance_override
+        else:
+            current, balance_type = compute_current_balance(
+                previous_balance, total_amount, previous_balance_type
+            )
+            entry.current_balance = current
+            entry.current_balance_type = balance_type
+
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShClientLedgerEntry",
+            entry.id,
+            f"Updated client ledger {entry.reference_number}",
+        )
+        db.session.commit()
+        flash("Client ledger entry updated.", "success")
+        return redirect(url_for("sh_main.client_ledger"))
+
+    return render_template(
+        "sh_traders/edit_client_ledger.html",
+        entry=entry,
+        clients=clients,
+        cancel_url=url_for("sh_main.client_ledger"),
+    )
+
+
+@stock_edits_bp.route("/sh/supplier-ledger/<int:entry_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_supplier_ledger(entry_id):
+    entry = ShSupplierLedgerEntry.query.get_or_404(entry_id)
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        entry_date = request.form.get("entry_date")
+        reference = request.form.get("reference_number", "").strip()
+        factory_challan_no = request.form.get("factory_challan_no", "").strip()
+        supplier_id = request.form.get("supplier_company_id", type=int)
+        location = request.form.get("location", "MULTAN").strip() or "MULTAN"
+        previous_balance = request.form.get("previous_balance", type=float) or 0.0
+        previous_balance_type = request.form.get("previous_balance_type", "DR").strip() or "DR"
+        current_balance_override = request.form.get("current_balance", type=float)
+        current_balance_type = request.form.get("current_balance_type", "DR").strip() or "DR"
+        notes = request.form.get("notes", "").strip()
+
+        if not entry_date or not supplier_id or not reference:
+            flash("Date, reference, and supplier are required.", "danger")
+            return redirect(url_for("stock_edits.edit_sh_supplier_ledger", entry_id=entry_id))
+
+        try:
+            entry.entry_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
+            lines = parse_invoice_lines(request.form)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("stock_edits.edit_sh_supplier_ledger", entry_id=entry_id))
+
+        entry.reference_number = reference
+        entry.factory_challan_no = factory_challan_no or None
+        entry.supplier_company_id = supplier_id
+        entry.location = location
+        entry.previous_balance = previous_balance
+        entry.previous_balance_type = previous_balance_type
+        entry.current_balance_type = current_balance_type
+        entry.notes = notes or None
+
+        total_amount = save_supplier_ledger_lines(entry, lines)
+        entry.total_amount = total_amount
+        if current_balance_override is not None and not request.form.get("auto_current_balance"):
+            entry.current_balance = current_balance_override
+        else:
+            current, balance_type = compute_current_balance(
+                previous_balance, total_amount, previous_balance_type
+            )
+            entry.current_balance = current
+            entry.current_balance_type = balance_type
+
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShSupplierLedgerEntry",
+            entry.id,
+            f"Updated supplier ledger {entry.reference_number}",
+        )
+        db.session.commit()
+        flash("Supplier ledger entry updated.", "success")
+        return redirect(url_for("sh_main.supplier_ledger"))
+
+    return render_template(
+        "sh_traders/edit_supplier_ledger.html",
+        entry=entry,
+        suppliers=suppliers,
+        cancel_url=url_for("sh_main.supplier_ledger"),
     )
 
 

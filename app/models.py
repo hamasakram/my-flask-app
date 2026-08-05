@@ -485,6 +485,18 @@ class AppSetting(db.Model):
     value = db.Column(db.String(255), nullable=False)
 
 
+class ShBank(db.Model):
+    """Bank context for SH Traders — each bank has separate records and opening balance."""
+
+    __tablename__ = "sh_banks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False)
+    opening_balance = db.Column(db.Float, nullable=False, default=0)
+    is_default = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+
 class ShSupplierCompany(db.Model):
     """Supplier companies SH Traders purchases material from."""
 
@@ -527,6 +539,7 @@ class ShPurchase(db.Model):
     __tablename__ = "sh_purchases"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     date_purchased = db.Column(db.Date, nullable=False)
     supplier_company_id = db.Column(
         db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=False
@@ -548,6 +561,7 @@ class ShPurchase(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
+    bank = db.relationship("ShBank")
     supplier = db.relationship("ShSupplierCompany", back_populates="purchases")
     client = db.relationship("ShClientCompany", back_populates="purchases")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
@@ -593,6 +607,7 @@ class ShOpeningBalance(db.Model):
     __tablename__ = "sh_opening_balance"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     amount = db.Column(db.Float, nullable=False, default=0)
     notes = db.Column(db.Text)
     set_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -606,6 +621,7 @@ class ShLedgerEntry(db.Model):
     __tablename__ = "sh_ledger_entries"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     entry_date = db.Column(db.Date, nullable=False)
     debit = db.Column(db.Float, nullable=False, default=0)
     credit = db.Column(db.Float, nullable=False, default=0)
@@ -636,6 +652,7 @@ class ShPaymentScreenshot(db.Model):
     __tablename__ = "sh_payment_screenshots"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     payment_date = db.Column(db.Date, nullable=False)
     supplier_company_id = db.Column(
         db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=False
@@ -660,6 +677,7 @@ class ShGatePassScreenshot(db.Model):
     __tablename__ = "sh_gate_pass_screenshots"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     gate_pass_date = db.Column(db.Date, nullable=False)
     sold_to_client_id = db.Column(db.Integer, db.ForeignKey("sh_client_companies.id"))
     sale_invoice_id = db.Column(db.Integer, db.ForeignKey("sh_sale_invoices.id"))
@@ -680,6 +698,7 @@ class ShGatePass(db.Model):
     __tablename__ = "sh_gate_passes"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     gate_pass_number = db.Column(db.String(30), unique=True, nullable=False)
     issued_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     sold_to_client_id = db.Column(
@@ -740,6 +759,7 @@ class ShSaleInvoice(db.Model):
     __tablename__ = "sh_sale_invoices"
 
     id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
     invoice_number = db.Column(db.String(30), unique=True, nullable=False)
     invoice_date = db.Column(db.Date, nullable=False)
     factory_challan_no = db.Column(db.String(50))
@@ -791,6 +811,151 @@ class ShSaleInvoiceLine(db.Model):
     __table_args__ = (
         db.UniqueConstraint("invoice_id", "line_number", name="uq_sale_invoice_line"),
     )
+
+
+class ShClientLedgerEntry(db.Model):
+    """Manual client ledger entry — same field options as sale invoice."""
+
+    __tablename__ = "sh_client_ledger_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    reference_number = db.Column(db.String(30), nullable=False)
+    factory_challan_no = db.Column(db.String(50))
+    sold_to_client_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    location = db.Column(db.String(100), nullable=False, default="MULTAN")
+    previous_balance = db.Column(db.Float, nullable=False, default=0)
+    previous_balance_type = db.Column(db.String(2), nullable=False, default="DR")
+    current_balance = db.Column(db.Float, nullable=False, default=0)
+    current_balance_type = db.Column(db.String(2), nullable=False, default="DR")
+    total_amount = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    sold_to = db.relationship("ShClientCompany")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    lines = db.relationship(
+        "ShClientLedgerLine",
+        back_populates="entry",
+        lazy="joined",
+        cascade="all, delete-orphan",
+        order_by="ShClientLedgerLine.line_number",
+    )
+
+
+class ShClientLedgerLine(db.Model):
+    __tablename__ = "sh_client_ledger_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sh_client_ledger_entries.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    line_number = db.Column(db.Integer, nullable=False)
+    item_name = db.Column(db.String(200), nullable=False)
+    size = db.Column(db.String(100), default="")
+    qty = db.Column(db.Float, nullable=False, default=0)
+    qty_unit = db.Column(db.String(30), nullable=False, default="Roll/Reel")
+    gross_weight = db.Column(db.Float, nullable=False, default=0)
+    net_weight = db.Column(db.Float, nullable=False, default=0)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    line_total = db.Column(db.Float, nullable=False, default=0)
+
+    entry = db.relationship("ShClientLedgerEntry", back_populates="lines")
+
+    __table_args__ = (
+        db.UniqueConstraint("entry_id", "line_number", name="uq_client_ledger_line"),
+    )
+
+
+class ShSupplierLedgerEntry(db.Model):
+    """Manual supplier ledger entry — same field options as sale invoice."""
+
+    __tablename__ = "sh_supplier_ledger_entries"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=False)
+    entry_date = db.Column(db.Date, nullable=False)
+    reference_number = db.Column(db.String(30), nullable=False)
+    factory_challan_no = db.Column(db.String(50))
+    supplier_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_supplier_companies.id"), nullable=False
+    )
+    location = db.Column(db.String(100), nullable=False, default="MULTAN")
+    previous_balance = db.Column(db.Float, nullable=False, default=0)
+    previous_balance_type = db.Column(db.String(2), nullable=False, default="DR")
+    current_balance = db.Column(db.Float, nullable=False, default=0)
+    current_balance_type = db.Column(db.String(2), nullable=False, default="DR")
+    total_amount = db.Column(db.Float, nullable=False, default=0)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    supplier = db.relationship("ShSupplierCompany")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    lines = db.relationship(
+        "ShSupplierLedgerLine",
+        back_populates="entry",
+        lazy="joined",
+        cascade="all, delete-orphan",
+        order_by="ShSupplierLedgerLine.line_number",
+    )
+
+
+class ShSupplierLedgerLine(db.Model):
+    __tablename__ = "sh_supplier_ledger_lines"
+
+    id = db.Column(db.Integer, primary_key=True)
+    entry_id = db.Column(
+        db.Integer,
+        db.ForeignKey("sh_supplier_ledger_entries.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    line_number = db.Column(db.Integer, nullable=False)
+    item_name = db.Column(db.String(200), nullable=False)
+    size = db.Column(db.String(100), default="")
+    qty = db.Column(db.Float, nullable=False, default=0)
+    qty_unit = db.Column(db.String(30), nullable=False, default="Roll/Reel")
+    gross_weight = db.Column(db.Float, nullable=False, default=0)
+    net_weight = db.Column(db.Float, nullable=False, default=0)
+    unit_price = db.Column(db.Float, nullable=False, default=0)
+    line_total = db.Column(db.Float, nullable=False, default=0)
+
+    entry = db.relationship("ShSupplierLedgerEntry", back_populates="lines")
+
+    __table_args__ = (
+        db.UniqueConstraint("entry_id", "line_number", name="uq_supplier_ledger_line"),
+    )
+
+
+class ShOrderConfirmation(db.Model):
+    """Order confirmation slip for client material orders."""
+
+    __tablename__ = "sh_order_confirmations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=False)
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50))
+    total_kg = db.Column(db.Float, nullable=False)
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    client = db.relationship("ShClientCompany")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
 class HomeParty(db.Model):

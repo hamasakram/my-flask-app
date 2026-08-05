@@ -76,6 +76,7 @@
             <li><a href="{{ url_for('sh_main.dashboard') }}" class="{% if request.endpoint == 'sh_main.dashboard' %}active{% endif %}">Dashboard</a></li>
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">SH Traders</li>
+            <li><a href="{{ url_for('sh_main.banks') }}">Banks</a></li>
             <li><a href="{{ url_for('sh_main.suppliers') }}">Supplier Companies</a></li>
             <li><a href="{{ url_for('sh_main.clients') }}">Client Companies</a></li>
             <li><a href="{{ url_for('sh_main.partners') }}">Partners</a></li>
@@ -83,8 +84,9 @@
             <li><a href="{{ url_for('sh_main.payment_screenshots') }}">Payment Screenshots</a></li>
             <li><a href="{{ url_for('sh_main.gate_pass_screenshots') }}">Gate Pass Screenshots</a></li>
             <li><a href="{{ url_for('sh_main.sale_invoices') }}">Sale Invoices</a></li>
-            <li><a href="{{ url_for('sh_main.payments') }}">Payments & Ledger</a></li>
-            <li><a href="{{ url_for('sh_main.party_balances') }}">Party Balances</a></li>
+            <li><a href="{{ url_for('sh_main.client_ledger') }}">Client Ledger</a></li>
+            <li><a href="{{ url_for('sh_main.supplier_ledger') }}">Supplier Ledger</a></li>
+            <li><a href="{{ url_for('sh_main.order_confirmation') }}">Order Confirmation</a></li>
             <li class="nav-section">Reports</li>
             <li><a href="{{ url_for('pdf.builder', module='sh_traders') }}">Custom PDF</a></li>
             {% endif %}

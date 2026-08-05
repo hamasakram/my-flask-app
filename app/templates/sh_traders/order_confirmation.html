@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector %}
+{% block title %}Order Confirmation - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Order Confirmation Slip', 'Confirm material orders for clients') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if current_user.can_edit() %}
+{% if not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Create Order Confirmation</h2>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" required placeholder="e.g. Banana Wafer PET">
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size" placeholder="199">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron" placeholder="20">
+        </div>
+        <div class="form-group">
+            <label for="total_kg">KG</label>
+            <input type="number" id="total_kg" name="total_kg" step="0.1" min="0.1" required>
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Purchased For</label>
+            <select id="client_company_id" name="client_company_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create &amp; Print Slip</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Order Confirmation Records</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Material</th>
+                <th>Size</th>
+                <th>Micron</th>
+                <th>KG</th>
+                <th>Purchased For</th>
+                <th>PDF</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>{{ order.created_at.strftime('%d-%m-%Y') }}</td>
+                <td>{{ order.material_name }}</td>
+                <td>{{ order.size or '—' }}</td>
+                <td>{{ order.micron or '—' }}</td>
+                <td>{{ "{:,.1f}".format(order.total_kg) }}</td>
+                <td>{{ order.client.name }}</td>
+                <td>
+                    <a href="{{ url_for('sh_main.order_confirmation_pdf', order_id=order.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No order confirmations yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

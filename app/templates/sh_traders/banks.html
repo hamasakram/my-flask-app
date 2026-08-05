@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector %}
+{% block title %}Banks - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('SH Traders Banks', 'Each bank has separate purchases, ledgers, and opening balance') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Bank</h2>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="add">
+        <div class="form-group">
+            <label for="bank_name">Bank Name</label>
+            <input type="text" id="bank_name" name="bank_name" required placeholder="e.g. Askari Bank">
+        </div>
+        <div class="form-group">
+            <label for="opening_balance_new">Starting Balance</label>
+            <input type="number" id="opening_balance_new" name="opening_balance" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Bank</button>
+        </div>
+    </form>
+</div>
+
+{% if current_bank %}
+<div class="card">
+    <h2>Update Opening Balance — {{ current_bank.name }}</h2>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="opening">
+        <div class="form-group">
+            <label for="opening_balance">Opening Balance</label>
+            <input type="number" id="opening_balance" name="opening_balance" step="0.01" min="0" value="{{ current_bank.opening_balance }}" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Opening Balance</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Registered Banks</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Bank</th>
+                <th>Opening Balance</th>
+                <th>Default</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for bank in banks %}
+            <tr>
+                <td><strong>{{ bank.name }}</strong></td>
+                <td>₨ {{ "{:,.2f}".format(bank.opening_balance) }}</td>
+                <td>{% if bank.is_default %}Yes{% else %}—{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="3" class="empty">No banks yet — add Askari Bank or another bank above.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

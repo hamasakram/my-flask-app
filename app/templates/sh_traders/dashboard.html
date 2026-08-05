@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector %}
 {% block title %}SH Traders Dashboard{% endblock %}
 {% block content %}
 {{ sh_page_header('SH Traders Dashboard', 'Material trading overview — ' ~ today.strftime('%d %B %Y')) }}
+{{ sh_bank_selector(banks, current_bank) }}
 
 {% if current_user.can_view_sensitive() %}
 <div class="stats-grid">
@@ -16,21 +18,13 @@
         <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_outstanding) }}</span>
     </div>
     <div class="stat-card accent-green">
-        <span class="stat-label">Payment Ledger Balance</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.ledger_balance) }}</span>
-        {% if stats.opening_balance is not none %}
-        <small class="field-note">Opening: ₨ {{ "{:,.2f}".format(stats.opening_balance) }}</small>
+        <span class="stat-label">Bank Opening Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.opening_balance or 0) }}</span>
+        {% if stats.current_bank %}
+        <small class="field-note">{{ stats.current_bank.name }}</small>
         {% else %}
-        <small class="field-note">Opening balance not set</small>
+        <small class="field-note"><a href="{{ url_for('sh_main.banks') }}">Add a bank</a></small>
         {% endif %}
-    </div>
-    <div class="stat-card accent-red">
-        <span class="stat-label">To Pay (Suppliers)</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_payable) }}</span>
-    </div>
-    <div class="stat-card">
-        <span class="stat-label">To Receive (Clients)</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_receivable) }}</span>
     </div>
 </div>
 {% else %}
@@ -124,13 +118,12 @@
 {% if current_user.can_edit() %}
 <div class="quick-actions">
     <a href="{{ url_for('sh_main.purchases') }}" class="btn btn-primary">+ Advance Stock Purchase</a>
+    <a href="{{ url_for('sh_main.client_ledger') }}" class="btn btn-secondary">Client Ledger</a>
+    <a href="{{ url_for('sh_main.supplier_ledger') }}" class="btn btn-secondary">Supplier Ledger</a>
+    <a href="{{ url_for('sh_main.order_confirmation') }}" class="btn btn-secondary">Order Confirmation</a>
+    <a href="{{ url_for('sh_main.sale_invoices') }}" class="btn btn-secondary">Sale Invoices</a>
     <a href="{{ url_for('sh_main.payment_screenshots') }}" class="btn btn-secondary">Payment Screenshots</a>
     <a href="{{ url_for('sh_main.gate_pass_screenshots') }}" class="btn btn-secondary">Gate Pass Screenshots</a>
-    <a href="{{ url_for('sh_main.sale_invoices') }}" class="btn btn-secondary">Create Sale Invoice</a>
-    <a href="{{ url_for('sh_main.suppliers') }}" class="btn btn-secondary">Supplier Companies</a>
-    <a href="{{ url_for('sh_main.clients') }}" class="btn btn-secondary">Client Companies</a>
-    <a href="{{ url_for('sh_main.payments') }}" class="btn btn-secondary">Payments & Ledger</a>
-    <a href="{{ url_for('sh_main.party_balances') }}" class="btn btn-secondary">Party Balances</a>
 </div>
 {% endif %}
 {% endblock %}

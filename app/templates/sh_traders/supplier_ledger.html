@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector %}
+{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script %}
+{% block title %}Supplier Ledger - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Supplier Ledger', 'Manual supplier ledger entries — same fields as Sale Invoice') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if current_user.can_edit() %}
+{% if not suppliers %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Add Supplier Ledger Entry</h2>
+    <form method="POST" class="form-grid" id="supplier-ledger-form">
+        <div class="form-group">
+            <label for="entry_date">Date</label>
+            <input type="date" id="entry_date" name="entry_date" required>
+        </div>
+        <div class="form-group">
+            <label for="reference_number">Reference #</label>
+            <input type="text" id="reference_number" name="reference_number" value="{{ next_reference }}" placeholder="Auto if blank">
+        </div>
+        <div class="form-group">
+            <label for="factory_challan_no">Factory Challan No</label>
+            <input type="text" id="factory_challan_no" name="factory_challan_no">
+        </div>
+        <div class="form-group">
+            <label for="location">Location</label>
+            <input type="text" id="location" name="location" value="MULTAN">
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier</label>
+            <select id="supplier_company_id" name="supplier_company_id" required>
+                <option value="">Select supplier</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="previous_balance">Previous Balance</label>
+            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="previous_balance_type">Previous Balance Type</label>
+            <select id="previous_balance_type" name="previous_balance_type">
+                <option value="DR">DR</option>
+                <option value="CR">CR</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="current_balance">Current Balance</label>
+            <input type="number" id="current_balance" name="current_balance" step="1" min="0" readonly>
+            <small class="field-note"><label><input type="checkbox" id="auto_current_balance" checked> Auto = Previous + Total</label></small>
+        </div>
+        <div class="form-group">
+            <label for="current_balance_type">Current Balance Type</label>
+            <select id="current_balance_type" name="current_balance_type">
+                <option value="DR">DR</option>
+                <option value="CR">CR</option>
+            </select>
+        </div>
+
+        <div class="form-group full-width">
+            <h3>Line Items</h3>
+            <div id="invoice-lines-container">
+                {{ invoice_line_row() }}
+            </div>
+            <template id="invoice-line-template">
+                {{ invoice_line_row() }}
+            </template>
+            <div class="form-actions rolls-entry-actions">
+                <button type="button" id="add-line-btn" class="btn btn-secondary">+ Add Line Item</button>
+                <button type="button" id="remove-line-btn" class="btn btn-secondary">Remove Last Line</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="invoice_total_display">Entry Total (auto)</label>
+            <input type="text" id="invoice_total_display" readonly class="readonly-field" value="Rs 0">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Entry</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <div class="card-header-row">
+        <h2>Supplier Ledger Records</h2>
+        <a href="{{ url_for('sh_main.supplier_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print Supplier Ledger PDF</a>
+    </div>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Ref #</th>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Lines</th>
+                <th>Total</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in entries %}
+            <tr>
+                <td><strong>{{ entry.reference_number }}</strong></td>
+                <td>{{ entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ entry.supplier.name }}</td>
+                <td>{{ entry.lines|length }}</td>
+                <td>₨ {{ "{:,.0f}".format(entry.total_amount) }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_supplier_ledger', entry_id=entry.id),
+                    url_for('stock_deletes.delete_sh_supplier_ledger', entry_id=entry.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No supplier ledger entries yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('entry_date').valueAsDate = new Date();
+</script>
+{{ invoice_line_script() }}
+{% endblock %}

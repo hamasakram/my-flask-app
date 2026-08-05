@@ -5,21 +5,38 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.models import (
+    ShBank,
     ShClientCompany,
+    ShClientLedgerEntry,
     ShGatePassScreenshot,
     ShLedgerEntry,
-    ShOpeningBalance,
+    ShOrderConfirmation,
     ShPartnerCompany,
     ShPaymentScreenshot,
     ShPurchase,
     ShSaleInvoice,
     ShSupplierCompany,
+    ShSupplierLedgerEntry,
 )
 from app.services.inventory import log_audit
-from app.services.sh_partnership import (
-    apply_partnership_from_form,
-    get_partner_ledger_balance,
+from app.services.sh_bank import (
+    ensure_bank_on_create,
+    filter_by_bank,
+    get_all_banks,
+    get_current_sh_bank,
+    set_current_sh_bank,
 )
+from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supplier_ledger_pdf
+from app.services.sh_manual_ledger import (
+    build_client_ledger_from_form,
+    build_supplier_ledger_from_form,
+    get_client_ledger_entries,
+    get_supplier_ledger_entries,
+    next_client_ledger_ref,
+    next_supplier_ledger_ref,
+)
+from app.services.sh_order_confirmation_pdf import generate_order_confirmation_pdf
+from app.services.sh_partnership import apply_partnership_from_form, get_partner_ledger_balance
 from app.services.sh_sale_invoice import (
     compute_current_balance,
     next_sale_invoice_number,
@@ -27,15 +44,7 @@ from app.services.sh_sale_invoice import (
     save_invoice_lines,
 )
 from app.services.sh_sale_invoice_pdf import generate_sale_invoice_pdf
-from app.services.sh_traders import (
-    calculate_total_amount,
-    get_current_ledger_balance,
-    get_dashboard_stats,
-    get_ledger_rows,
-    get_opening_balance,
-    get_party_balance_totals,
-    parse_multi_item_purchase_lines,
-)
+from app.services.sh_traders import calculate_total_amount, get_dashboard_stats, parse_multi_item_purchase_lines
 from app.services.sh_uploads import (
     apply_gate_pass_screenshot,
     apply_payment_screenshot,
@@ -57,6 +66,84 @@ def _parse_date(value: str):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
+def _bank_purchases():
+    return filter_by_bank(ShPurchase.query, ShPurchase).order_by(
+        ShPurchase.date_purchased.desc(), ShPurchase.id.desc()
+    )
+
+
+def _bank_sale_invoices():
+    return filter_by_bank(ShSaleInvoice.query, ShSaleInvoice).order_by(
+        ShSaleInvoice.invoice_date.desc(), ShSaleInvoice.id.desc()
+    )
+
+
+@sh_main_bp.route("/select-bank", methods=["POST"])
+@login_required
+def select_bank():
+    bank_id = request.form.get("bank_id", type=int)
+    if bank_id and set_current_sh_bank(bank_id):
+        flash(f"Switched to {get_current_sh_bank().name}.", "success")
+    else:
+        flash("Invalid bank selection.", "danger")
+    return redirect(request.referrer or url_for("sh_main.dashboard"))
+
+
+@sh_main_bp.route("/banks", methods=["GET", "POST"])
+@login_required
+def banks():
+    if request.method == "POST":
+        require_edit_access()
+        action = request.form.get("action", "add")
+
+        if action == "opening":
+            bank = get_current_sh_bank()
+            if not bank:
+                flash("No bank selected.", "danger")
+                return redirect(url_for("sh_main.banks"))
+            amount = request.form.get("opening_balance", type=float)
+            if amount is None or amount < 0:
+                flash("Enter a valid opening balance.", "danger")
+                return redirect(url_for("sh_main.banks"))
+            bank.opening_balance = amount
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "ShBank",
+                bank.id,
+                f"Updated opening balance for {bank.name}: {amount:,.2f}",
+            )
+            db.session.commit()
+            flash(f"Opening balance updated for {bank.name}.", "success")
+            return redirect(url_for("sh_main.banks"))
+
+        name = request.form.get("bank_name", "").strip()
+        opening = request.form.get("opening_balance", type=float) or 0.0
+        if not name:
+            flash("Bank name is required.", "danger")
+            return redirect(url_for("sh_main.banks"))
+        if ShBank.query.filter(db.func.lower(ShBank.name) == name.lower()).first():
+            flash("This bank already exists.", "warning")
+            return redirect(url_for("sh_main.banks"))
+
+        is_first = ShBank.query.count() == 0
+        bank = ShBank(name=name, opening_balance=opening, is_default=is_first)
+        db.session.add(bank)
+        db.session.flush()
+        log_audit(current_user.id, "CREATE", "ShBank", bank.id, f"SH bank added: {name}")
+        db.session.commit()
+        if is_first:
+            set_current_sh_bank(bank.id)
+        flash(f"Bank '{name}' added.", "success")
+        return redirect(url_for("sh_main.banks"))
+
+    return render_template(
+        "sh_traders/banks.html",
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
 @sh_main_bp.route("/")
 @login_required
 def dashboard():
@@ -67,6 +154,8 @@ def dashboard():
         "sh_traders/dashboard.html",
         stats=stats,
         today=date.today(),
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
     )
 
 
@@ -99,7 +188,12 @@ def suppliers():
         return redirect(url_for("sh_main.suppliers"))
 
     companies = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
-    return render_template("sh_traders/suppliers.html", companies=companies)
+    return render_template(
+        "sh_traders/suppliers.html",
+        companies=companies,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
 
 
 @sh_main_bp.route("/clients", methods=["GET", "POST"])
@@ -131,7 +225,12 @@ def clients():
         return redirect(url_for("sh_main.clients"))
 
     companies = ShClientCompany.query.order_by(ShClientCompany.name).all()
-    return render_template("sh_traders/clients.html", companies=companies)
+    return render_template(
+        "sh_traders/clients.html",
+        companies=companies,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
 
 
 @sh_main_bp.route("/partners", methods=["GET", "POST"])
@@ -139,6 +238,47 @@ def clients():
 def partners():
     if request.method == "POST":
         require_edit_access()
+        action = request.form.get("action", "add_partner")
+
+        if action == "partner_payment":
+            entry_date = request.form.get("entry_date")
+            partner_id = request.form.get("partner_company_id", type=int)
+            debit = request.form.get("debit", type=float) or 0
+            credit = request.form.get("credit", type=float) or 0
+            notes = request.form.get("notes", "").strip()
+
+            if not entry_date or not partner_id:
+                flash("Date and partner are required.", "danger")
+                return redirect(url_for("sh_main.partners"))
+            if debit <= 0 and credit <= 0:
+                flash("Enter a debit or credit amount.", "danger")
+                return redirect(url_for("sh_main.partners"))
+            if debit > 0 and credit > 0:
+                flash("Enter either debit or credit, not both.", "danger")
+                return redirect(url_for("sh_main.partners"))
+
+            entry = ShLedgerEntry(
+                entry_date=_parse_date(entry_date),
+                debit=debit,
+                credit=credit,
+                partner_company_id=partner_id,
+                notes=notes or None,
+                created_by_id=current_user.id,
+            )
+            ensure_bank_on_create(entry)
+            db.session.add(entry)
+            db.session.flush()
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "ShLedgerEntry",
+                entry.id,
+                f"Partner ledger entry on {entry_date}",
+            )
+            db.session.commit()
+            flash("Partner payment recorded.", "success")
+            return redirect(url_for("sh_main.partners"))
+
         name = request.form.get("company_name", "").strip()
         if not name:
             flash("Partner name is required.", "danger")
@@ -173,12 +313,22 @@ def partners():
         }
         for partner in partner_list
     ]
-    return render_template("sh_traders/partners.html", partners=summaries)
+    return render_template(
+        "sh_traders/partners.html",
+        partners=summaries,
+        partner_list=partner_list,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
 
 
 @sh_main_bp.route("/purchases", methods=["GET", "POST"])
 @login_required
 def purchases():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
     suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
 
@@ -236,6 +386,7 @@ def purchases():
                     notes=notes or None,
                     created_by_id=current_user.id,
                 )
+                ensure_bank_on_create(purchase)
                 db.session.add(purchase)
                 db.session.flush()
                 try:
@@ -255,7 +406,10 @@ def purchases():
                 f"SH multi-item purchase: {created} items",
             )
             db.session.commit()
-            flash(f"{created} purchase records saved ({', '.join(item_names[:3])}{'…' if created > 3 else ''}).", "success")
+            flash(
+                f"{created} purchase records saved ({', '.join(item_names[:3])}{'…' if created > 3 else ''}).",
+                "success",
+            )
             return redirect(url_for("sh_main.purchases"))
 
         material_name = request.form.get("material_name", "").strip()
@@ -294,6 +448,7 @@ def purchases():
             notes=notes or None,
             created_by_id=current_user.id,
         )
+        ensure_bank_on_create(purchase)
         db.session.add(purchase)
         db.session.flush()
         try:
@@ -313,11 +468,7 @@ def purchases():
         flash("Purchase recorded.", "success")
         return redirect(url_for("sh_main.purchases"))
 
-    purchase_list = (
-        ShPurchase.query.order_by(
-            ShPurchase.date_purchased.desc(), ShPurchase.id.desc()
-        ).all()
-    )
+    purchase_list = _bank_purchases().all()
     partner_list = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
     return render_template(
         "sh_traders/purchases.html",
@@ -325,114 +476,205 @@ def purchases():
         suppliers=suppliers,
         clients=clients,
         partners=partner_list,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
     )
 
 
-@sh_main_bp.route("/payments", methods=["GET", "POST"])
+@sh_main_bp.route("/payments")
 @login_required
-def payments():
-    opening = get_opening_balance()
-    action = request.form.get("action", "ledger")
-
-    if request.method == "POST":
-        require_edit_access()
-
-        if action == "opening":
-            if opening:
-                flash("Opening balance is already set. Use Edit to change it.", "warning")
-                return redirect(url_for("sh_main.payments"))
-
-            amount = request.form.get("opening_amount", type=float)
-            notes = request.form.get("opening_notes", "").strip()
-            if amount is None or amount < 0:
-                flash("Enter a valid opening balance amount.", "danger")
-                return redirect(url_for("sh_main.payments"))
-
-            record = ShOpeningBalance(
-                amount=amount,
-                notes=notes or None,
-                set_by_id=current_user.id,
-            )
-            db.session.add(record)
-            db.session.flush()
-            log_audit(
-                current_user.id,
-                "CREATE",
-                "ShOpeningBalance",
-                record.id,
-                f"SH opening balance: {amount:,.2f}",
-            )
-            db.session.commit()
-            flash("Opening balance saved.", "success")
-            return redirect(url_for("sh_main.payments"))
-
-        entry_date = request.form.get("entry_date")
-        debit = request.form.get("debit", type=float) or 0
-        credit = request.form.get("credit", type=float) or 0
-        supplier_id = request.form.get("supplier_company_id", type=int) or None
-        client_id = request.form.get("client_company_id", type=int) or None
-        partner_id = request.form.get("partner_company_id", type=int) or None
-        notes = request.form.get("notes", "").strip()
-
-        if not entry_date:
-            flash("Entry date is required.", "danger")
-            return redirect(url_for("sh_main.payments"))
-
-        if debit <= 0 and credit <= 0:
-            flash("Enter a debit or credit amount.", "danger")
-            return redirect(url_for("sh_main.payments"))
-
-        if debit > 0 and credit > 0:
-            flash("Enter either debit or credit, not both.", "danger")
-            return redirect(url_for("sh_main.payments"))
-
-        entry = ShLedgerEntry(
-            entry_date=_parse_date(entry_date),
-            debit=debit,
-            credit=credit,
-            supplier_company_id=supplier_id,
-            client_company_id=client_id,
-            partner_company_id=partner_id,
-            notes=notes or None,
-            created_by_id=current_user.id,
-        )
-        db.session.add(entry)
-        db.session.flush()
-        log_audit(
-            current_user.id,
-            "CREATE",
-            "ShLedgerEntry",
-            entry.id,
-            f"SH ledger entry on {entry_date}",
-        )
-        db.session.commit()
-        flash("Ledger entry added.", "success")
-        return redirect(url_for("sh_main.payments"))
-
-    ledger_rows = get_ledger_rows()
-    party_totals = get_party_balance_totals()
-    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
-    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
-    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
-    return render_template(
-        "sh_traders/payments.html",
-        opening=opening,
-        ledger_rows=ledger_rows,
-        current_balance=get_current_ledger_balance(),
-        party_totals=party_totals,
-        suppliers=suppliers,
-        clients=clients,
-        partners=partners,
-    )
+def payments_redirect():
+    return redirect(url_for("sh_main.client_ledger"))
 
 
 @sh_main_bp.route("/party-balances")
 @login_required
-def party_balances():
-    party_totals = get_party_balance_totals()
+def party_balances_redirect():
+    return redirect(url_for("sh_main.client_ledger"))
+
+
+@sh_main_bp.route("/client-ledger", methods=["GET", "POST"])
+@login_required
+def client_ledger():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        if not clients:
+            flash("Add client companies first.", "danger")
+            return redirect(url_for("sh_main.clients"))
+        try:
+            entry = build_client_ledger_from_form(request.form, current_user.id)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.client_ledger"))
+
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShClientLedgerEntry",
+            entry.id,
+            f"Client ledger entry {entry.reference_number}",
+        )
+        db.session.commit()
+        flash(f"Client ledger entry {entry.reference_number} saved.", "success")
+        return redirect(url_for("sh_main.client_ledger_pdf"))
+
     return render_template(
-        "sh_traders/party_balances.html",
-        party_totals=party_totals,
+        "sh_traders/client_ledger.html",
+        entries=get_client_ledger_entries(),
+        clients=clients,
+        next_reference=next_client_ledger_ref(),
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/client-ledger/pdf")
+@login_required
+def client_ledger_pdf():
+    entries = get_client_ledger_entries()
+    output = generate_client_ledger_pdf(entries)
+    bank = get_current_sh_bank()
+    bank_slug = (bank.name if bank else "ledger").replace(" ", "_")
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=f"client_ledger_{bank_slug}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/supplier-ledger", methods=["GET", "POST"])
+@login_required
+def supplier_ledger():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        if not suppliers:
+            flash("Add supplier companies first.", "danger")
+            return redirect(url_for("sh_main.suppliers"))
+        try:
+            entry = build_supplier_ledger_from_form(request.form, current_user.id)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.supplier_ledger"))
+
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShSupplierLedgerEntry",
+            entry.id,
+            f"Supplier ledger entry {entry.reference_number}",
+        )
+        db.session.commit()
+        flash(f"Supplier ledger entry {entry.reference_number} saved.", "success")
+        return redirect(url_for("sh_main.supplier_ledger_pdf"))
+
+    return render_template(
+        "sh_traders/supplier_ledger.html",
+        entries=get_supplier_ledger_entries(),
+        suppliers=suppliers,
+        next_reference=next_supplier_ledger_ref(),
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/supplier-ledger/pdf")
+@login_required
+def supplier_ledger_pdf():
+    entries = get_supplier_ledger_entries()
+    output = generate_supplier_ledger_pdf(entries)
+    bank = get_current_sh_bank()
+    bank_slug = (bank.name if bank else "ledger").replace(" ", "_")
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=f"supplier_ledger_{bank_slug}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/order-confirmation", methods=["GET", "POST"])
+@login_required
+def order_confirmation():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        material_name = request.form.get("material_name", "").strip()
+        size = request.form.get("size", "").strip()
+        micron = request.form.get("micron", "").strip()
+        total_kg = request.form.get("total_kg", type=float)
+        client_id = request.form.get("client_company_id", type=int)
+        notes = request.form.get("notes", "").strip()
+
+        if not material_name or not total_kg or total_kg <= 0 or not client_id:
+            flash("Material name, KG, and purchased-for client are required.", "danger")
+            return redirect(url_for("sh_main.order_confirmation"))
+
+        order = ShOrderConfirmation(
+            material_name=material_name,
+            size=size,
+            micron=micron or None,
+            total_kg=total_kg,
+            client_company_id=client_id,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        ensure_bank_on_create(order)
+        db.session.add(order)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShOrderConfirmation",
+            order.id,
+            f"Order confirmation: {material_name}",
+        )
+        db.session.commit()
+        flash("Order confirmation slip created.", "success")
+        return redirect(url_for("sh_main.order_confirmation_pdf", order_id=order.id))
+
+    orders = filter_by_bank(ShOrderConfirmation.query, ShOrderConfirmation).order_by(
+        ShOrderConfirmation.created_at.desc()
+    ).all()
+    return render_template(
+        "sh_traders/order_confirmation.html",
+        orders=orders,
+        clients=clients,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/order-confirmation/<int:order_id>/pdf")
+@login_required
+def order_confirmation_pdf(order_id):
+    order = ShOrderConfirmation.query.get_or_404(order_id)
+    bank_id = get_current_sh_bank().id if get_current_sh_bank() else None
+    if bank_id and order.bank_id != bank_id:
+        abort(404)
+    output = generate_order_confirmation_pdf(order)
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=f"order_confirmation_{order_id}.pdf",
+        mimetype="application/pdf",
     )
 
 
@@ -452,10 +694,12 @@ def view_payment_screenshot(record_id):
 @sh_main_bp.route("/payment-screenshots", methods=["GET", "POST"])
 @login_required
 def payment_screenshots():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
     suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
-    purchases = (
-        ShPurchase.query.order_by(ShPurchase.date_purchased.desc(), ShPurchase.id.desc()).all()
-    )
+    purchases = _bank_purchases().all()
 
     if request.method == "POST":
         require_edit_access()
@@ -488,6 +732,7 @@ def payment_screenshots():
             notes=notes or None,
             created_by_id=current_user.id,
         )
+        ensure_bank_on_create(record)
         apply_payment_screenshot(record, prepared)
         db.session.add(record)
         db.session.flush()
@@ -502,16 +747,16 @@ def payment_screenshots():
         flash("Payment screenshot uploaded.", "success")
         return redirect(url_for("sh_main.payment_screenshots"))
 
-    records = (
-        ShPaymentScreenshot.query.order_by(
-            ShPaymentScreenshot.payment_date.desc(), ShPaymentScreenshot.id.desc()
-        ).all()
-    )
+    records = filter_by_bank(ShPaymentScreenshot.query, ShPaymentScreenshot).order_by(
+        ShPaymentScreenshot.payment_date.desc(), ShPaymentScreenshot.id.desc()
+    ).all()
     return render_template(
         "sh_traders/payment_screenshots.html",
         records=records,
         suppliers=suppliers,
         purchases=purchases,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
     )
 
 
@@ -531,10 +776,12 @@ def view_gate_pass_screenshot(record_id):
 @sh_main_bp.route("/gate-pass-screenshots", methods=["GET", "POST"])
 @login_required
 def gate_pass_screenshots():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
-    invoices = (
-        ShSaleInvoice.query.order_by(ShSaleInvoice.invoice_date.desc(), ShSaleInvoice.id.desc()).all()
-    )
+    invoices = _bank_sale_invoices().all()
 
     if request.method == "POST":
         require_edit_access()
@@ -563,6 +810,7 @@ def gate_pass_screenshots():
             notes=notes or None,
             created_by_id=current_user.id,
         )
+        ensure_bank_on_create(record)
         apply_gate_pass_screenshot(record, prepared)
         db.session.add(record)
         db.session.flush()
@@ -577,17 +825,17 @@ def gate_pass_screenshots():
         flash("Gate pass screenshot uploaded.", "success")
         return redirect(url_for("sh_main.gate_pass_screenshots"))
 
-    records = (
-        ShGatePassScreenshot.query.order_by(
-            ShGatePassScreenshot.gate_pass_date.desc(),
-            ShGatePassScreenshot.id.desc(),
-        ).all()
-    )
+    records = filter_by_bank(ShGatePassScreenshot.query, ShGatePassScreenshot).order_by(
+        ShGatePassScreenshot.gate_pass_date.desc(),
+        ShGatePassScreenshot.id.desc(),
+    ).all()
     return render_template(
         "sh_traders/gate_pass_screenshots.html",
         records=records,
         clients=clients,
         invoices=invoices,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
     )
 
 
@@ -600,6 +848,10 @@ def gate_passes_redirect():
 @sh_main_bp.route("/sale-invoices", methods=["GET", "POST"])
 @login_required
 def sale_invoices():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
 
     if request.method == "POST":
@@ -642,6 +894,7 @@ def sale_invoices():
             notes=notes or None,
             created_by_id=current_user.id,
         )
+        ensure_bank_on_create(invoice)
         db.session.add(invoice)
         db.session.flush()
 
@@ -667,14 +920,14 @@ def sale_invoices():
         flash(f"Sale invoice {invoice.invoice_number} created.", "success")
         return redirect(url_for("sh_main.sale_invoice_pdf", invoice_id=invoice.id))
 
-    invoice_list = (
-        ShSaleInvoice.query.order_by(ShSaleInvoice.invoice_date.desc(), ShSaleInvoice.id.desc()).all()
-    )
+    invoice_list = _bank_sale_invoices().all()
     return render_template(
         "sh_traders/sale_invoices.html",
         invoices=invoice_list,
         clients=clients,
         next_invoice_number=next_sale_invoice_number(),
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
     )
 
 

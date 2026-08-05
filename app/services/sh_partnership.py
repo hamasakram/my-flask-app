@@ -135,16 +135,26 @@ def save_purchase_partnership(purchase, shares: list[dict]) -> None:
 
 def get_partner_ledger_balance(partner_id: int) -> float:
     from app.models import ShLedgerEntry
+    from app.services.sh_bank import get_current_sh_bank_id
+
+    bank_id = get_current_sh_bank_id()
+    bank_filter = (
+        db.or_(ShLedgerEntry.bank_id == bank_id, ShLedgerEntry.bank_id.is_(None))
+        if bank_id
+        else True
+    )
 
     credits = (
         db.session.query(db.func.coalesce(db.func.sum(ShLedgerEntry.credit), 0))
         .filter(ShLedgerEntry.partner_company_id == partner_id)
+        .filter(bank_filter)
         .scalar()
         or 0
     )
     debits = (
         db.session.query(db.func.coalesce(db.func.sum(ShLedgerEntry.debit), 0))
         .filter(ShLedgerEntry.partner_company_id == partner_id)
+        .filter(bank_filter)
         .scalar()
         or 0
     )

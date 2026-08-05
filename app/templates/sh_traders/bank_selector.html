@@ -1,0 +1,23 @@
+{% macro sh_bank_selector(banks, current_bank) %}
+{% if banks %}
+<div class="sh-bank-bar card compact-card">
+    <form method="POST" action="{{ url_for('sh_main.select_bank') }}" class="inline-form">
+        <label for="sh_bank_select"><strong>Bank:</strong></label>
+        <select id="sh_bank_select" name="bank_id" onchange="this.form.submit()">
+            {% for bank in banks %}
+            <option value="{{ bank.id }}" {% if current_bank and bank.id == current_bank.id %}selected{% endif %}>
+                {{ bank.name }}{% if bank.is_default %} (default){% endif %}
+            </option>
+            {% endfor %}
+        </select>
+        <noscript><button type="submit" class="btn btn-sm btn-secondary">Switch</button></noscript>
+    </form>
+    {% if current_bank and current_user.can_view_sensitive() %}
+    <span class="field-note">Opening balance: ₨ {{ "{:,.2f}".format(current_bank.opening_balance) }}</span>
+    {% endif %}
+    {% if current_user.can_edit() %}
+    <a href="{{ url_for('sh_main.banks') }}" class="btn btn-sm btn-secondary">Manage Banks</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endmacro %}

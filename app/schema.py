@@ -56,17 +56,32 @@ COLUMN_MIGRATIONS = {
         "gross_weight_per_roll": "FLOAT",
         "net_weight_per_roll": "FLOAT",
         "cone_weight_per_roll": "FLOAT",
+        "bank_id": "INTEGER",
     },
     "sh_purchases": {
         "client_rate_per_kg": "FLOAT",
         "client_total_amount": "FLOAT",
         "has_partnership": "BOOLEAN DEFAULT FALSE",
+        "bank_id": "INTEGER",
+    },
+    "sh_opening_balance": {
+        "bank_id": "INTEGER",
     },
     "sh_ledger_entries": {
         "supplier_company_id": "INTEGER",
         "client_company_id": "INTEGER",
         "partner_company_id": "INTEGER",
         "purchase_id": "INTEGER",
+        "bank_id": "INTEGER",
+    },
+    "sh_payment_screenshots": {
+        "bank_id": "INTEGER",
+    },
+    "sh_gate_pass_screenshots": {
+        "bank_id": "INTEGER",
+    },
+    "sh_sale_invoices": {
+        "bank_id": "INTEGER",
     },
     "bank_ledger_entries": {
         "entry_type": "VARCHAR(20) DEFAULT 'standard'",
@@ -641,6 +656,62 @@ def _seed_used_ink_catalog_from_inks():
         db.session.commit()
 
 
+def _seed_sh_banks_and_backfill():
+    """Seed default Askari Bank and assign existing SH records to it."""
+    from app.models import AppSetting, ShBank, ShOpeningBalance
+
+    flag_key = "sh_banks_v1"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+
+    if not inspect(db.engine).has_table("sh_banks"):
+        db.session.add(AppSetting(key=flag_key, value="no_table"))
+        db.session.commit()
+        return
+
+    askari = ShBank.query.filter(
+        db.func.lower(ShBank.name) == "askari bank"
+    ).first()
+    if not askari:
+        opening_amount = 0.0
+        legacy_opening = ShOpeningBalance.query.order_by(ShOpeningBalance.id.asc()).first()
+        if legacy_opening:
+            opening_amount = float(legacy_opening.amount or 0)
+
+        askari = ShBank(
+            name="Askari Bank",
+            opening_balance=opening_amount,
+            is_default=True,
+        )
+        db.session.add(askari)
+        db.session.flush()
+    elif askari.is_default is False and ShBank.query.filter_by(is_default=True).count() == 0:
+        askari.is_default = True
+
+    bank_id = askari.id
+    inspector = inspect(db.engine)
+    tables_with_bank = [
+        "sh_purchases",
+        "sh_opening_balance",
+        "sh_ledger_entries",
+        "sh_payment_screenshots",
+        "sh_gate_pass_screenshots",
+        "sh_gate_passes",
+        "sh_sale_invoices",
+    ]
+    for table in tables_with_bank:
+        if inspector.has_table(table):
+            columns = {col["name"] for col in inspector.get_columns(table)}
+            if "bank_id" in columns:
+                db.session.execute(
+                    text(f"UPDATE {table} SET bank_id = :bank_id WHERE bank_id IS NULL"),
+                    {"bank_id": bank_id},
+                )
+
+    db.session.add(AppSetting(key=flag_key, value=f"seeded_{bank_id}"))
+    db.session.commit()
+
+
 def ensure_schema():
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
@@ -656,6 +727,7 @@ def ensure_schema():
     _seed_production_jobs_from_transactions()
     _migrate_cans_left_to_cans_out()
     _seed_used_ink_catalog_from_inks()
+    _seed_sh_banks_and_backfill()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)
