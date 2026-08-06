@@ -661,12 +661,11 @@ def _seed_sh_banks_and_backfill():
     from app.models import AppSetting, ShBank, ShOpeningBalance
 
     flag_key = "sh_banks_v1"
-    if AppSetting.query.filter_by(key=flag_key).first():
+    if not inspect(db.engine).has_table("sh_banks"):
         return
 
-    if not inspect(db.engine).has_table("sh_banks"):
-        db.session.add(AppSetting(key=flag_key, value="no_table"))
-        db.session.commit()
+    existing_flag = AppSetting.query.filter_by(key=flag_key).first()
+    if existing_flag and str(existing_flag.value).startswith("seeded_"):
         return
 
     askari = ShBank.query.filter(
@@ -698,6 +697,9 @@ def _seed_sh_banks_and_backfill():
         "sh_gate_pass_screenshots",
         "sh_gate_passes",
         "sh_sale_invoices",
+        "sh_client_ledger_entries",
+        "sh_supplier_ledger_entries",
+        "sh_order_confirmations",
     ]
     for table in tables_with_bank:
         if inspector.has_table(table):
@@ -708,11 +710,19 @@ def _seed_sh_banks_and_backfill():
                     {"bank_id": bank_id},
                 )
 
-    db.session.add(AppSetting(key=flag_key, value=f"seeded_{bank_id}"))
+    flag_value = f"seeded_{bank_id}"
+    if existing_flag:
+        existing_flag.value = flag_value
+    else:
+        db.session.add(AppSetting(key=flag_key, value=flag_value))
     db.session.commit()
 
 
 def ensure_schema():
+    import app.models  # noqa: F401 — register all models before create_all
+
+    db.create_all()
+
     for table, columns in COLUMN_MIGRATIONS.items():
         for column, col_type in columns.items():
             _add_column_if_missing(table, column, col_type)

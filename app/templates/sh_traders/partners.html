@@ -97,6 +97,7 @@
 
 {% block scripts %}
 <script>
-document.getElementById('entry_date').valueAsDate = new Date();
+var entryDate = document.getElementById('entry_date');
+if (entryDate) entryDate.valueAsDate = new Date();
 </script>
 {% endblock %}

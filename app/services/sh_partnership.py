@@ -138,26 +138,23 @@ def get_partner_ledger_balance(partner_id: int) -> float:
     from app.services.sh_bank import get_current_sh_bank_id
 
     bank_id = get_current_sh_bank_id()
-    bank_filter = (
-        db.or_(ShLedgerEntry.bank_id == bank_id, ShLedgerEntry.bank_id.is_(None))
-        if bank_id
-        else True
-    )
 
-    credits = (
-        db.session.query(db.func.coalesce(db.func.sum(ShLedgerEntry.credit), 0))
-        .filter(ShLedgerEntry.partner_company_id == partner_id)
-        .filter(bank_filter)
-        .scalar()
-        or 0
-    )
-    debits = (
-        db.session.query(db.func.coalesce(db.func.sum(ShLedgerEntry.debit), 0))
-        .filter(ShLedgerEntry.partner_company_id == partner_id)
-        .filter(bank_filter)
-        .scalar()
-        or 0
-    )
+    credit_query = db.session.query(
+        db.func.coalesce(db.func.sum(ShLedgerEntry.credit), 0)
+    ).filter(ShLedgerEntry.partner_company_id == partner_id)
+    debit_query = db.session.query(
+        db.func.coalesce(db.func.sum(ShLedgerEntry.debit), 0)
+    ).filter(ShLedgerEntry.partner_company_id == partner_id)
+    if bank_id:
+        bank_filter = db.or_(
+            ShLedgerEntry.bank_id == bank_id,
+            ShLedgerEntry.bank_id.is_(None),
+        )
+        credit_query = credit_query.filter(bank_filter)
+        debit_query = debit_query.filter(bank_filter)
+
+    credits = credit_query.scalar() or 0
+    debits = debit_query.scalar() or 0
     return float(credits) - float(debits)
 
 
