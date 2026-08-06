@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
 {% from "sh_traders/macros.html" import sh_page_header %}
-{% from "sh_traders/bank_selector.html" import sh_bank_selector %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
 {% block title %}Partners - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Partners', 'Co-investors on stock purchases — each partner has their own ledger') }}

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "sh_traders/macros.html" import sh_page_header %}
-{% from "sh_traders/bank_selector.html" import sh_bank_selector %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
 {% block title %}Order Confirmation - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Order Confirmation Slip', 'Confirm material orders for clients') }}
