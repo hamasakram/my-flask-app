@@ -120,6 +120,37 @@ def _build_ledger_pdf(
         return buffer
 
     for entry in entries:
+        if getattr(entry, "entry_type", "sale") == "payment":
+            header_data = [
+                [
+                    Paragraph(f"<b>Date:</b> {entry.entry_date.strftime('%d-%m-%Y')}", meta_style),
+                    Paragraph(f"<b>Ref #:</b> {entry.reference_number}", meta_style),
+                    Paragraph(f"<b>{party_label}:</b> {party_name_fn(entry)}", meta_style),
+                ],
+                [
+                    Paragraph("<b>Type:</b> Payment", meta_style),
+                    Paragraph(f"<b>Amount:</b> Rs {_format_money(entry.total_amount)}", meta_style),
+                    Paragraph(
+                        f"<b>Balance:</b> Rs {_format_money(entry.current_balance)} {entry.current_balance_type}",
+                        meta_style,
+                    ),
+                ],
+            ]
+            header_table = Table(header_data, colWidths=[3.2 * inch, 3.2 * inch, 3.2 * inch])
+            header_table.setStyle(
+                TableStyle(
+                    [
+                        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                    ]
+                )
+            )
+            elements.append(header_table)
+            if entry.notes:
+                elements.append(Paragraph(f"<b>Notes:</b> {entry.notes}", meta_style))
+            elements.append(Spacer(1, 16))
+            continue
+
         header_data = [
             [
                 Paragraph(f"<b>Date:</b> {entry.entry_date.strftime('%d-%m-%Y')}", meta_style),

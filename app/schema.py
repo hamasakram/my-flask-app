@@ -83,6 +83,14 @@ COLUMN_MIGRATIONS = {
     "sh_sale_invoices": {
         "bank_id": "INTEGER",
     },
+    "sh_client_ledger_entries": {
+        "entry_type": "VARCHAR(20) DEFAULT 'sale'",
+        "source_bank_ledger_id": "INTEGER",
+    },
+    "sh_supplier_ledger_entries": {
+        "entry_type": "VARCHAR(20) DEFAULT 'sale'",
+        "source_bank_ledger_id": "INTEGER",
+    },
     "bank_ledger_entries": {
         "entry_type": "VARCHAR(20) DEFAULT 'standard'",
         "transfer_id": "INTEGER",

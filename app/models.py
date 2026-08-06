@@ -832,6 +832,10 @@ class ShClientLedgerEntry(db.Model):
     current_balance = db.Column(db.Float, nullable=False, default=0)
     current_balance_type = db.Column(db.String(2), nullable=False, default="DR")
     total_amount = db.Column(db.Float, nullable=False, default=0)
+    entry_type = db.Column(db.String(20), nullable=False, default="sale")
+    source_bank_ledger_id = db.Column(
+        db.Integer, db.ForeignKey("sh_ledger_entries.id"), nullable=True
+    )
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
@@ -893,6 +897,10 @@ class ShSupplierLedgerEntry(db.Model):
     current_balance = db.Column(db.Float, nullable=False, default=0)
     current_balance_type = db.Column(db.String(2), nullable=False, default="DR")
     total_amount = db.Column(db.Float, nullable=False, default=0)
+    entry_type = db.Column(db.String(20), nullable=False, default="sale")
+    source_bank_ledger_id = db.Column(
+        db.Integer, db.ForeignKey("sh_ledger_entries.id"), nullable=True
+    )
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)

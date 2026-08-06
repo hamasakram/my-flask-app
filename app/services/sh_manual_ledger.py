@@ -3,10 +3,12 @@ from datetime import datetime
 from app import db
 from app.models import ShClientLedgerEntry, ShClientLedgerLine, ShSupplierLedgerEntry, ShSupplierLedgerLine
 from app.services.sh_bank import filter_by_bank, get_current_sh_bank_id
-from app.services.sh_sale_invoice import (
-    compute_current_balance,
-    parse_invoice_lines,
+from app.services.sh_ledger_sync import (
+    balance_after_sale,
+    get_last_client_ledger_balance,
+    get_last_supplier_ledger_balance,
 )
+from app.services.sh_sale_invoice import parse_invoice_lines
 
 
 def next_client_ledger_ref() -> str:
@@ -104,8 +106,6 @@ def build_client_ledger_from_form(form, user_id: int) -> ShClientLedgerEntry:
     factory_challan_no = form.get("factory_challan_no", "").strip()
     sold_to_id = form.get("sold_to_client_id", type=int)
     location = form.get("location", "MULTAN").strip() or "MULTAN"
-    previous_balance = form.get("previous_balance", type=float) or 0.0
-    previous_balance_type = form.get("previous_balance_type", "DR").strip() or "DR"
     current_balance_override = form.get("current_balance", type=float)
     current_balance_type = form.get("current_balance_type", "DR").strip() or "DR"
     notes = form.get("notes", "").strip()
@@ -115,6 +115,10 @@ def build_client_ledger_from_form(form, user_id: int) -> ShClientLedgerEntry:
 
     lines = parse_invoice_lines(form)
     parsed_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
+
+    last_balance, last_type = get_last_client_ledger_balance(sold_to_id)
+    previous_balance = last_balance
+    previous_balance_type = last_type
 
     entry = ShClientLedgerEntry(
         entry_date=parsed_date,
@@ -127,6 +131,7 @@ def build_client_ledger_from_form(form, user_id: int) -> ShClientLedgerEntry:
         current_balance_type=current_balance_type,
         notes=notes or None,
         created_by_id=user_id,
+        entry_type="sale",
     )
     ensure_bank_on_create(entry)
     db.session.add(entry)
@@ -137,8 +142,8 @@ def build_client_ledger_from_form(form, user_id: int) -> ShClientLedgerEntry:
     if current_balance_override is not None:
         entry.current_balance = current_balance_override
     else:
-        current, balance_type = compute_current_balance(
-            previous_balance, total_amount, previous_balance_type
+        current, balance_type = balance_after_sale(
+            previous_balance, previous_balance_type, total_amount
         )
         entry.current_balance = current
         entry.current_balance_type = balance_type
@@ -153,8 +158,6 @@ def build_supplier_ledger_from_form(form, user_id: int) -> ShSupplierLedgerEntry
     factory_challan_no = form.get("factory_challan_no", "").strip()
     supplier_id = form.get("supplier_company_id", type=int)
     location = form.get("location", "MULTAN").strip() or "MULTAN"
-    previous_balance = form.get("previous_balance", type=float) or 0.0
-    previous_balance_type = form.get("previous_balance_type", "DR").strip() or "DR"
     current_balance_override = form.get("current_balance", type=float)
     current_balance_type = form.get("current_balance_type", "DR").strip() or "DR"
     notes = form.get("notes", "").strip()
@@ -164,6 +167,10 @@ def build_supplier_ledger_from_form(form, user_id: int) -> ShSupplierLedgerEntry
 
     lines = parse_invoice_lines(form)
     parsed_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
+
+    last_balance, last_type = get_last_supplier_ledger_balance(supplier_id)
+    previous_balance = last_balance
+    previous_balance_type = last_type
 
     entry = ShSupplierLedgerEntry(
         entry_date=parsed_date,
@@ -176,6 +183,7 @@ def build_supplier_ledger_from_form(form, user_id: int) -> ShSupplierLedgerEntry
         current_balance_type=current_balance_type,
         notes=notes or None,
         created_by_id=user_id,
+        entry_type="sale",
     )
     ensure_bank_on_create(entry)
     db.session.add(entry)
@@ -186,8 +194,8 @@ def build_supplier_ledger_from_form(form, user_id: int) -> ShSupplierLedgerEntry
     if current_balance_override is not None:
         entry.current_balance = current_balance_override
     else:
-        current, balance_type = compute_current_balance(
-            previous_balance, total_amount, previous_balance_type
+        current, balance_type = balance_after_sale(
+            previous_balance, previous_balance_type, total_amount
         )
         entry.current_balance = current
         entry.current_balance_type = balance_type

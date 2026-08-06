@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy import func
 
 from app import db
-from app.models import ShPaymentScreenshot, ShPurchase
+from app.models import ShPaymentScreenshot, ShPurchase, ShLedgerEntry
 from app.services.sh_bank import filter_by_bank, get_current_sh_bank
 
 
@@ -182,6 +182,34 @@ def _scoped_purchase_query():
     return filter_by_bank(ShPurchase.query, ShPurchase)
 
 
+def _scoped_ledger_query():
+    from app.models import ShLedgerEntry
+
+    return filter_by_bank(ShLedgerEntry.query, ShLedgerEntry)
+
+
+def get_ledger_rows() -> list[dict]:
+    """Running balance ledger for the current SH bank."""
+    bank = get_current_sh_bank()
+    balance = float(bank.opening_balance) if bank else 0.0
+    entries = _scoped_ledger_query().order_by(
+        ShLedgerEntry.entry_date.asc(), ShLedgerEntry.id.asc()
+    ).all()
+    rows = []
+    for entry in entries:
+        balance += float(entry.credit or 0) - float(entry.debit or 0)
+        rows.append({"entry": entry, "balance": balance})
+    return rows
+
+
+def get_current_ledger_balance() -> float:
+    rows = get_ledger_rows()
+    if rows:
+        return rows[-1]["balance"]
+    bank = get_current_sh_bank()
+    return float(bank.opening_balance) if bank else 0.0
+
+
 def get_dashboard_stats(today: date) -> dict:
     month_start = today.replace(day=1)
     if month_start.month == 1:
@@ -242,32 +270,37 @@ def get_purchase_pdf_rows(supplier_id: Optional[int] = None) -> list[dict]:
 
 
 def get_ledger_pdf_rows() -> list[dict]:
-    """Legacy helper for custom PDF builder — uses client ledger entries."""
-    from app.models import ShClientLedgerEntry
-    from app.services.sh_manual_ledger import get_client_ledger_entries
-
-    rows = []
+    """Payment ledger rows for custom PDF builder — current SH bank."""
     bank = get_current_sh_bank()
-    if bank and bank.opening_balance:
+    balance = float(bank.opening_balance) if bank else 0.0
+    rows = []
+    if bank:
         rows.append(
             {
                 "date": bank.created_at.strftime("%d-%m-%Y") if bank.created_at else "—",
                 "debit": "—",
                 "credit": f"{bank.opening_balance:,.2f}",
                 "notes": f"Opening balance ({bank.name})",
-                "balance": f"{bank.opening_balance:,.2f}",
+                "balance": f"{balance:,.2f}",
             }
         )
-
-    balance = float(bank.opening_balance) if bank else 0.0
-    for entry in reversed(get_client_ledger_entries()):
-        balance += float(entry.total_amount or 0)
+    for item in get_ledger_rows():
+        entry = item["entry"]
+        balance = item["balance"]
+        party = "—"
+        if entry.supplier:
+            party = f"Supplier: {entry.supplier.name}"
+        elif entry.client:
+            party = f"Client: {entry.client.name}"
+        elif entry.partner:
+            party = f"Partner: {entry.partner.name}"
         rows.append(
             {
                 "date": entry.entry_date.strftime("%d-%m-%Y"),
-                "debit": "—",
-                "credit": f"{entry.total_amount:,.2f}" if entry.total_amount else "—",
-                "notes": entry.reference_number + (f" — {entry.notes}" if entry.notes else ""),
+                "debit": f"{entry.debit:,.2f}" if entry.debit else "—",
+                "credit": f"{entry.credit:,.2f}" if entry.credit else "—",
+                "party": party,
+                "notes": entry.notes or "—",
                 "balance": f"{balance:,.2f}",
             }
         )

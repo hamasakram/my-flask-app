@@ -2,7 +2,7 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% from "sh_traders/macros.html" import sh_page_header %}
 {% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
-{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script %}
+{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script, party_balance_script %}
 {% block title %}Client Ledger - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Client Ledger', 'Manual client ledger entries — same fields as Sale Invoice') }}
@@ -42,7 +42,8 @@
         </div>
         <div class="form-group">
             <label for="previous_balance">Previous Balance</label>
-            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="0">
+            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="0" readonly>
+            <small class="field-note">Auto-loaded from last entry for selected client</small>
         </div>
         <div class="form-group">
             <label for="previous_balance_type">Previous Balance Type</label>
@@ -107,6 +108,7 @@
                 <th>Client</th>
                 <th>Lines</th>
                 <th>Total</th>
+                <th>Current Balance</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
@@ -116,17 +118,20 @@
                 <td><strong>{{ entry.reference_number }}</strong></td>
                 <td>{{ entry.entry_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ entry.sold_to.name }}</td>
-                <td>{{ entry.lines|length }}</td>
-                <td>₨ {{ "{:,.0f}".format(entry.total_amount) }}</td>
-                {% if current_user.can_edit() %}
+                <td>{{ entry.lines|length if entry.entry_type == 'sale' else '—' }}</td>
+                <td>{% if entry.entry_type == 'payment' %}<span class="badge badge-green">Payment</span> {% endif %}₨ {{ "{:,.0f}".format(entry.total_amount) }}</td>
+                <td><strong>₨ {{ "{:,.0f}".format(entry.current_balance) }} {{ entry.current_balance_type }}</strong></td>
+                {% if current_user.can_edit() and not entry.source_bank_ledger_id %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_client_ledger', entry_id=entry.id),
                     url_for('stock_deletes.delete_sh_client_ledger', entry_id=entry.id)
                 ) }}
+                {% elif current_user.can_edit() %}
+                <td><small class="field-note">Via Bank Ledger</small></td>
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No client ledger entries yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No client ledger entries yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -138,4 +143,5 @@
 document.getElementById('entry_date').valueAsDate = new Date();
 </script>
 {{ invoice_line_script() }}
+{{ party_balance_script('sold_to_client_id', 'previous_balance', 'previous_balance_type', 'client') }}
 {% endblock %}

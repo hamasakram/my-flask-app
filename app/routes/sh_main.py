@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app import db
@@ -28,6 +28,11 @@ from app.services.sh_bank import (
     set_current_sh_bank,
 )
 from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supplier_ledger_pdf
+from app.services.sh_ledger_sync import (
+    get_last_client_ledger_balance,
+    get_last_supplier_ledger_balance,
+    sync_bank_entry_to_party_ledgers,
+)
 from app.services.sh_manual_ledger import (
     build_client_ledger_from_form,
     build_supplier_ledger_from_form,
@@ -51,7 +56,13 @@ from app.services.sh_sale_invoice import (
     save_invoice_lines,
 )
 from app.services.sh_sale_invoice_pdf import generate_sale_invoice_pdf
-from app.services.sh_traders import calculate_total_amount, get_dashboard_stats, parse_multi_item_purchase_lines
+from app.services.sh_traders import (
+    calculate_total_amount,
+    get_current_ledger_balance,
+    get_dashboard_stats,
+    get_ledger_rows,
+    parse_multi_item_purchase_lines,
+)
 from app.services.sh_uploads import (
     apply_gate_pass_screenshot,
     apply_payment_screenshot,
@@ -488,10 +499,90 @@ def purchases():
     )
 
 
-@sh_main_bp.route("/payments")
+@sh_main_bp.route("/payments", methods=["GET", "POST"])
 @login_required
-def payments_redirect():
-    return redirect(url_for("sh_main.client_ledger"))
+def payments():
+    if not get_current_sh_bank():
+        flash("Add a bank first (e.g. Askari Bank).", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    bank = get_current_sh_bank()
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        entry_date = request.form.get("entry_date")
+        debit = request.form.get("debit", type=float) or 0
+        credit = request.form.get("credit", type=float) or 0
+        supplier_id = request.form.get("supplier_company_id", type=int) or None
+        client_id = request.form.get("client_company_id", type=int) or None
+        partner_id = request.form.get("partner_company_id", type=int) or None
+        notes = request.form.get("notes", "").strip()
+
+        if not entry_date:
+            flash("Entry date is required.", "danger")
+            return redirect(url_for("sh_main.payments"))
+        if debit <= 0 and credit <= 0:
+            flash("Enter a debit or credit amount.", "danger")
+            return redirect(url_for("sh_main.payments"))
+        if debit > 0 and credit > 0:
+            flash("Enter either debit or credit, not both.", "danger")
+            return redirect(url_for("sh_main.payments"))
+
+        entry = ShLedgerEntry(
+            entry_date=_parse_date(entry_date),
+            debit=debit,
+            credit=credit,
+            supplier_company_id=supplier_id,
+            client_company_id=client_id,
+            partner_company_id=partner_id,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        ensure_bank_on_create(entry)
+        db.session.add(entry)
+        db.session.flush()
+        sync_messages = sync_bank_entry_to_party_ledgers(entry, current_user.id)
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShLedgerEntry",
+            entry.id,
+            f"Bank ledger entry on {entry_date}",
+        )
+        db.session.commit()
+        flash("Ledger entry added.", "success")
+        for msg in sync_messages:
+            flash(msg, "info")
+        return redirect(url_for("sh_main.payments"))
+
+    return render_template(
+        "sh_traders/payments.html",
+        bank=bank,
+        ledger_rows=get_ledger_rows(),
+        current_balance=get_current_ledger_balance(),
+        suppliers=suppliers,
+        clients=clients,
+        partners=partners,
+        banks=get_all_banks(),
+        current_bank=bank,
+    )
+
+
+@sh_main_bp.route("/api/party-balance")
+@login_required
+def party_balance_api():
+    party_type = request.args.get("type", "")
+    party_id = request.args.get("id", type=int)
+    if party_type == "client" and party_id:
+        balance, balance_type = get_last_client_ledger_balance(party_id)
+    elif party_type == "supplier" and party_id:
+        balance, balance_type = get_last_supplier_ledger_balance(party_id)
+    else:
+        balance, balance_type = 0.0, "DR"
+    return jsonify({"balance": balance, "balance_type": balance_type})
 
 
 @sh_main_bp.route("/party-balances")

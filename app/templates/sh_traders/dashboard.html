@@ -118,6 +118,7 @@
 {% if current_user.can_edit() %}
 <div class="quick-actions">
     <a href="{{ url_for('sh_main.purchases') }}" class="btn btn-primary">+ Advance Stock Purchase</a>
+    <a href="{{ url_for('sh_main.payments') }}" class="btn btn-secondary">Bank Payments Ledger</a>
     <a href="{{ url_for('sh_main.client_ledger') }}" class="btn btn-secondary">Client Ledger</a>
     <a href="{{ url_for('sh_main.supplier_ledger') }}" class="btn btn-secondary">Supplier Ledger</a>
     <a href="{{ url_for('sh_main.order_confirmation') }}" class="btn btn-secondary">Order Confirmation</a>

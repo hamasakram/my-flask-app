@@ -521,11 +521,14 @@ def delete_sh_purchase(purchase_id):
 @login_required
 def delete_sh_ledger(entry_id):
     entry = ShLedgerEntry.query.get_or_404(entry_id)
+    from app.services.sh_ledger_sync import remove_linked_party_entries
+
+    remove_linked_party_entries(entry.id)
     return _delete_entity(
         entry,
         "ShLedgerEntry",
         f"Deleted SH ledger entry #{entry_id}",
-        url_for("sh_main.partners"),
+        url_for("sh_main.payments"),
     )
 
 

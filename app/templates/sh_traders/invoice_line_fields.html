@@ -35,6 +35,38 @@
 </div>
 {% endmacro %}
 
+{% macro party_balance_script(party_select_id, balance_input_id, balance_type_id, party_type) %}
+<script>
+(function () {
+    var partySelect = document.getElementById('{{ party_select_id }}');
+    var balanceInput = document.getElementById('{{ balance_input_id }}');
+    var balanceTypeSelect = document.getElementById('{{ balance_type_id }}');
+    if (!partySelect || !balanceInput) return;
+
+    function loadPartyBalance() {
+        var partyId = partySelect.value;
+        if (!partyId) {
+            balanceInput.value = 0;
+            if (balanceTypeSelect) balanceTypeSelect.value = 'DR';
+            balanceInput.dispatchEvent(new Event('input'));
+            return;
+        }
+        fetch('{{ url_for("sh_main.party_balance_api") }}?type={{ party_type }}&id=' + partyId)
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                balanceInput.value = Math.round(data.balance || 0);
+                if (balanceTypeSelect && data.balance_type) {
+                    balanceTypeSelect.value = data.balance_type;
+                }
+                balanceInput.dispatchEvent(new Event('input'));
+            });
+    }
+
+    partySelect.addEventListener('change', loadPartyBalance);
+})();
+</script>
+{% endmacro %}
+
 {% macro invoice_line_script() %}
 <script>
 (function () {

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Bank Payments Ledger - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Bank Payments Ledger', 'All incoming and outgoing payments for ' ~ (bank.name if bank else 'selected bank')) }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Current Ledger Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
+        {% if bank %}
+        <small class="field-note">{{ bank.name }}</small>
+        {% endif %}
+    </div>
+    {% if bank and current_user.can_view_sensitive() %}
+    <div class="stat-card">
+        <span class="stat-label">Opening Balance</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(bank.opening_balance) }}</span>
+        {% if current_user.can_edit() %}
+        <small class="field-note"><a href="{{ url_for('sh_main.banks') }}">Edit on Banks page</a></small>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Ledger Entry</h2>
+    <p class="field-note">Record money in (credit) or money out (debit). When payment is <strong>received from a client</strong>, select the client and enter credit — it updates the Client Ledger automatically. When payment is <strong>sent to a supplier</strong>, select the supplier and enter debit — it updates the Supplier Ledger automatically.</p>
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="entry_date">Date</label>
+            <input type="date" id="entry_date" name="entry_date" required>
+        </div>
+        <div class="form-group">
+            <label for="supplier_company_id">Supplier (payment out)</label>
+            <select id="supplier_company_id" name="supplier_company_id">
+                <option value="">None</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Client (payment in)</label>
+            <select id="client_company_id" name="client_company_id">
+                <option value="">None</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="partner_company_id">Partner</label>
+            <select id="partner_company_id" name="partner_company_id">
+                <option value="">None</option>
+                {% for p in partners %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="debit">Debit (out)</label>
+            <input type="number" id="debit" name="debit" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="credit">Credit (in)</label>
+            <input type="number" id="credit" name="credit" step="0.01" min="0" value="0">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes / Statement</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Where payment was used, reference, etc."></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Entry</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Payment Ledger</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Debit</th>
+                <th>Credit</th>
+                <th>Party</th>
+                <th>Balance</th>
+                <th>Notes</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% if bank %}
+            <tr class="row-opening">
+                <td>{{ bank.created_at.strftime('%d-%m-%Y') if bank.created_at else '—' }}</td>
+                <td>—</td>
+                <td>₨ {{ "{:,.2f}".format(bank.opening_balance) }}</td>
+                <td>Opening balance</td>
+                <td>₨ {{ "{:,.2f}".format(bank.opening_balance) }}</td>
+                <td>{{ bank.name }} starting balance</td>
+                {% if current_user.can_edit() %}<td>—</td>{% endif %}
+            </tr>
+            {% endif %}
+            {% for row in ledger_rows %}
+            <tr>
+                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>{% if row.entry.debit %}₨ {{ "{:,.2f}".format(row.entry.debit) }}{% else %}—{% endif %}</td>
+                <td>{% if row.entry.credit %}₨ {{ "{:,.2f}".format(row.entry.credit) }}{% else %}—{% endif %}</td>
+                <td>
+                    {% if row.entry.supplier %}Supplier: {{ row.entry.supplier.name }}
+                    {% elif row.entry.client %}Client: {{ row.entry.client.name }}
+                    {% elif row.entry.partner %}Partner: {{ row.entry.partner.name }}
+                    {% else %}—{% endif %}
+                </td>
+                <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
+                <td>{{ row.entry.notes or '—' }}</td>
+                {% if current_user.can_edit() %}
+                {{ row_actions(
+                    url_for('stock_edits.edit_sh_ledger', entry_id=row.entry.id),
+                    url_for('stock_deletes.delete_sh_ledger', entry_id=row.entry.id)
+                ) }}
+                {% endif %}
+            </tr>
+            {% else %}
+            {% if not bank %}
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">Select a bank to view the ledger</td></tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var entryDate = document.getElementById('entry_date');
+if (entryDate) entryDate.valueAsDate = new Date();
+</script>
+{% endblock %}

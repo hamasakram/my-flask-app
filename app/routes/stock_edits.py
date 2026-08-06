@@ -1476,9 +1476,12 @@ def edit_sh_ledger(entry_id):
             entry.id,
             f"Updated ledger entry #{entry_id}",
         )
+        from app.services.sh_ledger_sync import resync_bank_entry_party_ledgers
+
+        resync_bank_entry_party_ledgers(entry, current_user.id)
         db.session.commit()
         flash("Ledger entry updated.", "success")
-        return redirect(url_for("sh_main.partners"))
+        return redirect(url_for("sh_main.payments"))
 
     return render_template(
         "sh_traders/edit_ledger.html",
@@ -1486,7 +1489,7 @@ def edit_sh_ledger(entry_id):
         suppliers=ShSupplierCompany.query.order_by(ShSupplierCompany.name).all(),
         clients=ShClientCompany.query.order_by(ShClientCompany.name).all(),
         partners=ShPartnerCompany.query.order_by(ShPartnerCompany.name).all(),
-        cancel_url=url_for("sh_main.partners"),
+        cancel_url=url_for("sh_main.payments"),
     )
 
 
