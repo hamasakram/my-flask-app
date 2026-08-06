@@ -2,11 +2,16 @@
 
 from app import db
 from app.models import ShClientLedgerEntry, ShLedgerEntry, ShSupplierLedgerEntry
-from app.services.sh_bank import filter_by_bank, get_current_sh_bank_id, ensure_bank_on_create
+from app.services.sh_bank import filter_by_bank
 
 
 ENTRY_SALE = "sale"
 ENTRY_PAYMENT = "payment"
+
+
+def _entry_kind(entry) -> str:
+    kind = getattr(entry, "entry_type", None) or ENTRY_SALE
+    return ENTRY_PAYMENT if kind == ENTRY_PAYMENT else ENTRY_SALE
 
 
 def get_last_client_ledger_balance(client_id: int) -> tuple[float, str]:
@@ -46,71 +51,148 @@ def balance_after_payment(previous: float, prev_type: str, amount: float) -> tup
     return new_balance, balance_type
 
 
+def recalculate_client_ledger_chain(client_id: int, bank_id: int) -> None:
+    entries = (
+        ShClientLedgerEntry.query.filter_by(
+            sold_to_client_id=client_id,
+            bank_id=bank_id,
+        )
+        .order_by(ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc())
+        .all()
+    )
+    running = 0.0
+    running_type = "DR"
+    for entry in entries:
+        entry.previous_balance = running
+        entry.previous_balance_type = running_type
+        amount = float(entry.total_amount or 0)
+        if _entry_kind(entry) == ENTRY_PAYMENT:
+            running, running_type = balance_after_payment(running, running_type, amount)
+        else:
+            running, running_type = balance_after_sale(running, running_type, amount)
+        entry.current_balance = running
+        entry.current_balance_type = running_type
+
+
+def recalculate_supplier_ledger_chain(supplier_id: int, bank_id: int) -> None:
+    entries = (
+        ShSupplierLedgerEntry.query.filter_by(
+            supplier_company_id=supplier_id,
+            bank_id=bank_id,
+        )
+        .order_by(ShSupplierLedgerEntry.entry_date.asc(), ShSupplierLedgerEntry.id.asc())
+        .all()
+    )
+    running = 0.0
+    running_type = "DR"
+    for entry in entries:
+        entry.previous_balance = running
+        entry.previous_balance_type = running_type
+        amount = float(entry.total_amount or 0)
+        if _entry_kind(entry) == ENTRY_PAYMENT:
+            running, running_type = balance_after_payment(running, running_type, amount)
+        else:
+            running, running_type = balance_after_sale(running, running_type, amount)
+        entry.current_balance = running
+        entry.current_balance_type = running_type
+
+
+def _linked_client_bank_ids() -> set[int]:
+    rows = (
+        db.session.query(ShClientLedgerEntry.source_bank_ledger_id)
+        .filter(ShClientLedgerEntry.source_bank_ledger_id.isnot(None))
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
+def _linked_supplier_bank_ids() -> set[int]:
+    rows = (
+        db.session.query(ShSupplierLedgerEntry.source_bank_ledger_id)
+        .filter(ShSupplierLedgerEntry.source_bank_ledger_id.isnot(None))
+        .all()
+    )
+    return {row[0] for row in rows}
+
+
 def sync_bank_entry_to_party_ledgers(bank_entry: ShLedgerEntry, user_id: int) -> list[str]:
     """Create client/supplier ledger payment rows from a bank ledger entry."""
     messages = []
+    client_pairs: set[tuple[int, int]] = set()
+    supplier_pairs: set[tuple[int, int]] = set()
 
     if bank_entry.client_company_id and float(bank_entry.credit or 0) > 0:
         existing = ShClientLedgerEntry.query.filter_by(
             source_bank_ledger_id=bank_entry.id
         ).first()
-        if not existing:
-            prev, prev_type = get_last_client_ledger_balance(bank_entry.client_company_id)
+        if not existing and bank_entry.bank_id:
             amount = float(bank_entry.credit)
-            current, current_type = balance_after_payment(prev, prev_type, amount)
             entry = ShClientLedgerEntry(
+                bank_id=bank_entry.bank_id,
                 entry_date=bank_entry.entry_date,
                 reference_number=f"PAY-BL-{bank_entry.id}",
                 sold_to_client_id=bank_entry.client_company_id,
                 location="MULTAN",
-                previous_balance=prev,
-                previous_balance_type=prev_type,
-                current_balance=current,
-                current_balance_type=current_type,
+                previous_balance=0,
+                previous_balance_type="DR",
+                current_balance=0,
+                current_balance_type="DR",
                 total_amount=amount,
                 entry_type=ENTRY_PAYMENT,
                 source_bank_ledger_id=bank_entry.id,
                 notes=f"Payment received (bank ledger): {bank_entry.notes or ''}".strip(),
                 created_by_id=user_id,
             )
-            ensure_bank_on_create(entry)
             db.session.add(entry)
+            client_pairs.add((bank_entry.client_company_id, bank_entry.bank_id))
             messages.append("Client ledger updated with payment received.")
 
     if bank_entry.supplier_company_id and float(bank_entry.debit or 0) > 0:
         existing = ShSupplierLedgerEntry.query.filter_by(
             source_bank_ledger_id=bank_entry.id
         ).first()
-        if not existing:
-            prev, prev_type = get_last_supplier_ledger_balance(bank_entry.supplier_company_id)
+        if not existing and bank_entry.bank_id:
             amount = float(bank_entry.debit)
-            current, current_type = balance_after_payment(prev, prev_type, amount)
             entry = ShSupplierLedgerEntry(
+                bank_id=bank_entry.bank_id,
                 entry_date=bank_entry.entry_date,
                 reference_number=f"PAY-BL-{bank_entry.id}",
                 supplier_company_id=bank_entry.supplier_company_id,
                 location="MULTAN",
-                previous_balance=prev,
-                previous_balance_type=prev_type,
-                current_balance=current,
-                current_balance_type=current_type,
+                previous_balance=0,
+                previous_balance_type="DR",
+                current_balance=0,
+                current_balance_type="DR",
                 total_amount=amount,
                 entry_type=ENTRY_PAYMENT,
                 source_bank_ledger_id=bank_entry.id,
                 notes=f"Payment sent (bank ledger): {bank_entry.notes or ''}".strip(),
                 created_by_id=user_id,
             )
-            ensure_bank_on_create(entry)
             db.session.add(entry)
+            supplier_pairs.add((bank_entry.supplier_company_id, bank_entry.bank_id))
             messages.append("Supplier ledger updated with payment sent.")
+
+    db.session.flush()
+    for client_id, bank_id in client_pairs:
+        recalculate_client_ledger_chain(client_id, bank_id)
+    for supplier_id, bank_id in supplier_pairs:
+        recalculate_supplier_ledger_chain(supplier_id, bank_id)
 
     return messages
 
 
 def resync_bank_entry_party_ledgers(bank_entry: ShLedgerEntry, user_id: int) -> None:
     """Replace linked party ledger rows after a bank entry edit."""
+    client_id = bank_entry.client_company_id
+    supplier_id = bank_entry.supplier_company_id
+    bank_id = bank_entry.bank_id
     remove_linked_party_entries(bank_entry.id)
     sync_bank_entry_to_party_ledgers(bank_entry, user_id)
+    if client_id and bank_id:
+        recalculate_client_ledger_chain(client_id, bank_id)
+    if supplier_id and bank_id:
+        recalculate_supplier_ledger_chain(supplier_id, bank_id)
 
 
 def remove_linked_party_entries(bank_ledger_id: int) -> None:
@@ -120,3 +202,112 @@ def remove_linked_party_entries(bank_ledger_id: int) -> None:
     ShSupplierLedgerEntry.query.filter_by(source_bank_ledger_id=bank_ledger_id).delete(
         synchronize_session=False
     )
+
+
+def backfill_unsynced_bank_payments() -> None:
+    """Import existing bank ledger client/supplier payments into party ledgers."""
+    from sqlalchemy import inspect as sa_inspect
+
+    from app.models import AppSetting
+    from app.services.sh_bank import get_default_bank
+
+    flag_key = "sh_ledger_sync_v1"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+    if not sa_inspect(db.engine).has_table("sh_ledger_entries"):
+        return
+
+    default_bank = get_default_bank()
+    linked_clients = _linked_client_bank_ids()
+    linked_suppliers = _linked_supplier_bank_ids()
+    client_pairs: set[tuple[int, int]] = set()
+    supplier_pairs: set[tuple[int, int]] = set()
+
+    client_entries = (
+        ShLedgerEntry.query.filter(
+            ShLedgerEntry.client_company_id.isnot(None),
+            ShLedgerEntry.credit > 0,
+        )
+        .order_by(ShLedgerEntry.entry_date.asc(), ShLedgerEntry.id.asc())
+        .all()
+    )
+    for bank_entry in client_entries:
+        if bank_entry.id in linked_clients:
+            continue
+        if not bank_entry.bank_id and default_bank:
+            bank_entry.bank_id = default_bank.id
+        if not bank_entry.bank_id:
+            continue
+        amount = float(bank_entry.credit)
+        entry = ShClientLedgerEntry(
+            bank_id=bank_entry.bank_id,
+            entry_date=bank_entry.entry_date,
+            reference_number=f"PAY-BL-{bank_entry.id}",
+            sold_to_client_id=bank_entry.client_company_id,
+            location="MULTAN",
+            previous_balance=0,
+            previous_balance_type="DR",
+            current_balance=0,
+            current_balance_type="DR",
+            total_amount=amount,
+            entry_type=ENTRY_PAYMENT,
+            source_bank_ledger_id=bank_entry.id,
+            notes=f"Payment received (bank ledger): {bank_entry.notes or ''}".strip(),
+            created_by_id=bank_entry.created_by_id,
+        )
+        db.session.add(entry)
+        client_pairs.add((bank_entry.client_company_id, bank_entry.bank_id))
+
+    supplier_entries = (
+        ShLedgerEntry.query.filter(
+            ShLedgerEntry.supplier_company_id.isnot(None),
+            ShLedgerEntry.debit > 0,
+        )
+        .order_by(ShLedgerEntry.entry_date.asc(), ShLedgerEntry.id.asc())
+        .all()
+    )
+    for bank_entry in supplier_entries:
+        if bank_entry.id in linked_suppliers:
+            continue
+        if not bank_entry.bank_id and default_bank:
+            bank_entry.bank_id = default_bank.id
+        if not bank_entry.bank_id:
+            continue
+        amount = float(bank_entry.debit)
+        entry = ShSupplierLedgerEntry(
+            bank_id=bank_entry.bank_id,
+            entry_date=bank_entry.entry_date,
+            reference_number=f"PAY-BL-{bank_entry.id}",
+            supplier_company_id=bank_entry.supplier_company_id,
+            location="MULTAN",
+            previous_balance=0,
+            previous_balance_type="DR",
+            current_balance=0,
+            current_balance_type="DR",
+            total_amount=amount,
+            entry_type=ENTRY_PAYMENT,
+            source_bank_ledger_id=bank_entry.id,
+            notes=f"Payment sent (bank ledger): {bank_entry.notes or ''}".strip(),
+            created_by_id=bank_entry.created_by_id,
+        )
+        db.session.add(entry)
+        supplier_pairs.add((bank_entry.supplier_company_id, bank_entry.bank_id))
+
+    db.session.flush()
+    for client_id, bank_id in client_pairs:
+        recalculate_client_ledger_chain(client_id, bank_id)
+    for supplier_id, bank_id in supplier_pairs:
+        recalculate_supplier_ledger_chain(supplier_id, bank_id)
+
+    # Recalculate all existing client/supplier chains so sale-only rows stay correct
+    for row in db.session.query(
+        ShClientLedgerEntry.sold_to_client_id, ShClientLedgerEntry.bank_id
+    ).distinct():
+        recalculate_client_ledger_chain(row[0], row[1])
+    for row in db.session.query(
+        ShSupplierLedgerEntry.supplier_company_id, ShSupplierLedgerEntry.bank_id
+    ).distinct():
+        recalculate_supplier_ledger_chain(row[0], row[1])
+
+    db.session.add(AppSetting(key=flag_key, value="done"))
+    db.session.commit()

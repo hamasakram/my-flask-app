@@ -747,6 +747,9 @@ def ensure_schema():
     _migrate_cans_left_to_cans_out()
     _seed_used_ink_catalog_from_inks()
     _seed_sh_banks_and_backfill()
+    from app.services.sh_ledger_sync import backfill_unsynced_bank_payments
+
+    backfill_unsynced_bank_payments()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

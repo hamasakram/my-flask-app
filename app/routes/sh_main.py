@@ -31,6 +31,8 @@ from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supp
 from app.services.sh_ledger_sync import (
     get_last_client_ledger_balance,
     get_last_supplier_ledger_balance,
+    recalculate_client_ledger_chain,
+    recalculate_supplier_ledger_chain,
     sync_bank_entry_to_party_ledgers,
 )
 from app.services.sh_manual_ledger import (
@@ -618,6 +620,7 @@ def client_ledger():
             entry.id,
             f"Client ledger entry {entry.reference_number}",
         )
+        recalculate_client_ledger_chain(entry.sold_to_client_id, entry.bank_id)
         db.session.commit()
         flash(f"Client ledger entry {entry.reference_number} saved.", "success")
         return redirect(url_for("sh_main.client_ledger_pdf"))
@@ -674,6 +677,7 @@ def supplier_ledger():
             entry.id,
             f"Supplier ledger entry {entry.reference_number}",
         )
+        recalculate_supplier_ledger_chain(entry.supplier_company_id, entry.bank_id)
         db.session.commit()
         flash(f"Supplier ledger entry {entry.reference_number} saved.", "success")
         return redirect(url_for("sh_main.supplier_ledger_pdf"))
