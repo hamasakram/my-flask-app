@@ -1687,6 +1687,8 @@ def edit_sh_client_ledger(entry_id):
 
     if request.method == "POST":
         require_edit_access()
+        old_client_id = entry.sold_to_client_id
+        old_bank_id = entry.bank_id
         entry_date = request.form.get("entry_date")
         reference = request.form.get("reference_number", "").strip()
         factory_challan_no = request.form.get("factory_challan_no", "").strip()
@@ -1736,6 +1738,11 @@ def edit_sh_client_ledger(entry_id):
             entry.id,
             f"Updated client ledger {entry.reference_number}",
         )
+        from app.services.sh_ledger_sync import recalculate_client_ledger_chain
+
+        recalculate_client_ledger_chain(entry.sold_to_client_id, entry.bank_id)
+        if (old_client_id, old_bank_id) != (entry.sold_to_client_id, entry.bank_id):
+            recalculate_client_ledger_chain(old_client_id, old_bank_id)
         db.session.commit()
         flash("Client ledger entry updated.", "success")
         return redirect(url_for("sh_main.client_ledger"))
@@ -1756,6 +1763,8 @@ def edit_sh_supplier_ledger(entry_id):
 
     if request.method == "POST":
         require_edit_access()
+        old_supplier_id = entry.supplier_company_id
+        old_bank_id = entry.bank_id
         entry_date = request.form.get("entry_date")
         reference = request.form.get("reference_number", "").strip()
         factory_challan_no = request.form.get("factory_challan_no", "").strip()
@@ -1805,6 +1814,11 @@ def edit_sh_supplier_ledger(entry_id):
             entry.id,
             f"Updated supplier ledger {entry.reference_number}",
         )
+        from app.services.sh_ledger_sync import recalculate_supplier_ledger_chain
+
+        recalculate_supplier_ledger_chain(entry.supplier_company_id, entry.bank_id)
+        if (old_supplier_id, old_bank_id) != (entry.supplier_company_id, entry.bank_id):
+            recalculate_supplier_ledger_chain(old_supplier_id, old_bank_id)
         db.session.commit()
         flash("Supplier ledger entry updated.", "success")
         return redirect(url_for("sh_main.supplier_ledger"))
