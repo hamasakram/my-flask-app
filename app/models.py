@@ -958,6 +958,30 @@ class ShOrderConfirmation(db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
+class ShPaymentReceipt(db.Model):
+    """Payment received confirmation slip for clients."""
+
+    __tablename__ = "sh_payment_receipts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=False)
+    receipt_number = db.Column(db.String(30), nullable=False)
+    receipt_date = db.Column(db.Date, nullable=False)
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    amount_received = db.Column(db.Float, nullable=False)
+    total_received = db.Column(db.Float, nullable=False)
+    total_due = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    client = db.relationship("ShClientCompany")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
 class HomeParty(db.Model):
     """Party in Home Ledger — person or entity for payments to give or receive."""
 

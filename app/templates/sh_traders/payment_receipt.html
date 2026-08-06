@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Payment Receipt - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Payment Receipt Confirmation', 'Receipt when payment is received from a client') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if current_user.can_edit() %}
+{% if not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Record Payment Received</h2>
+    <p class="field-note">Create a confirmation receipt showing amount received today, total received, and total still due.</p>
+    <form method="POST" class="form-grid" id="payment-receipt-form">
+        <div class="form-group">
+            <label for="receipt_date">Date</label>
+            <input type="date" id="receipt_date" name="receipt_date" required>
+        </div>
+        <div class="form-group">
+            <label for="receipt_number">Receipt #</label>
+            <input type="text" id="receipt_number" name="receipt_number" value="{{ next_receipt_number }}" placeholder="Auto if blank">
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Client</label>
+            <select id="client_company_id" name="client_company_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="amount_received">Received On This Date</label>
+            <input type="number" id="amount_received" name="amount_received" step="0.01" min="0.01" required placeholder="Amount paid today">
+        </div>
+        <div class="form-group">
+            <label for="total_received">Total Received</label>
+            <input type="number" id="total_received" name="total_received" step="0.01" min="0" placeholder="Cumulative total after this payment">
+            <small class="field-note">Leave blank to add to previous receipts for this client</small>
+        </div>
+        <div class="form-group">
+            <label for="total_due">Total Due</label>
+            <input type="number" id="total_due" name="total_due" step="0.01" min="0" required placeholder="Balance still outstanding">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Optional payment details"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create &amp; Print Receipt</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Payment Receipt Records</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Receipt #</th>
+                <th>Date</th>
+                <th>Client</th>
+                <th>Received Today</th>
+                <th>Total Received</th>
+                <th>Total Due</th>
+                <th>PDF</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for receipt in receipts %}
+            <tr>
+                <td><strong>{{ receipt.receipt_number }}</strong></td>
+                <td>{{ receipt.receipt_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ receipt.client.name }}</td>
+                <td>₨ {{ "{:,.2f}".format(receipt.amount_received) }}</td>
+                <td>₨ {{ "{:,.2f}".format(receipt.total_received) }}</td>
+                <td>₨ {{ "{:,.2f}".format(receipt.total_due) }}</td>
+                <td>
+                    <a href="{{ url_for('sh_main.payment_receipt_pdf', receipt_id=receipt.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty">No payment receipts yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var receiptDate = document.getElementById('receipt_date');
+if (receiptDate) receiptDate.valueAsDate = new Date();
+</script>
+{% endblock %}

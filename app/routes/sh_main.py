@@ -12,6 +12,7 @@ from app.models import (
     ShLedgerEntry,
     ShOrderConfirmation,
     ShPartnerCompany,
+    ShPaymentReceipt,
     ShPaymentScreenshot,
     ShPurchase,
     ShSaleInvoice,
@@ -37,6 +38,12 @@ from app.services.sh_manual_ledger import (
 )
 from app.services.sh_order_confirmation_pdf import generate_order_confirmation_pdf
 from app.services.sh_partnership import apply_partnership_from_form, get_partner_ledger_balance
+from app.services.sh_payment_receipt import (
+    get_payment_receipts,
+    next_payment_receipt_number,
+    suggest_total_received,
+)
+from app.services.sh_payment_receipt_pdf import generate_payment_receipt_pdf
 from app.services.sh_sale_invoice import (
     compute_current_balance,
     next_sale_invoice_number,
@@ -674,6 +681,88 @@ def order_confirmation_pdf(order_id):
         output,
         as_attachment=False,
         download_name=f"order_confirmation_{order_id}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/payment-receipt", methods=["GET", "POST"])
+@login_required
+def payment_receipt():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        receipt_date = request.form.get("receipt_date")
+        client_id = request.form.get("client_company_id", type=int)
+        amount_received = request.form.get("amount_received", type=float)
+        total_received = request.form.get("total_received", type=float)
+        total_due = request.form.get("total_due", type=float)
+        notes = request.form.get("notes", "").strip()
+        receipt_number = request.form.get("receipt_number", "").strip()
+
+        if not receipt_date or not client_id:
+            flash("Date and client are required.", "danger")
+            return redirect(url_for("sh_main.payment_receipt"))
+        if not amount_received or amount_received <= 0:
+            flash("Enter a valid amount received on this date.", "danger")
+            return redirect(url_for("sh_main.payment_receipt"))
+        if total_due is None or total_due < 0:
+            flash("Enter a valid total due amount.", "danger")
+            return redirect(url_for("sh_main.payment_receipt"))
+
+        if total_received is None or total_received < 0:
+            total_received = suggest_total_received(client_id, amount_received)
+
+        receipt = ShPaymentReceipt(
+            receipt_number=receipt_number or next_payment_receipt_number(),
+            receipt_date=_parse_date(receipt_date),
+            client_company_id=client_id,
+            amount_received=amount_received,
+            total_received=total_received,
+            total_due=total_due,
+            notes=notes or None,
+            created_by_id=current_user.id,
+        )
+        ensure_bank_on_create(receipt)
+        db.session.add(receipt)
+        db.session.flush()
+        log_audit(
+            current_user.id,
+            "CREATE",
+            "ShPaymentReceipt",
+            receipt.id,
+            f"Payment receipt {receipt.receipt_number} for {amount_received:,.2f}",
+        )
+        db.session.commit()
+        flash("Payment receipt created.", "success")
+        return redirect(url_for("sh_main.payment_receipt_pdf", receipt_id=receipt.id))
+
+    return render_template(
+        "sh_traders/payment_receipt.html",
+        receipts=get_payment_receipts(),
+        clients=clients,
+        next_receipt_number=next_payment_receipt_number(),
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/payment-receipt/<int:receipt_id>/pdf")
+@login_required
+def payment_receipt_pdf(receipt_id):
+    receipt = ShPaymentReceipt.query.get_or_404(receipt_id)
+    bank_id = get_current_sh_bank().id if get_current_sh_bank() else None
+    if bank_id and receipt.bank_id != bank_id:
+        abort(404)
+    output = generate_payment_receipt_pdf(receipt)
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=f"payment_receipt_{receipt.receipt_number}.pdf",
         mimetype="application/pdf",
     )
 

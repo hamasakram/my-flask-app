@@ -700,6 +700,7 @@ def _seed_sh_banks_and_backfill():
         "sh_client_ledger_entries",
         "sh_supplier_ledger_entries",
         "sh_order_confirmations",
+        "sh_payment_receipts",
     ]
     for table in tables_with_bank:
         if inspector.has_table(table):
