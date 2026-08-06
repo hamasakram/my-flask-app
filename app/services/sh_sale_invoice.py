@@ -101,6 +101,15 @@ def save_invoice_lines(invoice, lines: list[dict]) -> float:
     return total
 
 
+def resolve_sale_invoice_previous_balance(
+    client_id: int, invoice_date, exclude_entry_id: int | None = None
+) -> tuple[float, str]:
+    """Previous balance for a sale invoice, matching the client ledger chain."""
+    from app.services.sh_ledger_sync import get_client_ledger_balance_before
+
+    return get_client_ledger_balance_before(client_id, invoice_date, exclude_entry_id)
+
+
 def compute_current_balance(previous_balance: float, total_amount: float, balance_type: str = "DR") -> tuple[float, str]:
     """Current balance = previous + invoice total (debit style ledger)."""
     current = float(previous_balance or 0) + float(total_amount or 0)

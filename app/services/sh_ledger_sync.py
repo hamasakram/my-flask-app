@@ -14,6 +14,47 @@ def _entry_kind(entry) -> str:
     return ENTRY_PAYMENT if kind == ENTRY_PAYMENT else ENTRY_SALE
 
 
+def _apply_client_ledger_entry(
+    running: float, running_type: str, entry: ShClientLedgerEntry
+) -> tuple[float, str]:
+    amount = float(entry.total_amount or 0)
+    if _entry_kind(entry) == ENTRY_PAYMENT:
+        return balance_after_payment(running, running_type, amount)
+    return balance_after_sale(running, running_type, amount)
+
+
+def get_client_ledger_balance_before(
+    client_id: int,
+    before_date,
+    before_id: int | None = None,
+) -> tuple[float, str]:
+    """Balance after all client ledger entries before (before_date, before_id).
+
+    When before_id is None, all entries on before_date are included (new row appends last).
+    """
+    query = ShClientLedgerEntry.query.filter(
+        ShClientLedgerEntry.sold_to_client_id == client_id
+    )
+    query = filter_by_bank(query, ShClientLedgerEntry)
+    entries = query.order_by(
+        ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc()
+    ).all()
+
+    running = 0.0
+    running_type = "DR"
+    for entry in entries:
+        if entry.entry_date > before_date:
+            break
+        if (
+            before_id is not None
+            and entry.entry_date == before_date
+            and entry.id >= before_id
+        ):
+            break
+        running, running_type = _apply_client_ledger_entry(running, running_type, entry)
+    return running, running_type
+
+
 def get_last_client_ledger_balance(client_id: int) -> tuple[float, str]:
     query = ShClientLedgerEntry.query.filter(
         ShClientLedgerEntry.sold_to_client_id == client_id
@@ -65,11 +106,7 @@ def recalculate_client_ledger_chain(client_id: int, bank_id: int) -> None:
     for entry in entries:
         entry.previous_balance = running
         entry.previous_balance_type = running_type
-        amount = float(entry.total_amount or 0)
-        if _entry_kind(entry) == ENTRY_PAYMENT:
-            running, running_type = balance_after_payment(running, running_type, amount)
-        else:
-            running, running_type = balance_after_sale(running, running_type, amount)
+        running, running_type = _apply_client_ledger_entry(running, running_type, entry)
         entry.current_balance = running
         entry.current_balance_type = running_type
 

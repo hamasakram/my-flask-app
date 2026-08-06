@@ -5,7 +5,7 @@ from app.models import ShClientLedgerEntry, ShClientLedgerLine, ShSupplierLedger
 from app.services.sh_bank import filter_by_bank, get_current_sh_bank_id
 from app.services.sh_ledger_sync import (
     balance_after_sale,
-    get_last_client_ledger_balance,
+    get_client_ledger_balance_before,
     get_last_supplier_ledger_balance,
 )
 from app.services.sh_sale_invoice import parse_invoice_lines
@@ -116,9 +116,9 @@ def build_client_ledger_from_form(form, user_id: int) -> ShClientLedgerEntry:
     lines = parse_invoice_lines(form)
     parsed_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
 
-    last_balance, last_type = get_last_client_ledger_balance(sold_to_id)
-    previous_balance = last_balance
-    previous_balance_type = last_type
+    previous_balance, previous_balance_type = get_client_ledger_balance_before(
+        sold_to_id, parsed_date
+    )
 
     entry = ShClientLedgerEntry(
         entry_date=parsed_date,

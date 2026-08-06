@@ -29,6 +29,7 @@ from app.services.sh_bank import (
 )
 from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supplier_ledger_pdf
 from app.services.sh_ledger_sync import (
+    get_client_ledger_balance_before,
     get_last_client_ledger_balance,
     get_last_supplier_ledger_balance,
     recalculate_client_ledger_chain,
@@ -55,6 +56,7 @@ from app.services.sh_sale_invoice import (
     compute_current_balance,
     next_sale_invoice_number,
     parse_invoice_lines,
+    resolve_sale_invoice_previous_balance,
     save_invoice_lines,
 )
 from app.services.sh_sale_invoice_pdf import generate_sale_invoice_pdf
@@ -578,8 +580,19 @@ def payments():
 def party_balance_api():
     party_type = request.args.get("type", "")
     party_id = request.args.get("id", type=int)
+    date_str = request.args.get("date", "").strip()
+    before_date = None
+    if date_str:
+        try:
+            before_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            before_date = None
+
     if party_type == "client" and party_id:
-        balance, balance_type = get_last_client_ledger_balance(party_id)
+        if before_date:
+            balance, balance_type = get_client_ledger_balance_before(party_id, before_date)
+        else:
+            balance, balance_type = get_last_client_ledger_balance(party_id)
     elif party_type == "supplier" and party_id:
         balance, balance_type = get_last_supplier_ledger_balance(party_id)
     else:
@@ -1049,8 +1062,6 @@ def sale_invoices():
         factory_challan_no = request.form.get("factory_challan_no", "").strip()
         sold_to_id = request.form.get("sold_to_client_id", type=int)
         location = request.form.get("location", "MULTAN").strip() or "MULTAN"
-        previous_balance = request.form.get("previous_balance", type=float) or 0.0
-        previous_balance_type = request.form.get("previous_balance_type", "DR").strip() or "DR"
         current_balance_override = request.form.get("current_balance", type=float)
         current_balance_type = request.form.get("current_balance_type", "DR").strip() or "DR"
         notes = request.form.get("notes", "").strip()
@@ -1065,6 +1076,10 @@ def sale_invoices():
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("sh_main.sale_invoices"))
+
+        previous_balance, previous_balance_type = resolve_sale_invoice_previous_balance(
+            sold_to_id, parsed_date
+        )
 
         invoice = ShSaleInvoice(
             invoice_number=invoice_number or next_sale_invoice_number(),
