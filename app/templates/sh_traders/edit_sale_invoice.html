@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "sh_traders/macros.html" import sh_page_header %}
-{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script %}
+{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script, party_balance_script %}
 {% block title %}Edit Sale Invoice - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Edit Sale Invoice', invoice.invoice_number) }}
@@ -32,7 +32,8 @@
         </div>
         <div class="form-group">
             <label for="previous_balance">Previous Balance</label>
-            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="{{ invoice.previous_balance|int }}">
+            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="{{ invoice.previous_balance|int }}" readonly>
+            <small class="field-note">Auto-loaded from client ledger for selected client</small>
         </div>
         <div class="form-group">
             <label for="previous_balance_type">Previous Balance Type</label>
@@ -91,4 +92,5 @@
 
 {% block scripts %}
 {{ invoice_line_script() }}
+{{ party_balance_script('sold_to_client_id', 'previous_balance', 'previous_balance_type', 'client', 'invoice_date') }}
 {% endblock %}

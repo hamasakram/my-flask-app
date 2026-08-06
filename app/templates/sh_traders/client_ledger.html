@@ -143,5 +143,5 @@
 document.getElementById('entry_date').valueAsDate = new Date();
 </script>
 {{ invoice_line_script() }}
-{{ party_balance_script('sold_to_client_id', 'previous_balance', 'previous_balance_type', 'client') }}
+{{ party_balance_script('sold_to_client_id', 'previous_balance', 'previous_balance_type', 'client', 'entry_date') }}
 {% endblock %}

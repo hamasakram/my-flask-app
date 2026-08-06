@@ -49,7 +49,12 @@ from app.services.bank_ledger import normalize_expense_category, update_bank_tra
 from app.services.inventory import create_ink_type, log_audit
 from app.services.receipt_uploads import apply_receipt_file, delete_receipt_file, save_receipt_upload
 from app.services.sh_manual_ledger import save_client_ledger_lines, save_supplier_ledger_lines
-from app.services.sh_sale_invoice import compute_current_balance, parse_invoice_lines, save_invoice_lines
+from app.services.sh_sale_invoice import (
+    compute_current_balance,
+    parse_invoice_lines,
+    resolve_sale_invoice_previous_balance,
+    save_invoice_lines,
+)
 from app.services.sh_traders import calculate_total_amount
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_partnership import apply_partnership_from_form
@@ -1616,8 +1621,6 @@ def edit_sh_sale_invoice(invoice_id):
         factory_challan_no = request.form.get("factory_challan_no", "").strip()
         sold_to_id = request.form.get("sold_to_client_id", type=int)
         location = request.form.get("location", "MULTAN").strip() or "MULTAN"
-        previous_balance = request.form.get("previous_balance", type=float) or 0.0
-        previous_balance_type = request.form.get("previous_balance_type", "DR").strip() or "DR"
         current_balance_override = request.form.get("current_balance", type=float)
         current_balance_type = request.form.get("current_balance_type", "DR").strip() or "DR"
         notes = request.form.get("notes", "").strip()
@@ -1632,6 +1635,10 @@ def edit_sh_sale_invoice(invoice_id):
         except ValueError as exc:
             flash(str(exc), "danger")
             return redirect(url_for("stock_edits.edit_sh_sale_invoice", invoice_id=invoice_id))
+
+        previous_balance, previous_balance_type = resolve_sale_invoice_previous_balance(
+            sold_to_id, invoice.invoice_date
+        )
 
         invoice.invoice_number = invoice_number
         invoice.factory_challan_no = factory_challan_no or None

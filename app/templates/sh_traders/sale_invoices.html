@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "shared/macros.html" import row_actions with context %}
 {% from "sh_traders/macros.html" import sh_page_header %}
-{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script %}
+{% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script, party_balance_script %}
 {% block title %}Sale Invoices - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Sale Invoices', 'Create printable sale invoices — add line items manually') }}
@@ -40,7 +40,8 @@
         </div>
         <div class="form-group">
             <label for="previous_balance">Previous Balance</label>
-            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="0">
+            <input type="number" id="previous_balance" name="previous_balance" step="1" min="0" value="0" readonly>
+            <small class="field-note">Auto-loaded from client ledger for selected client</small>
         </div>
         <div class="form-group">
             <label for="previous_balance_type">Previous Balance Type</label>
@@ -139,4 +140,5 @@
 document.getElementById('invoice_date').valueAsDate = new Date();
 </script>
 {{ invoice_line_script() }}
+{{ party_balance_script('sold_to_client_id', 'previous_balance', 'previous_balance_type', 'client', 'invoice_date') }}
 {% endblock %}

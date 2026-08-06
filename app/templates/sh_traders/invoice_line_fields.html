@@ -35,12 +35,13 @@
 </div>
 {% endmacro %}
 
-{% macro party_balance_script(party_select_id, balance_input_id, balance_type_id, party_type) %}
+{% macro party_balance_script(party_select_id, balance_input_id, balance_type_id, party_type, date_field_id=None) %}
 <script>
 (function () {
     var partySelect = document.getElementById('{{ party_select_id }}');
     var balanceInput = document.getElementById('{{ balance_input_id }}');
     var balanceTypeSelect = document.getElementById('{{ balance_type_id }}');
+    var dateInput = {% if date_field_id %}document.getElementById('{{ date_field_id }}'){% else %}null{% endif %};
     if (!partySelect || !balanceInput) return;
 
     function loadPartyBalance() {
@@ -51,7 +52,11 @@
             balanceInput.dispatchEvent(new Event('input'));
             return;
         }
-        fetch('{{ url_for("sh_main.party_balance_api") }}?type={{ party_type }}&id=' + partyId)
+        var url = '{{ url_for("sh_main.party_balance_api") }}?type={{ party_type }}&id=' + partyId;
+        if (dateInput && dateInput.value) {
+            url += '&date=' + encodeURIComponent(dateInput.value);
+        }
+        fetch(url)
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 balanceInput.value = Math.round(data.balance || 0);
@@ -63,6 +68,8 @@
     }
 
     partySelect.addEventListener('change', loadPartyBalance);
+    dateInput?.addEventListener('change', loadPartyBalance);
+    loadPartyBalance();
 })();
 </script>
 {% endmacro %}
