@@ -98,7 +98,14 @@
 <div class="card">
     <div class="card-header-row">
         <h2>Supplier Ledger by Party</h2>
-        <a href="{{ url_for('sh_main.supplier_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print All Suppliers PDF</a>
+        <div class="header-actions">
+            {% if current_user.can_edit() %}
+            <form method="POST" action="{{ url_for('sh_main.sync_party_ledgers') }}" class="inline-form">
+                <button type="submit" class="btn btn-secondary">Sync Bank Payments</button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('sh_main.supplier_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print All Suppliers PDF</a>
+        </div>
     </div>
     {% if grouped_parties %}
     <table class="data-table compact">
@@ -107,7 +114,7 @@
                 <th>Supplier</th>
                 <th>Total Purchases</th>
                 <th>Total Paid</th>
-                <th>Remaining</th>
+                <th>Remaining / Advance</th>
                 <th>PDF</th>
             </tr>
         </thead>
@@ -117,7 +124,12 @@
                 <td><strong>{{ block.party.name }}</strong></td>
                 <td>₨ {{ "{:,.0f}".format(block.total_sales) }}</td>
                 <td>₨ {{ "{:,.0f}".format(block.total_payments) }}</td>
-                <td><strong>₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong></td>
+                <td>
+                    <strong>
+                        {% if block.remaining_balance_type == 'CR' %}Advance: {% else %}Due: {% endif %}
+                        ₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}
+                    </strong>
+                </td>
                 <td><a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-sm btn-secondary">PDF</a></td>
             </tr>
             {% endfor %}
@@ -136,7 +148,10 @@
             <div class="report-party-stats">
                 <span>Purchases: <strong>₨ {{ "{:,.0f}".format(block.total_sales) }}</strong></span>
                 <span>Paid: <strong>₨ {{ "{:,.0f}".format(block.total_payments) }}</strong></span>
-                <span>Remaining: <strong>₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong></span>
+                <span>
+                    {% if block.remaining_balance_type == 'CR' %}Advance{% else %}Remaining{% endif %}:
+                    <strong>₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong>
+                </span>
             </div>
         </div>
         <a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-secondary">Print PDF</a>

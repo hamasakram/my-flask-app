@@ -15,6 +15,7 @@ from app.services.sh_ledger_sync import (
     balance_after_sale,
     get_client_account_balance,
     get_client_ledger_balance_before,
+    get_supplier_account_balance,
     get_supplier_ledger_balance_before,
 )
 from app.services.sh_sale_invoice import parse_invoice_lines
@@ -135,6 +136,25 @@ def _summarize_client_party(client_id: int, entries: list) -> dict:
     }
 
 
+def _summarize_supplier_party(supplier_id: int, entries: list) -> dict:
+    total_purchases = 0.0
+    total_payments = 0.0
+    for entry in entries:
+        amount = float(entry.total_amount or 0)
+        if getattr(entry, "entry_type", "sale") == "payment":
+            total_payments += amount
+        else:
+            total_purchases += amount
+
+    remaining_balance, remaining_balance_type = get_supplier_account_balance(supplier_id)
+    return {
+        "total_sales": total_purchases,
+        "total_payments": total_payments,
+        "remaining_balance": remaining_balance,
+        "remaining_balance_type": remaining_balance_type,
+    }
+
+
 def _summarize_party_entries(entries: list) -> dict:
     total_sales = 0.0
     total_payments = 0.0
@@ -199,7 +219,7 @@ def group_supplier_ledger_by_party(party_id: int | None = None) -> list[dict]:
         ).all()
         if not entries:
             continue
-        summary = _summarize_party_entries(entries)
+        summary = _summarize_supplier_party(party.id, entries)
         grouped.append({"party": party, "entries": entries, **summary})
     return grouped
 

@@ -115,57 +115,86 @@ def _apply_supplier_ledger_entry(
     return balance_after_sale(running, running_type, amount)
 
 
+def _supplier_ledger_entries(supplier_id: int) -> list[ShSupplierLedgerEntry]:
+    query = ShSupplierLedgerEntry.query.filter(
+        ShSupplierLedgerEntry.supplier_company_id == supplier_id
+    )
+    query = filter_by_bank(query, ShSupplierLedgerEntry)
+    return query.order_by(
+        ShSupplierLedgerEntry.entry_date.asc(), ShSupplierLedgerEntry.id.asc()
+    ).all()
+
+
+def get_supplier_account_balance(
+    supplier_id: int,
+    before_date=None,
+    before_ledger_id: int | None = None,
+) -> tuple[float, str]:
+    """Supplier balance = total purchases minus total paid.
+
+    DR = still owed to supplier. CR = advance paid (supplier credit / owes you back).
+    """
+    total_purchases = 0.0
+    total_payments = 0.0
+    for entry in _supplier_ledger_entries(supplier_id):
+        if before_date and entry.entry_date > before_date:
+            continue
+        if (
+            before_ledger_id is not None
+            and entry.entry_date == before_date
+            and entry.id >= before_ledger_id
+        ):
+            continue
+        amount = float(entry.total_amount or 0)
+        if _entry_kind(entry) == ENTRY_PAYMENT:
+            total_payments += amount
+        else:
+            total_purchases += amount
+
+    net = total_purchases - total_payments
+    if net >= 0:
+        return net, "DR"
+    return abs(net), "CR"
+
+
 def get_supplier_ledger_balance_before(
     supplier_id: int,
     before_date,
     before_id: int | None = None,
 ) -> tuple[float, str]:
-    """Balance after all supplier ledger entries before (before_date, before_id)."""
-    query = ShSupplierLedgerEntry.query.filter(
-        ShSupplierLedgerEntry.supplier_company_id == supplier_id
+    """Balance before a new supplier ledger entry on before_date."""
+    return get_supplier_account_balance(
+        supplier_id,
+        before_date=before_date,
+        before_ledger_id=before_id,
     )
-    query = filter_by_bank(query, ShSupplierLedgerEntry)
-    entries = query.order_by(
-        ShSupplierLedgerEntry.entry_date.asc(), ShSupplierLedgerEntry.id.asc()
-    ).all()
-
-    running = 0.0
-    running_type = "DR"
-    for entry in entries:
-        if entry.entry_date > before_date:
-            break
-        if (
-            before_id is not None
-            and entry.entry_date == before_date
-            and entry.id >= before_id
-        ):
-            break
-        running, running_type = _apply_supplier_ledger_entry(running, running_type, entry)
-    return running, running_type
 
 
 def get_last_supplier_ledger_balance(supplier_id: int) -> tuple[float, str]:
-    query = ShSupplierLedgerEntry.query.filter(
-        ShSupplierLedgerEntry.supplier_company_id == supplier_id
-    )
-    query = filter_by_bank(query, ShSupplierLedgerEntry)
-    last = query.order_by(
-        ShSupplierLedgerEntry.entry_date.desc(), ShSupplierLedgerEntry.id.desc()
-    ).first()
-    if not last:
-        return 0.0, "DR"
-    return float(last.current_balance or 0), last.current_balance_type or "DR"
+    return get_supplier_account_balance(supplier_id)
 
 
 def balance_after_sale(previous: float, prev_type: str, amount: float) -> tuple[float, str]:
-    balance_type = prev_type or "DR"
-    return float(previous or 0) + float(amount or 0), balance_type
+    signed = _signed_balance(previous, prev_type) + float(amount or 0)
+    return _from_signed_balance(signed)
 
 
 def balance_after_payment(previous: float, prev_type: str, amount: float) -> tuple[float, str]:
-    balance_type = prev_type or "DR"
-    new_balance = max(0.0, float(previous or 0) - float(amount or 0))
-    return new_balance, balance_type
+    signed = _signed_balance(previous, prev_type) - float(amount or 0)
+    return _from_signed_balance(signed)
+
+
+def _signed_balance(amount: float, balance_type: str) -> float:
+    """Positive = DR (owed), negative = CR (advance/credit)."""
+    if (balance_type or "DR") == "CR":
+        return -float(amount or 0)
+    return float(amount or 0)
+
+
+def _from_signed_balance(signed: float) -> tuple[float, str]:
+    if signed >= 0:
+        return signed, "DR"
+    return abs(signed), "CR"
 
 
 def recalculate_client_ledger_chain(client_id: int, bank_id: int) -> None:
