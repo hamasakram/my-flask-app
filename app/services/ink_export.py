@@ -220,26 +220,27 @@ def export_used_inks_pdf(report_data):
     )
     elements.append(
         Paragraph(
-            f"<b>Total Used Cans:</b> {report_data['total_cans']:.1f} &nbsp;&nbsp; "
-            f"<b>Total Used Weight:</b> {report_data['total_weight']:.1f} kg",
+            f"<b>Total Stock:</b> {report_data['total_balance_kg']:.1f} kg &nbsp;&nbsp; "
+            f"<b>Total Added:</b> {report_data['total_added_kg']:.1f} kg &nbsp;&nbsp; "
+            f"<b>Total Used:</b> {report_data['total_used_kg']:.1f} kg",
             styles["Normal"],
         )
     )
     elements.append(Spacer(1, 0.18 * inch))
 
-    summary = report_data.get("summary") or []
+    summary = report_data.get("balances") or report_data.get("summary") or []
     if not summary:
         elements.append(Paragraph("No used ink stock recorded.", styles["Normal"]))
     else:
-        summary_data = [["Ink Name", "Shade Name", "Total Cans", "Wt/Can", "Total Weight (kg)"]]
+        summary_data = [["Ink Name", "Shade Name", "Added (kg)", "Used (kg)", "Balance (kg)"]]
         for row in summary:
             summary_data.append(
                 [
                     row["ink_name"],
                     row["shade_name"],
-                    f"{row['quantity_total']:.1f}",
-                    f"{row['weight_per_can']:.1f}" if row["weight_per_can"] else "—",
-                    f"{row['total_weight']:.1f}" if row["total_weight"] else "—",
+                    f"{row['added_kg']:.1f}",
+                    f"{row['used_kg']:.1f}",
+                    f"{row['balance_kg']:.1f}",
                 ]
             )
         summary_table = Table(
@@ -248,28 +249,30 @@ def export_used_inks_pdf(report_data):
             repeatRows=1,
         )
         summary_table.setStyle(_table_style())
-        elements.append(Paragraph("<b>Used Inks Summary</b>", section_label))
+        elements.append(Paragraph("<b>Current Used Ink Stock</b>", section_label))
         elements.append(summary_table)
         elements.append(Spacer(1, 0.15 * inch))
 
-        detail_data = [["Date", "Ink Name", "Shade Name", "Quantity", "Notes"]]
+        detail_data = [["Date", "Type", "Ink Name", "Shade Name", "Quantity (kg)", "Notes"]]
         for entry in report_data.get("entries") or []:
+            entry_label = "Used" if entry.entry_type == "use" else "Added"
             detail_data.append(
                 [
                     entry.entry_date.strftime("%d-%b-%Y"),
+                    entry_label,
                     entry.ink_name,
                     entry.shade_name or "—",
-                    f"{entry.quantity_total:.1f}",
+                    f"{entry.quantity_total:.2f}",
                     entry.notes or "—",
                 ]
             )
         detail_table = Table(
             detail_data,
-            colWidths=[70, 110, 90, 60, 140],
+            colWidths=[65, 45, 100, 80, 65, 120],
             repeatRows=1,
         )
         detail_table.setStyle(_table_style())
-        elements.append(Paragraph("<b>Daily Used Ink Entries</b>", section_label))
+        elements.append(Paragraph("<b>Daily Used Ink Log</b>", section_label))
         elements.append(detail_table)
 
     doc.build(elements)

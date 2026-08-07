@@ -152,10 +152,14 @@ class UsedInkStock(db.Model):
 
     __tablename__ = "used_ink_stock"
 
+    ENTRY_ADD = "add"
+    ENTRY_USE = "use"
+
     id = db.Column(db.Integer, primary_key=True)
     ink_name = db.Column(db.String(150), nullable=False)
     shade_name = db.Column(db.String(150), nullable=False, default="")
     quantity_total = db.Column(db.Float, nullable=False, default=0)
+    entry_type = db.Column(db.String(10), nullable=False, default=ENTRY_ADD)
     entry_date = db.Column(db.Date, nullable=False)
     notes = db.Column(db.Text)
     source_transaction_id = db.Column(

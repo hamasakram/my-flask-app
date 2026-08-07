@@ -79,6 +79,7 @@ from app.services.ink_used_stock import (
     list_used_ink_names,
     list_used_ink_shades,
     record_used_ink_stock,
+    sync_used_ink_from_cans_out,
 )
 
 from pathlib import Path
@@ -244,8 +245,8 @@ def edit_ink_used(txn_id):
             return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id, return_to=return_to, date=return_date))
 
         if link_used_ink and not used_ink_name:
-            flash("Select a used ink name when linking to Used Ink Stock.", "danger")
-            return redirect(url_for("stock_edits.edit_ink_used", txn_id=txn_id, return_to=return_to, date=return_date))
+            used_ink_name = txn.ink_type.name
+            used_ink_shade = txn.ink_type.color_code or ""
 
         parsed_date = _parse_date(transaction_date)
         txn.quantity = cans_out
@@ -255,19 +256,16 @@ def edit_ink_used(txn_id):
         txn.notes = notes
         txn.transaction_type = InventoryTransaction.TRANSACTION_CANS_OUT
 
-        if link_used_ink:
-            record_used_ink_stock(
-                ink_name=used_ink_name,
-                shade_name=used_ink_shade,
-                quantity=cans_out,
-                entry_date=parsed_date,
-                source_transaction_id=txn.id,
-                notes=notes or where_used,
-                created_by_id=current_user.id,
-                merge_same_day=False,
-            )
-        elif linked:
-            db.session.delete(linked)
+        sync_used_ink_from_cans_out(
+            txn.ink_type,
+            cans_out,
+            parsed_date,
+            txn.id,
+            ink_name=used_ink_name or txn.ink_type.name,
+            shade_name=used_ink_shade if used_ink_shade is not None else (txn.ink_type.color_code or ""),
+            notes=notes or where_used,
+            created_by_id=current_user.id,
+        )
 
         log_audit(
             current_user.id,

@@ -19,12 +19,13 @@ from app.services.ink_used_stock import (
     create_catalog_ink_name,
     create_catalog_shade_name,
     get_used_ink_report_data,
-    get_used_ink_stock_entries,
     list_used_ink_name_records,
     list_used_ink_names,
     list_used_ink_shade_records,
     list_used_ink_shades,
     record_used_ink_stock,
+    record_used_ink_usage,
+    sync_used_ink_from_cans_out,
 )
 from app.services.inventory import log_audit
 
@@ -162,10 +163,6 @@ def cans_out():
             flash("Ink, cans out, and date are required.", "danger")
             return redirect(url_for("inventory.cans_out", date=redirect_date))
 
-        if link_used_ink and not used_ink_name:
-            flash("Select a used ink name when linking to Used Ink Stock.", "danger")
-            return redirect(url_for("inventory.cans_out", date=redirect_date))
-
         ink = db.session.get(InkType, ink_type_id)
         if not ink:
             flash("Invalid ink.", "danger")
@@ -192,17 +189,16 @@ def cans_out():
         db.session.add(txn)
         db.session.flush()
 
-        if link_used_ink:
-            record_used_ink_stock(
-                ink_name=used_ink_name,
-                shade_name=used_ink_shade,
-                quantity=quantity_used,
-                entry_date=parsed_date,
-                source_transaction_id=txn.id,
-                notes=notes or where_used,
-                created_by_id=current_user.id,
-                merge_same_day=False,
-            )
+        sync_used_ink_from_cans_out(
+            ink,
+            quantity_used,
+            parsed_date,
+            txn.id,
+            ink_name=used_ink_name or ink.name,
+            shade_name=used_ink_shade if used_ink_shade else (ink.color_code or ""),
+            notes=notes or where_used,
+            created_by_id=current_user.id,
+        )
 
         log_audit(
             current_user.id,
@@ -213,7 +209,7 @@ def cans_out():
         )
         db.session.commit()
         flash(
-            f"Cans Out recorded: {quantity_used:.1f} cans used, {quantity_left:.1f} cans remaining.",
+            f"Cans Out recorded: {quantity_used:.1f} cans ({quantity_used * float(ink.weight_per_can):.1f} kg added to Used Ink Stock).",
             "success",
         )
         return redirect(url_for("inventory.cans_out", date=parsed_date.isoformat()))
@@ -300,46 +296,60 @@ def used_inks_stock():
 
     if request.method == "POST":
         require_edit_access()
+        form_type = request.form.get("form_type", "add")
         ink_name = request.form.get("ink_name", "").strip()
         shade_name = request.form.get("shade_name", "").strip()
-        quantity_total = request.form.get("quantity_total", type=float)
+        quantity_kg = request.form.get("quantity_kg", type=float)
         entry_date = request.form.get("entry_date")
         notes = request.form.get("notes", "").strip()
 
-        if not ink_name or quantity_total is None or quantity_total <= 0 or not entry_date:
-            flash("Ink name, quantity total, and date are required.", "danger")
+        if not ink_name or quantity_kg is None or quantity_kg <= 0 or not entry_date:
+            flash("Ink name, quantity (kg), and date are required.", "danger")
             return redirect(url_for("inventory.used_inks_stock", date=filter_date.isoformat()))
 
         parsed_date = datetime.strptime(entry_date, "%Y-%m-%d").date()
         try:
-            record_used_ink_stock(
-                ink_name=ink_name,
-                shade_name=shade_name,
-                quantity=quantity_total,
-                entry_date=parsed_date,
-                notes=notes,
-                created_by_id=current_user.id,
-            )
+            if form_type == "use":
+                record_used_ink_usage(
+                    ink_name=ink_name,
+                    shade_name=shade_name,
+                    quantity_kg=quantity_kg,
+                    entry_date=parsed_date,
+                    notes=notes,
+                    created_by_id=current_user.id,
+                )
+                action_label = f"Used {quantity_kg:.1f} kg"
+            else:
+                record_used_ink_stock(
+                    ink_name=ink_name,
+                    shade_name=shade_name,
+                    quantity_kg=quantity_kg,
+                    entry_date=parsed_date,
+                    notes=notes,
+                    created_by_id=current_user.id,
+                )
+                action_label = f"Added {quantity_kg:.1f} kg"
+
             log_audit(
                 current_user.id,
                 "CREATE",
                 "UsedInkStock",
                 None,
-                f"Used ink stock: {ink_name} / {shade_name or '—'} = {quantity_total} cans",
+                f"Used ink stock: {ink_name} / {shade_name or '—'} — {action_label}",
             )
             db.session.commit()
-            flash("Used ink stock recorded.", "success")
+            flash(f"Used ink stock updated ({action_label}).", "success")
         except ValueError as exc:
             db.session.rollback()
             flash(str(exc), "danger")
         return redirect(url_for("inventory.used_inks_stock", date=parsed_date.isoformat()))
 
-    entries = get_used_ink_stock_entries(filter_date)
     report_data = get_used_ink_report_data(filter_date)
     return render_template(
         "ink/used_inks_stock.html",
-        entries=entries,
+        entries=report_data["entries"],
         report_data=report_data,
+        balances=report_data["balances"],
         selected_date=filter_date.isoformat(),
         ink_names=list_used_ink_names(),
         shade_names=list_used_ink_shades(),

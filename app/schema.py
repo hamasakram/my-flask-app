@@ -96,6 +96,9 @@ COLUMN_MIGRATIONS = {
         "transfer_id": "INTEGER",
         "expense_category": "VARCHAR(30) DEFAULT ''",
     },
+    "used_ink_stock": {
+        "entry_type": "VARCHAR(10) DEFAULT 'add'",
+    },
 }
 
 

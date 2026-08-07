@@ -16,12 +16,12 @@
 
 <div class="stats-grid">
     <div class="stat-card accent-orange">
-        <span class="stat-label">Used Cans Today</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_cans) }}</span>
+        <span class="stat-label">Added to Used Stock Today</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.daily_added_kg) }} kg</span>
     </div>
     <div class="stat-card accent-blue">
-        <span class="stat-label">Used Weight Today</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_weight) }} kg</span>
+        <span class="stat-label">Total Used Ink Stock</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_balance_kg) }} kg</span>
     </div>
 </div>
 
@@ -129,43 +129,45 @@
 </div>
 
 <div class="card">
-    <h2>Used Inks Summary — {{ selected_date }}</h2>
+    <h2>Current Used Ink Stock</h2>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Ink Name</th><th>Shade Name</th><th>Total Cans</th><th>Total Weight</th>
+                <th>Ink Name</th><th>Shade Name</th><th>Added (kg)</th><th>Used (kg)</th><th>Balance (kg)</th>
             </tr>
         </thead>
         <tbody>
-            {% for row in report_data.summary %}
+            {% for row in report_data.balances %}
             <tr>
                 <td>{{ row.ink_name }}</td>
                 <td>{{ row.shade_name }}</td>
-                <td><strong>{{ "%.1f"|format(row.quantity_total) }}</strong></td>
-                <td>{% if row.total_weight %}{{ "%.1f"|format(row.total_weight) }} kg{% else %}—{% endif %}</td>
+                <td>{{ "%.1f"|format(row.added_kg) }}</td>
+                <td>{{ "%.1f"|format(row.used_kg) }}</td>
+                <td><strong>{{ "%.1f"|format(row.balance_kg) }} kg</strong></td>
             </tr>
             {% else %}
-            <tr><td colspan="4" class="empty">No used ink stock for this date</td></tr>
+            <tr><td colspan="5" class="empty">No used ink stock yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
 
 <div class="card">
-    <h2>Daily Used Ink Entries</h2>
+    <h2>Daily Used Ink Entries — {{ selected_date }}</h2>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Ink Name</th><th>Shade Name</th><th>Quantity</th><th>Source</th><th>Notes</th>
+                <th>Type</th><th>Ink Name</th><th>Shade Name</th><th>Quantity (kg)</th><th>Source</th><th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for entry in report_data.entries %}
             <tr>
+                <td>{% if entry.entry_type == 'use' %}<span class="badge badge-orange">Used</span>{% else %}<span class="badge badge-green">Added</span>{% endif %}</td>
                 <td>{{ entry.ink_name }}</td>
                 <td>{{ entry.shade_name or '—' }}</td>
-                <td>{{ "%.1f"|format(entry.quantity_total) }}</td>
+                <td>{{ "%.2f"|format(entry.quantity_total) }} kg</td>
                 <td>{% if entry.source_transaction_id %}Cans Out{% else %}Manual{% endif %}</td>
                 <td>{{ entry.notes or '—' }}</td>
                 {% if current_user.can_edit() %}
@@ -176,7 +178,7 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No used ink entries for this date</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No used ink entries for this date</td></tr>
             {% endfor %}
         </tbody>
     </table>

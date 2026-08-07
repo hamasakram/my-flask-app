@@ -5,38 +5,64 @@
 <div class="page-header">
     <div>
         <h1>Used Inks Stock</h1>
-        <p class="page-subtitle">Track opened/used inks separately from current inventory</p>
+        <p class="page-subtitle">Track opened/used inks in kg — separate from current inventory</p>
     </div>
     <div class="header-actions">
-        <a href="{{ url_for('inventory.used_inks_stock_pdf', date=selected_date) }}" class="btn btn-primary" target="_blank">Download Used Inks PDF</a>
+        <a href="{{ url_for('inventory.used_inks_stock_pdf') }}" class="btn btn-primary" target="_blank">Download Used Inks PDF</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total Stock (kg)</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_balance_kg) }} kg</span>
+    </div>
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Total Added (kg)</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_added_kg) }} kg</span>
+    </div>
+    <div class="stat-card accent-blue">
+        <span class="stat-label">Total Used (kg)</span>
+        <span class="stat-value">{{ "%.1f"|format(report_data.total_used_kg) }} kg</span>
     </div>
 </div>
 
 <div class="card">
-    <form method="GET" class="filter-bar">
-        <input type="date" name="date" value="{{ selected_date }}">
-        <button type="submit" class="btn btn-secondary">View Date</button>
-    </form>
-</div>
-
-<div class="stats-grid">
-    <div class="stat-card accent-orange">
-        <span class="stat-label">Total Used Cans</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_cans) }}</span>
-    </div>
-    <div class="stat-card accent-blue">
-        <span class="stat-label">Total Used Weight</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_weight) }} kg</span>
-    </div>
+    <h2>Current Used Ink Stock</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Ink Name</th>
+                <th>Shade Name</th>
+                <th>Added (kg)</th>
+                <th>Used (kg)</th>
+                <th>Balance (kg)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in balances %}
+            <tr>
+                <td>{{ row.ink_name }}</td>
+                <td>{{ row.shade_name }}</td>
+                <td>{{ "%.1f"|format(row.added_kg) }}</td>
+                <td>{{ "%.1f"|format(row.used_kg) }}</td>
+                <td><strong>{{ "%.1f"|format(row.balance_kg) }} kg</strong></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">No used ink stock recorded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 
 {% if current_user.can_edit() %}
 <div class="card highlight-card">
-    <h2>Add Used Ink Stock</h2>
+    <h2>Add Used Ink Stock (kg)</h2>
     <form method="POST" class="form-grid">
+        <input type="hidden" name="form_type" value="add">
         <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" list="ink-names-list" required placeholder="Select or type ink name">
+            <label for="add_ink_name">Ink Name</label>
+            <input type="text" id="add_ink_name" name="ink_name" list="ink-names-list" required placeholder="Select or type ink name">
             <datalist id="ink-names-list">
                 {% for name in ink_names %}
                 <option value="{{ name }}"></option>
@@ -44,8 +70,8 @@
             </datalist>
         </div>
         <div class="form-group">
-            <label for="shade_name">Shade Name</label>
-            <input type="text" id="shade_name" name="shade_name" list="shade-names-list" placeholder="Select or type shade">
+            <label for="add_shade_name">Shade Name</label>
+            <input type="text" id="add_shade_name" name="shade_name" list="shade-names-list" placeholder="Select or type shade">
             <datalist id="shade-names-list">
                 {% for name in shade_names %}
                 <option value="{{ name }}"></option>
@@ -53,61 +79,83 @@
             </datalist>
         </div>
         <div class="form-group">
-            <label for="quantity_total">Quantity Total</label>
-            <input type="number" id="quantity_total" name="quantity_total" step="0.1" min="0.1" required>
+            <label for="add_quantity_kg">Quantity (kg)</label>
+            <input type="number" id="add_quantity_kg" name="quantity_kg" step="0.01" min="0.01" required>
         </div>
         <div class="form-group">
-            <label for="entry_date">Date</label>
-            <input type="date" id="entry_date" name="entry_date" value="{{ selected_date }}" required>
+            <label for="add_entry_date">Date</label>
+            <input type="date" id="add_entry_date" name="entry_date" value="{{ selected_date }}" required>
         </div>
         <div class="form-group full-width">
-            <label for="notes">Notes</label>
-            <input type="text" id="notes" name="notes" placeholder="Optional notes">
+            <label for="add_notes">Notes</label>
+            <input type="text" id="add_notes" name="notes" placeholder="Optional notes">
         </div>
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Used Ink</button>
+            <button type="submit" class="btn btn-primary">Add to Stock</button>
+        </div>
+    </form>
+</div>
+
+<div class="card highlight-card">
+    <h2>Use Used Ink (kg)</h2>
+    <p class="field-note">Enter kg used — automatically subtracts from the balance shown above.</p>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="form_type" value="use">
+        <div class="form-group">
+            <label for="use_ink_name">Ink Name</label>
+            <input type="text" id="use_ink_name" name="ink_name" list="use-ink-names-list" required placeholder="Select ink name">
+            <datalist id="use-ink-names-list">
+                {% for name in ink_names %}
+                <option value="{{ name }}"></option>
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="use_shade_name">Shade Name</label>
+            <input type="text" id="use_shade_name" name="shade_name" list="use-shade-names-list" placeholder="Select shade">
+            <datalist id="use-shade-names-list">
+                {% for name in shade_names %}
+                <option value="{{ name }}"></option>
+                {% endfor %}
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="use_quantity_kg">Quantity Used (kg)</label>
+            <input type="number" id="use_quantity_kg" name="quantity_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="use_entry_date">Date</label>
+            <input type="date" id="use_entry_date" name="entry_date" value="{{ selected_date }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="use_notes">Notes</label>
+            <input type="text" id="use_notes" name="notes" placeholder="Optional notes">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-secondary">Record Usage</button>
         </div>
     </form>
 </div>
 {% endif %}
 
 <div class="card">
-    <h2>Used Inks Summary — {{ selected_date }}</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Ink Name</th>
-                <th>Shade Name</th>
-                <th>Total Cans</th>
-                <th>Wt/Can</th>
-                <th>Total Weight</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in report_data.summary %}
-            <tr>
-                <td>{{ row.ink_name }}</td>
-                <td>{{ row.shade_name }}</td>
-                <td><strong>{{ "%.1f"|format(row.quantity_total) }}</strong></td>
-                <td>{% if row.weight_per_can %}{{ "%.1f"|format(row.weight_per_can) }}{% else %}—{% endif %}</td>
-                <td>{% if row.total_weight %}{{ "%.1f"|format(row.total_weight) }} kg{% else %}—{% endif %}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" class="empty">No used ink stock for this date</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <form method="GET" class="filter-bar">
+        <label>Filter daily log:</label>
+        <input type="date" name="date" value="{{ selected_date }}">
+        <button type="submit" class="btn btn-secondary">View Date</button>
+    </form>
 </div>
 
 <div class="card">
-    <h2>Daily Used Ink Entries</h2>
+    <h2>Daily Log — {{ selected_date }}</h2>
     <table class="data-table">
         <thead>
             <tr>
-                <th>Date</th>
+                <th>Type</th>
                 <th>Ink Name</th>
                 <th>Shade Name</th>
-                <th>Quantity</th>
+                <th>Quantity (kg)</th>
+                <th>Source</th>
                 <th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -115,20 +163,27 @@
         <tbody>
             {% for entry in entries %}
             <tr>
-                <td>{{ entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td>
+                    {% if entry.entry_type == 'use' %}
+                    <span class="badge badge-orange">Used</span>
+                    {% else %}
+                    <span class="badge badge-green">Added</span>
+                    {% endif %}
+                </td>
                 <td>{{ entry.ink_name }}</td>
                 <td>{{ entry.shade_name or '—' }}</td>
-                <td>{{ "%.1f"|format(entry.quantity_total) }}</td>
+                <td>{{ "%.2f"|format(entry.quantity_total) }} kg</td>
+                <td>{% if entry.source_transaction_id %}Cans Out{% else %}Manual{% endif %}</td>
                 <td>{{ entry.notes or '—' }}</td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
-                    url_for('stock_edits.edit_used_ink_stock', record_id=entry.id),
-                    url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id)
+                    url_for('stock_edits.edit_used_ink_stock', record_id=entry.id, return_to='used_inks_stock', date=selected_date),
+                    url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id, return_to='used_inks_stock', date=selected_date)
                 ) }}
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No entries yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No entries for this date</td></tr>
             {% endfor %}
         </tbody>
     </table>
