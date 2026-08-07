@@ -189,5 +189,5 @@
 document.getElementById('entry_date').valueAsDate = new Date();
 </script>
 {{ invoice_line_script() }}
-{{ party_balance_script('supplier_company_id', 'previous_balance', 'previous_balance_type', 'supplier') }}
+{{ party_balance_script('supplier_company_id', 'previous_balance', 'previous_balance_type', 'supplier', 'entry_date') }}
 {% endblock %}

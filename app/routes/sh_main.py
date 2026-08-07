@@ -32,6 +32,7 @@ from app.services.sh_ledger_sync import (
     get_client_ledger_balance_before,
     get_last_client_ledger_balance,
     get_last_supplier_ledger_balance,
+    get_supplier_ledger_balance_before,
     recalculate_client_ledger_chain,
     recalculate_supplier_ledger_chain,
     sync_bank_entry_to_party_ledgers,
@@ -596,7 +597,10 @@ def party_balance_api():
         else:
             balance, balance_type = get_last_client_ledger_balance(party_id)
     elif party_type == "supplier" and party_id:
-        balance, balance_type = get_last_supplier_ledger_balance(party_id)
+        if before_date:
+            balance, balance_type = get_supplier_ledger_balance_before(party_id, before_date)
+        else:
+            balance, balance_type = get_last_supplier_ledger_balance(party_id)
     else:
         balance, balance_type = 0.0, "DR"
     return jsonify({"balance": balance, "balance_type": balance_type})

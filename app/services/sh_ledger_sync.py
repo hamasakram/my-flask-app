@@ -68,6 +68,44 @@ def get_last_client_ledger_balance(client_id: int) -> tuple[float, str]:
     return float(last.current_balance or 0), last.current_balance_type or "DR"
 
 
+def _apply_supplier_ledger_entry(
+    running: float, running_type: str, entry: ShSupplierLedgerEntry
+) -> tuple[float, str]:
+    amount = float(entry.total_amount or 0)
+    if _entry_kind(entry) == ENTRY_PAYMENT:
+        return balance_after_payment(running, running_type, amount)
+    return balance_after_sale(running, running_type, amount)
+
+
+def get_supplier_ledger_balance_before(
+    supplier_id: int,
+    before_date,
+    before_id: int | None = None,
+) -> tuple[float, str]:
+    """Balance after all supplier ledger entries before (before_date, before_id)."""
+    query = ShSupplierLedgerEntry.query.filter(
+        ShSupplierLedgerEntry.supplier_company_id == supplier_id
+    )
+    query = filter_by_bank(query, ShSupplierLedgerEntry)
+    entries = query.order_by(
+        ShSupplierLedgerEntry.entry_date.asc(), ShSupplierLedgerEntry.id.asc()
+    ).all()
+
+    running = 0.0
+    running_type = "DR"
+    for entry in entries:
+        if entry.entry_date > before_date:
+            break
+        if (
+            before_id is not None
+            and entry.entry_date == before_date
+            and entry.id >= before_id
+        ):
+            break
+        running, running_type = _apply_supplier_ledger_entry(running, running_type, entry)
+    return running, running_type
+
+
 def get_last_supplier_ledger_balance(supplier_id: int) -> tuple[float, str]:
     query = ShSupplierLedgerEntry.query.filter(
         ShSupplierLedgerEntry.supplier_company_id == supplier_id
@@ -345,6 +383,93 @@ def backfill_unsynced_bank_payments() -> None:
         ShSupplierLedgerEntry.supplier_company_id, ShSupplierLedgerEntry.bank_id
     ).distinct():
         recalculate_supplier_ledger_chain(row[0], row[1])
+
+    db.session.add(AppSetting(key=flag_key, value="done"))
+    db.session.commit()
+
+
+def fix_mashaallah_packages_bill() -> None:
+    """Correct MashaAllah Packages purchase total (4,170,530 → 4,194,599)."""
+    from datetime import date
+
+    from app.models import AppSetting, ShSupplierCompany, ShSupplierLedgerLine
+
+    flag_key = "fix_mashaallah_packages_bill_v1"
+    if AppSetting.query.filter_by(key=flag_key).first():
+        return
+
+    supplier = (
+        ShSupplierCompany.query.filter(
+            db.func.lower(ShSupplierCompany.name).like("%masha%packages%")
+        ).first()
+    )
+    if not supplier:
+        return
+
+    purchase_entries = (
+        ShSupplierLedgerEntry.query.filter_by(
+            supplier_company_id=supplier.id,
+        )
+        .filter(ShSupplierLedgerEntry.entry_type != ENTRY_PAYMENT)
+        .order_by(
+            ShSupplierLedgerEntry.entry_date.asc(),
+            ShSupplierLedgerEntry.id.asc(),
+        )
+        .all()
+    )
+    if not purchase_entries:
+        return
+
+    expected_total = 4_194_599.0
+    current_total = sum(float(entry.total_amount or 0) for entry in purchase_entries)
+    if abs(current_total - expected_total) < 1:
+        db.session.add(AppSetting(key=flag_key, value="already_correct"))
+        db.session.commit()
+        return
+
+    wrong_total = 4_170_530.0
+    if abs(current_total - wrong_total) > 1:
+        return
+
+    delta = expected_total - current_total
+    target_entry = None
+    for entry in reversed(purchase_entries):
+        note = (entry.notes or "").lower()
+        if "bopp" in note or entry.entry_date == date(2026, 6, 22):
+            target_entry = entry
+            break
+    if not target_entry:
+        target_entry = max(purchase_entries, key=lambda e: float(e.total_amount or 0))
+
+    target_entry.total_amount = float(target_entry.total_amount or 0) + delta
+    if target_entry.lines:
+        last_line = target_entry.lines[-1]
+        last_line.line_total = float(last_line.line_total or 0) + delta
+    else:
+        db.session.add(
+            ShSupplierLedgerLine(
+                entry_id=target_entry.id,
+                line_number=1,
+                item_name="Bill adjustment (660 BOPP)",
+                size="",
+                qty=0,
+                qty_unit="KG",
+                gross_weight=0,
+                net_weight=0,
+                unit_price=0,
+                line_total=delta,
+            )
+        )
+
+    bank_ids = {
+        row[0]
+        for row in db.session.query(ShSupplierLedgerEntry.bank_id)
+        .filter_by(supplier_company_id=supplier.id)
+        .distinct()
+    }
+    for bank_id in bank_ids:
+        if bank_id:
+            recalculate_supplier_ledger_chain(supplier.id, bank_id)
 
     db.session.add(AppSetting(key=flag_key, value="done"))
     db.session.commit()
