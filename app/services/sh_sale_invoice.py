@@ -102,12 +102,16 @@ def save_invoice_lines(invoice, lines: list[dict]) -> float:
 
 
 def resolve_sale_invoice_previous_balance(
-    client_id: int, invoice_date, exclude_entry_id: int | None = None
+    client_id: int,
+    invoice_date,
+    exclude_invoice_id: int | None = None,
 ) -> tuple[float, str]:
-    """Previous balance for a sale invoice, matching the client ledger chain."""
+    """Previous balance for a sale invoice = total billed minus payments received."""
     from app.services.sh_ledger_sync import get_client_ledger_balance_before
 
-    return get_client_ledger_balance_before(client_id, invoice_date, exclude_entry_id)
+    return get_client_ledger_balance_before(
+        client_id, invoice_date, exclude_invoice_id=exclude_invoice_id
+    )
 
 
 def compute_current_balance(previous_balance: float, total_amount: float, balance_type: str = "DR") -> tuple[float, str]:

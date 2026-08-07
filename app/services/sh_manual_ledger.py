@@ -5,6 +5,7 @@ from app.models import (
     ShClientCompany,
     ShClientLedgerEntry,
     ShClientLedgerLine,
+    ShSaleInvoice,
     ShSupplierCompany,
     ShSupplierLedgerEntry,
     ShSupplierLedgerLine,
@@ -12,6 +13,7 @@ from app.models import (
 from app.services.sh_bank import filter_by_bank, get_current_sh_bank_id
 from app.services.sh_ledger_sync import (
     balance_after_sale,
+    get_client_account_balance,
     get_client_ledger_balance_before,
     get_supplier_ledger_balance_before,
 )
@@ -105,6 +107,34 @@ def get_supplier_ledger_entries() -> list[ShSupplierLedgerEntry]:
     ).all()
 
 
+def _summarize_client_party(client_id: int, entries: list) -> dict:
+    bank_id = get_current_sh_bank_id()
+    invoices = ShSaleInvoice.query.filter(ShSaleInvoice.sold_to_client_id == client_id)
+    if bank_id:
+        invoices = invoices.filter(
+            db.or_(ShSaleInvoice.bank_id == bank_id, ShSaleInvoice.bank_id.is_(None))
+        )
+    invoice_sales = sum(float(inv.total_amount or 0) for inv in invoices.all())
+
+    ledger_sales = 0.0
+    total_payments = 0.0
+    for entry in entries:
+        amount = float(entry.total_amount or 0)
+        if getattr(entry, "entry_type", "sale") == "payment":
+            total_payments += amount
+        else:
+            ledger_sales += amount
+
+    total_sales = invoice_sales if invoice_sales > 0 else ledger_sales
+    remaining_balance, remaining_balance_type = get_client_account_balance(client_id)
+    return {
+        "total_sales": total_sales,
+        "total_payments": total_payments,
+        "remaining_balance": remaining_balance,
+        "remaining_balance_type": remaining_balance_type,
+    }
+
+
 def _summarize_party_entries(entries: list) -> dict:
     total_sales = 0.0
     total_payments = 0.0
@@ -135,11 +165,24 @@ def group_client_ledger_by_party(party_id: int | None = None) -> list[dict]:
         entries = query.order_by(
             ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc()
         ).all()
-        if not entries:
+        invoices = _client_sale_invoices_for_party(party.id)
+        if not entries and not invoices:
             continue
-        summary = _summarize_party_entries(entries)
+        summary = _summarize_client_party(party.id, entries)
         grouped.append({"party": party, "entries": entries, **summary})
     return grouped
+
+
+def _client_sale_invoices_for_party(client_id: int) -> list[ShSaleInvoice]:
+    bank_id = get_current_sh_bank_id()
+    query = ShSaleInvoice.query.filter(ShSaleInvoice.sold_to_client_id == client_id)
+    if bank_id:
+        query = query.filter(
+            db.or_(ShSaleInvoice.bank_id == bank_id, ShSaleInvoice.bank_id.is_(None))
+        )
+    return query.order_by(
+        ShSaleInvoice.invoice_date.asc(), ShSaleInvoice.id.asc()
+    ).all()
 
 
 def group_supplier_ledger_by_party(party_id: int | None = None) -> list[dict]:

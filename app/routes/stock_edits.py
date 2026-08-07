@@ -1635,7 +1635,7 @@ def edit_sh_sale_invoice(invoice_id):
             return redirect(url_for("stock_edits.edit_sh_sale_invoice", invoice_id=invoice_id))
 
         previous_balance, previous_balance_type = resolve_sale_invoice_previous_balance(
-            sold_to_id, invoice.invoice_date
+            sold_to_id, invoice.invoice_date, exclude_invoice_id=invoice.id
         )
 
         invoice.invoice_number = invoice_number

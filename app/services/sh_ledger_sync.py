@@ -1,8 +1,8 @@
 """Sync bank payment ledger entries with client/supplier ledgers."""
 
 from app import db
-from app.models import ShClientLedgerEntry, ShLedgerEntry, ShSupplierLedgerEntry
-from app.services.sh_bank import filter_by_bank
+from app.models import ShClientLedgerEntry, ShLedgerEntry, ShSaleInvoice, ShSupplierLedgerEntry
+from app.services.sh_bank import filter_by_bank, get_current_sh_bank_id
 
 
 ENTRY_SALE = "sale"
@@ -23,49 +23,87 @@ def _apply_client_ledger_entry(
     return balance_after_sale(running, running_type, amount)
 
 
+def _client_sale_invoices(client_id: int, bank_id: int | None) -> list[ShSaleInvoice]:
+    query = ShSaleInvoice.query.filter(ShSaleInvoice.sold_to_client_id == client_id)
+    if bank_id:
+        query = query.filter(
+            db.or_(ShSaleInvoice.bank_id == bank_id, ShSaleInvoice.bank_id.is_(None))
+        )
+    return query.order_by(
+        ShSaleInvoice.invoice_date.asc(), ShSaleInvoice.id.asc()
+    ).all()
+
+
+def _client_ledger_entries(client_id: int) -> list[ShClientLedgerEntry]:
+    query = ShClientLedgerEntry.query.filter(
+        ShClientLedgerEntry.sold_to_client_id == client_id
+    )
+    query = filter_by_bank(query, ShClientLedgerEntry)
+    return query.order_by(
+        ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc()
+    ).all()
+
+
+def get_client_account_balance(
+    client_id: int,
+    before_date=None,
+    before_ledger_id: int | None = None,
+    exclude_invoice_id: int | None = None,
+) -> tuple[float, str]:
+    """Client balance = total billed (sale invoices) minus payments received.
+
+    When a client has sale invoices, those are the bill totals. Client ledger
+    sale rows are ignored in that case to avoid double-counting legacy entries.
+    Client ledger payment rows (including bank sync) reduce the balance.
+    """
+    bank_id = get_current_sh_bank_id()
+    invoice_sales = 0.0
+    for invoice in _client_sale_invoices(client_id, bank_id):
+        if exclude_invoice_id and invoice.id == exclude_invoice_id:
+            continue
+        if before_date and invoice.invoice_date > before_date:
+            continue
+        invoice_sales += float(invoice.total_amount or 0)
+
+    ledger_sales = 0.0
+    total_payments = 0.0
+    for entry in _client_ledger_entries(client_id):
+        if before_date and entry.entry_date > before_date:
+            continue
+        if (
+            before_ledger_id is not None
+            and entry.entry_date == before_date
+            and entry.id >= before_ledger_id
+        ):
+            continue
+        amount = float(entry.total_amount or 0)
+        if _entry_kind(entry) == ENTRY_PAYMENT:
+            total_payments += amount
+        else:
+            ledger_sales += amount
+
+    total_sales = invoice_sales if invoice_sales > 0 else ledger_sales
+    balance = max(0.0, total_sales - total_payments)
+    return balance, "DR"
+
+
 def get_client_ledger_balance_before(
     client_id: int,
     before_date,
     before_id: int | None = None,
+    exclude_invoice_id: int | None = None,
 ) -> tuple[float, str]:
-    """Balance after all client ledger entries before (before_date, before_id).
-
-    When before_id is None, all entries on before_date are included (new row appends last).
-    """
-    query = ShClientLedgerEntry.query.filter(
-        ShClientLedgerEntry.sold_to_client_id == client_id
+    """Balance before a new client ledger row or sale invoice on before_date."""
+    return get_client_account_balance(
+        client_id,
+        before_date=before_date,
+        before_ledger_id=before_id,
+        exclude_invoice_id=exclude_invoice_id,
     )
-    query = filter_by_bank(query, ShClientLedgerEntry)
-    entries = query.order_by(
-        ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc()
-    ).all()
-
-    running = 0.0
-    running_type = "DR"
-    for entry in entries:
-        if entry.entry_date > before_date:
-            break
-        if (
-            before_id is not None
-            and entry.entry_date == before_date
-            and entry.id >= before_id
-        ):
-            break
-        running, running_type = _apply_client_ledger_entry(running, running_type, entry)
-    return running, running_type
 
 
 def get_last_client_ledger_balance(client_id: int) -> tuple[float, str]:
-    query = ShClientLedgerEntry.query.filter(
-        ShClientLedgerEntry.sold_to_client_id == client_id
-    )
-    query = filter_by_bank(query, ShClientLedgerEntry)
-    last = query.order_by(
-        ShClientLedgerEntry.entry_date.desc(), ShClientLedgerEntry.id.desc()
-    ).first()
-    if not last:
-        return 0.0, "DR"
-    return float(last.current_balance or 0), last.current_balance_type or "DR"
+    return get_client_account_balance(client_id)
 
 
 def _apply_supplier_ledger_entry(
