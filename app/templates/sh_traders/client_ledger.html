@@ -98,7 +98,14 @@
 <div class="card">
     <div class="card-header-row">
         <h2>Client Ledger by Party</h2>
-        <a href="{{ url_for('sh_main.client_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print All Clients PDF</a>
+        <div class="header-actions">
+            {% if current_user.can_edit() %}
+            <form method="POST" action="{{ url_for('sh_main.sync_party_ledgers') }}" class="inline-form">
+                <button type="submit" class="btn btn-secondary">Sync Bank Payments</button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('sh_main.client_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print All Clients PDF</a>
+        </div>
     </div>
     {% if grouped_parties %}
     <table class="data-table compact">

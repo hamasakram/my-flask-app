@@ -36,6 +36,7 @@ from app.services.sh_ledger_sync import (
     recalculate_client_ledger_chain,
     recalculate_supplier_ledger_chain,
     sync_bank_entry_to_party_ledgers,
+    sync_unsynced_bank_payments,
 )
 from app.services.sh_manual_ledger import (
     build_client_ledger_from_form,
@@ -610,6 +611,28 @@ def party_balance_api():
 @login_required
 def party_balances_redirect():
     return redirect(url_for("sh_main.client_ledger"))
+
+
+@sh_main_bp.route("/sync-party-ledgers", methods=["POST"])
+@login_required
+def sync_party_ledgers():
+    require_edit_access()
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    stats = sync_unsynced_bank_payments()
+    synced = stats["client_payments"] + stats["supplier_payments"]
+    if synced:
+        flash(
+            f"Synced {stats['client_payments']} client and "
+            f"{stats['supplier_payments']} supplier payment(s) from bank ledger. "
+            "All balances recalculated.",
+            "success",
+        )
+    else:
+        flash("All bank payments are already synced. Balances recalculated.", "success")
+    return redirect(request.referrer or url_for("sh_main.client_ledger"))
 
 
 @sh_main_bp.route("/client-ledger", methods=["GET", "POST"])

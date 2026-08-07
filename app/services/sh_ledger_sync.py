@@ -279,24 +279,32 @@ def remove_linked_party_entries(bank_ledger_id: int) -> None:
     )
 
 
-def backfill_unsynced_bank_payments() -> None:
-    """Import existing bank ledger client/supplier payments into party ledgers."""
+def recalculate_all_ledger_chains() -> None:
+    """Recalculate every client/supplier ledger chain for all banks."""
+    for row in db.session.query(
+        ShClientLedgerEntry.sold_to_client_id, ShClientLedgerEntry.bank_id
+    ).distinct():
+        recalculate_client_ledger_chain(row[0], row[1])
+    for row in db.session.query(
+        ShSupplierLedgerEntry.supplier_company_id, ShSupplierLedgerEntry.bank_id
+    ).distinct():
+        recalculate_supplier_ledger_chain(row[0], row[1])
+
+
+def sync_unsynced_bank_payments() -> dict[str, int]:
+    """Import bank ledger client/supplier payments missing from party ledgers."""
     from sqlalchemy import inspect as sa_inspect
 
     from app.models import AppSetting
     from app.services.sh_bank import get_default_bank
 
-    flag_key = "sh_ledger_sync_v1"
-    if AppSetting.query.filter_by(key=flag_key).first():
-        return
+    stats = {"client_payments": 0, "supplier_payments": 0}
     if not sa_inspect(db.engine).has_table("sh_ledger_entries"):
-        return
+        return stats
 
     default_bank = get_default_bank()
     linked_clients = _linked_client_bank_ids()
     linked_suppliers = _linked_supplier_bank_ids()
-    client_pairs: set[tuple[int, int]] = set()
-    supplier_pairs: set[tuple[int, int]] = set()
 
     client_entries = (
         ShLedgerEntry.query.filter(
@@ -331,7 +339,7 @@ def backfill_unsynced_bank_payments() -> None:
             created_by_id=bank_entry.created_by_id,
         )
         db.session.add(entry)
-        client_pairs.add((bank_entry.client_company_id, bank_entry.bank_id))
+        stats["client_payments"] += 1
 
     supplier_entries = (
         ShLedgerEntry.query.filter(
@@ -366,26 +374,24 @@ def backfill_unsynced_bank_payments() -> None:
             created_by_id=bank_entry.created_by_id,
         )
         db.session.add(entry)
-        supplier_pairs.add((bank_entry.supplier_company_id, bank_entry.bank_id))
+        stats["supplier_payments"] += 1
 
     db.session.flush()
-    for client_id, bank_id in client_pairs:
-        recalculate_client_ledger_chain(client_id, bank_id)
-    for supplier_id, bank_id in supplier_pairs:
-        recalculate_supplier_ledger_chain(supplier_id, bank_id)
+    recalculate_all_ledger_chains()
 
-    # Recalculate all existing client/supplier chains so sale-only rows stay correct
-    for row in db.session.query(
-        ShClientLedgerEntry.sold_to_client_id, ShClientLedgerEntry.bank_id
-    ).distinct():
-        recalculate_client_ledger_chain(row[0], row[1])
-    for row in db.session.query(
-        ShSupplierLedgerEntry.supplier_company_id, ShSupplierLedgerEntry.bank_id
-    ).distinct():
-        recalculate_supplier_ledger_chain(row[0], row[1])
-
-    db.session.add(AppSetting(key=flag_key, value="done"))
+    flag_key = "sh_ledger_sync_v1"
+    setting = AppSetting.query.filter_by(key=flag_key).first()
+    if setting:
+        setting.value = "done"
+    else:
+        db.session.add(AppSetting(key=flag_key, value="done"))
     db.session.commit()
+    return stats
+
+
+def backfill_unsynced_bank_payments() -> None:
+    """Startup hook — always sync any missing bank payments, then recalculate."""
+    sync_unsynced_bank_payments()
 
 
 def fix_mashaallah_packages_bill() -> None:
