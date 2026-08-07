@@ -41,6 +41,8 @@ from app.services.sh_manual_ledger import (
     build_supplier_ledger_from_form,
     get_client_ledger_entries,
     get_supplier_ledger_entries,
+    group_client_ledger_by_party,
+    group_supplier_ledger_by_party,
     next_client_ledger_ref,
     next_supplier_ledger_ref,
 )
@@ -640,7 +642,7 @@ def client_ledger():
 
     return render_template(
         "sh_traders/client_ledger.html",
-        entries=get_client_ledger_entries(),
+        grouped_parties=group_client_ledger_by_party(),
         clients=clients,
         next_reference=next_client_ledger_ref(),
         banks=get_all_banks(),
@@ -651,14 +653,34 @@ def client_ledger():
 @sh_main_bp.route("/client-ledger/pdf")
 @login_required
 def client_ledger_pdf():
-    entries = get_client_ledger_entries()
-    output = generate_client_ledger_pdf(entries)
+    grouped = group_client_ledger_by_party()
+    output = generate_client_ledger_pdf(grouped)
     bank = get_current_sh_bank()
     bank_slug = (bank.name if bank else "ledger").replace(" ", "_")
     return send_file(
         output,
         as_attachment=False,
         download_name=f"client_ledger_{bank_slug}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/client-ledger/pdf/<int:client_id>")
+@login_required
+def client_ledger_party_pdf(client_id):
+    grouped = group_client_ledger_by_party(client_id)
+    if not grouped:
+        flash("No ledger entries for this client.", "warning")
+        return redirect(url_for("sh_main.client_ledger"))
+    client = grouped[0]["party"]
+    output = generate_client_ledger_pdf(grouped)
+    bank = get_current_sh_bank()
+    bank_slug = (bank.name if bank else "ledger").replace(" ", "_")
+    client_slug = client.name.replace(" ", "_")
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=f"client_ledger_{client_slug}_{bank_slug}.pdf",
         mimetype="application/pdf",
     )
 
@@ -697,7 +719,7 @@ def supplier_ledger():
 
     return render_template(
         "sh_traders/supplier_ledger.html",
-        entries=get_supplier_ledger_entries(),
+        grouped_parties=group_supplier_ledger_by_party(),
         suppliers=suppliers,
         next_reference=next_supplier_ledger_ref(),
         banks=get_all_banks(),
@@ -708,14 +730,34 @@ def supplier_ledger():
 @sh_main_bp.route("/supplier-ledger/pdf")
 @login_required
 def supplier_ledger_pdf():
-    entries = get_supplier_ledger_entries()
-    output = generate_supplier_ledger_pdf(entries)
+    grouped = group_supplier_ledger_by_party()
+    output = generate_supplier_ledger_pdf(grouped)
     bank = get_current_sh_bank()
     bank_slug = (bank.name if bank else "ledger").replace(" ", "_")
     return send_file(
         output,
         as_attachment=False,
         download_name=f"supplier_ledger_{bank_slug}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/supplier-ledger/pdf/<int:supplier_id>")
+@login_required
+def supplier_ledger_party_pdf(supplier_id):
+    grouped = group_supplier_ledger_by_party(supplier_id)
+    if not grouped:
+        flash("No ledger entries for this supplier.", "warning")
+        return redirect(url_for("sh_main.supplier_ledger"))
+    supplier = grouped[0]["party"]
+    output = generate_supplier_ledger_pdf(grouped)
+    bank = get_current_sh_bank()
+    bank_slug = (bank.name if bank else "ledger").replace(" ", "_")
+    supplier_slug = supplier.name.replace(" ", "_")
+    return send_file(
+        output,
+        as_attachment=False,
+        download_name=f"supplier_ledger_{supplier_slug}_{bank_slug}.pdf",
         mimetype="application/pdf",
     )
 

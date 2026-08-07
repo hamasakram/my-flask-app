@@ -243,7 +243,221 @@ def _build_ledger_pdf(
     return buffer
 
 
-def generate_client_ledger_pdf(entries: list) -> BytesIO:
+def _build_grouped_ledger_pdf(
+    grouped_parties: list[dict],
+    pdf_title: str,
+    party_label: str,
+    sale_label: str = "Sale",
+) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        topMargin=0.4 * inch,
+        bottomMargin=0.4 * inch,
+        leftMargin=0.45 * inch,
+        rightMargin=0.45 * inch,
+    )
+    styles = getSampleStyleSheet()
+    elements = []
+
+    title_style = ParagraphStyle(
+        "LedgerTitle",
+        parent=styles["Normal"],
+        fontSize=16,
+        textColor=BRAND_RED,
+        fontName="Helvetica-Bold",
+        alignment=TA_CENTER,
+        spaceAfter=6,
+    )
+    subtitle_style = ParagraphStyle(
+        "LedgerSubtitle",
+        parent=styles["Normal"],
+        fontSize=9,
+        textColor=GREY_TEXT,
+        alignment=TA_CENTER,
+        spaceAfter=12,
+    )
+    party_title_style = ParagraphStyle(
+        "PartyTitle",
+        parent=styles["Normal"],
+        fontSize=12,
+        textColor=BRAND_RED,
+        fontName="Helvetica-Bold",
+        spaceBefore=8,
+        spaceAfter=6,
+    )
+    meta_style = ParagraphStyle(
+        "Meta",
+        parent=styles["Normal"],
+        fontSize=9,
+        fontName="Helvetica-Bold",
+        leading=12,
+    )
+
+    if SH_LOGO_PATH.exists():
+        elements.append(
+            Image(str(SH_LOGO_PATH), width=1.4 * inch, height=0.55 * inch, kind="proportional")
+        )
+        elements.append(Spacer(1, 4))
+
+    elements.append(Paragraph(pdf_title, title_style))
+    elements.append(
+        Paragraph(
+            f"Generated {datetime.now().strftime('%d-%m-%Y %H:%M')} · Sami Hamas Traders",
+            subtitle_style,
+        )
+    )
+
+    if not grouped_parties:
+        elements.append(Paragraph("No ledger entries recorded.", meta_style))
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    summary_data = [
+        [party_label, f"Total {sale_label}", "Total Paid", "Remaining Balance"]
+    ]
+    for block in grouped_parties:
+        party = block["party"]
+        summary_data.append(
+            [
+                party.name,
+                f"Rs {_format_money(block['total_sales'])}",
+                f"Rs {_format_money(block['total_payments'])}",
+                _format_balance(block["remaining_balance"], block["remaining_balance_type"]),
+            ]
+        )
+    summary_table = Table(
+        summary_data,
+        colWidths=[3.0 * inch, 2.0 * inch, 2.0 * inch, 2.0 * inch],
+        repeatRows=1,
+    )
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, BORDER_GREY),
+                ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    elements.append(Paragraph("<b>Party Summary</b>", meta_style))
+    elements.append(Spacer(1, 4))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 14))
+
+    txn_header = ["Date", "Ref #", "Type", "Amount", "Balance"]
+    for block in grouped_parties:
+        party = block["party"]
+        elements.append(
+            Paragraph(
+                f"{party_label}: {party.name} — Remaining: "
+                f"{_format_balance(block['remaining_balance'], block['remaining_balance_type'])}",
+                party_title_style,
+            )
+        )
+        txn_rows = [txn_header]
+        for entry in block["entries"]:
+            is_payment = getattr(entry, "entry_type", "sale") == "payment"
+            txn_rows.append(
+                [
+                    entry.entry_date.strftime("%d-%m-%Y"),
+                    entry.reference_number,
+                    "Payment" if is_payment else sale_label,
+                    f"Rs {_format_money(entry.total_amount)}",
+                    _format_balance(entry.current_balance, entry.current_balance_type),
+                ]
+            )
+        txn_table = Table(
+            txn_rows,
+            colWidths=[1.1 * inch, 1.3 * inch, 1.0 * inch, 1.3 * inch, 1.5 * inch],
+            repeatRows=1,
+        )
+        txn_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.5, BORDER_GREY),
+                    ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("TOPPADDING", (0, 0), (-1, -1), 4),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ]
+            )
+        )
+        elements.append(txn_table)
+        elements.append(Spacer(1, 12))
+
+        for entry in block["entries"]:
+            if getattr(entry, "entry_type", "sale") != "payment" and entry.lines:
+                elements.extend(_pdf_entry_detail_blocks(entry, party_label, party.name, meta_style))
+                elements.append(Spacer(1, 8))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+
+def _pdf_entry_detail_blocks(entry, party_label: str, party_name: str, meta_style):
+    elements = []
+    header_data = [
+        [
+            Paragraph(f"<b>Date:</b> {entry.entry_date.strftime('%d-%m-%Y')}", meta_style),
+            Paragraph(f"<b>Ref #:</b> {entry.reference_number}", meta_style),
+            Paragraph(f"<b>{party_label}:</b> {party_name}", meta_style),
+        ],
+    ]
+    header_table = Table(header_data, colWidths=[3.2 * inch, 3.2 * inch, 3.2 * inch])
+    elements.append(header_table)
+    elements.append(Spacer(1, 4))
+
+    line_table = Table(
+        _ledger_line_rows(entry),
+        repeatRows=1,
+        colWidths=[2.8 * inch, 0.7 * inch, 0.6 * inch, 0.8 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch, 0.9 * inch],
+    )
+    line_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.5, BORDER_GREY),
+                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+            ]
+        )
+    )
+    elements.append(line_table)
+    return elements
+
+
+def generate_client_ledger_pdf(grouped_parties: list[dict]) -> BytesIO:
+    return _build_grouped_ledger_pdf(
+        grouped_parties,
+        pdf_title="Client Ledger",
+        party_label="Client",
+        sale_label="Sale",
+    )
+
+
+def generate_supplier_ledger_pdf(grouped_parties: list[dict]) -> BytesIO:
+    return _build_grouped_ledger_pdf(
+        grouped_parties,
+        pdf_title="Supplier Ledger",
+        party_label="Supplier",
+        sale_label="Purchase",
+    )
+
+
+def generate_client_ledger_pdf_legacy(entries: list) -> BytesIO:
     return _build_ledger_pdf(
         entries,
         pdf_title="PDF Sales Ledger",
@@ -252,7 +466,7 @@ def generate_client_ledger_pdf(entries: list) -> BytesIO:
     )
 
 
-def generate_supplier_ledger_pdf(entries: list) -> BytesIO:
+def generate_supplier_ledger_pdf_legacy(entries: list) -> BytesIO:
     return _build_ledger_pdf(
         entries,
         pdf_title="Supplier Ledger",

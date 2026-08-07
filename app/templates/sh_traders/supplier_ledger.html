@@ -5,7 +5,7 @@
 {% from "sh_traders/invoice_line_fields.html" import invoice_line_row, invoice_line_script, party_balance_script %}
 {% block title %}Supplier Ledger - SH Traders{% endblock %}
 {% block content %}
-{{ sh_page_header('Supplier Ledger', 'Manual supplier ledger entries — same fields as Sale Invoice') }}
+{{ sh_page_header('Supplier Ledger', 'Supplier-wise purchases, payments, and remaining balance') }}
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if current_user.can_edit() %}
@@ -97,30 +97,77 @@
 
 <div class="card">
     <div class="card-header-row">
-        <h2>Supplier Ledger Records</h2>
-        <a href="{{ url_for('sh_main.supplier_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print Supplier Ledger PDF</a>
+        <h2>Supplier Ledger by Party</h2>
+        <a href="{{ url_for('sh_main.supplier_ledger_pdf') }}" target="_blank" class="btn btn-primary">Print All Suppliers PDF</a>
     </div>
-    <table class="data-table">
+    {% if grouped_parties %}
+    <table class="data-table compact">
         <thead>
             <tr>
-                <th>Ref #</th>
-                <th>Date</th>
                 <th>Supplier</th>
-                <th>Lines</th>
-                <th>Total</th>
-                <th>Current Balance</th>
+                <th>Total Purchases</th>
+                <th>Total Paid</th>
+                <th>Remaining</th>
+                <th>PDF</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for block in grouped_parties %}
+            <tr>
+                <td><strong>{{ block.party.name }}</strong></td>
+                <td>₨ {{ "{:,.0f}".format(block.total_sales) }}</td>
+                <td>₨ {{ "{:,.0f}".format(block.total_payments) }}</td>
+                <td><strong>₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong></td>
+                <td><a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-sm btn-secondary">PDF</a></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-state">No supplier ledger entries yet</p>
+    {% endif %}
+</div>
+
+{% for block in grouped_parties %}
+<div class="card report-party-block">
+    <div class="report-party-header">
+        <div>
+            <h2>{{ block.party.name }}</h2>
+            <div class="report-party-stats">
+                <span>Purchases: <strong>₨ {{ "{:,.0f}".format(block.total_sales) }}</strong></span>
+                <span>Paid: <strong>₨ {{ "{:,.0f}".format(block.total_payments) }}</strong></span>
+                <span>Remaining: <strong>₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong></span>
+            </div>
+        </div>
+        <a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-secondary">Print PDF</a>
+    </div>
+    <table class="data-table compact">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Ref #</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Balance After</th>
+                <th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
-            {% for entry in entries %}
+            {% for entry in block.entries %}
             <tr>
-                <td><strong>{{ entry.reference_number }}</strong></td>
                 <td>{{ entry.entry_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ entry.supplier.name }}</td>
-                <td>{{ entry.lines|length if entry.entry_type == 'sale' else '—' }}</td>
-                <td>{% if entry.entry_type == 'payment' %}<span class="badge badge-green">Payment</span> {% endif %}₨ {{ "{:,.0f}".format(entry.total_amount) }}</td>
+                <td><strong>{{ entry.reference_number }}</strong></td>
+                <td>
+                    {% if entry.entry_type == 'payment' %}
+                    <span class="badge badge-green">Payment</span>
+                    {% else %}
+                    <span class="badge badge-orange">Purchase</span>
+                    {% endif %}
+                </td>
+                <td>₨ {{ "{:,.0f}".format(entry.total_amount) }}</td>
                 <td><strong>₨ {{ "{:,.0f}".format(entry.current_balance) }} {{ entry.current_balance_type }}</strong></td>
+                <td>{{ entry.notes or '—' }}</td>
                 {% if current_user.can_edit() and not entry.source_bank_ledger_id %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_supplier_ledger', entry_id=entry.id),
@@ -130,12 +177,11 @@
                 <td><small class="field-note">Via Bank Ledger</small></td>
                 {% endif %}
             </tr>
-            {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No supplier ledger entries yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
 </div>
+{% endfor %}
 {% endblock %}
 
 {% block scripts %}

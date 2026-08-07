@@ -1,7 +1,14 @@
 from datetime import datetime
 
 from app import db
-from app.models import ShClientLedgerEntry, ShClientLedgerLine, ShSupplierLedgerEntry, ShSupplierLedgerLine
+from app.models import (
+    ShClientCompany,
+    ShClientLedgerEntry,
+    ShClientLedgerLine,
+    ShSupplierCompany,
+    ShSupplierLedgerEntry,
+    ShSupplierLedgerLine,
+)
 from app.services.sh_bank import filter_by_bank, get_current_sh_bank_id
 from app.services.sh_ledger_sync import (
     balance_after_sale,
@@ -96,6 +103,62 @@ def get_supplier_ledger_entries() -> list[ShSupplierLedgerEntry]:
     return query.order_by(
         ShSupplierLedgerEntry.entry_date.desc(), ShSupplierLedgerEntry.id.desc()
     ).all()
+
+
+def _summarize_party_entries(entries: list) -> dict:
+    total_sales = 0.0
+    total_payments = 0.0
+    for entry in entries:
+        amount = float(entry.total_amount or 0)
+        if getattr(entry, "entry_type", "sale") == "payment":
+            total_payments += amount
+        else:
+            total_sales += amount
+    last = entries[-1] if entries else None
+    return {
+        "total_sales": total_sales,
+        "total_payments": total_payments,
+        "remaining_balance": float(last.current_balance or 0) if last else 0.0,
+        "remaining_balance_type": last.current_balance_type if last else "DR",
+    }
+
+
+def group_client_ledger_by_party(party_id: int | None = None) -> list[dict]:
+    parties = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    if party_id:
+        parties = [p for p in parties if p.id == party_id]
+
+    grouped = []
+    for party in parties:
+        query = ShClientLedgerEntry.query.filter_by(sold_to_client_id=party.id)
+        query = filter_by_bank(query, ShClientLedgerEntry)
+        entries = query.order_by(
+            ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc()
+        ).all()
+        if not entries:
+            continue
+        summary = _summarize_party_entries(entries)
+        grouped.append({"party": party, "entries": entries, **summary})
+    return grouped
+
+
+def group_supplier_ledger_by_party(party_id: int | None = None) -> list[dict]:
+    parties = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    if party_id:
+        parties = [p for p in parties if p.id == party_id]
+
+    grouped = []
+    for party in parties:
+        query = ShSupplierLedgerEntry.query.filter_by(supplier_company_id=party.id)
+        query = filter_by_bank(query, ShSupplierLedgerEntry)
+        entries = query.order_by(
+            ShSupplierLedgerEntry.entry_date.asc(), ShSupplierLedgerEntry.id.asc()
+        ).all()
+        if not entries:
+            continue
+        summary = _summarize_party_entries(entries)
+        grouped.append({"party": party, "entries": entries, **summary})
+    return grouped
 
 
 def build_client_ledger_from_form(form, user_id: int) -> ShClientLedgerEntry:
