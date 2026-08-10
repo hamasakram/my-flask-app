@@ -98,9 +98,22 @@
 
 <div class="card highlight-card">
     <h2>Use Used Ink (kg)</h2>
-    <p class="field-note">Enter kg used — automatically subtracts from the balance shown above.</p>
-    <form method="POST" class="form-grid">
+    <p class="field-note">Pick from stock below or enter ink and shade — shade must match the stock row (e.g. GLX 0049).</p>
+    <form method="POST" class="form-grid" id="use-used-ink-form">
         <input type="hidden" name="form_type" value="use">
+        {% if balances %}
+        <div class="form-group full-width">
+            <label for="use_stock_pick">Pick from current stock</label>
+            <select id="use_stock_pick">
+                <option value="">— Or type manually below —</option>
+                {% for row in balances if row.balance_kg > 0.001 %}
+                <option value="{{ row.ink_name }}|{{ row.shade_name if row.shade_name != '—' else '' }}|{{ row.balance_kg }}">
+                    {{ row.ink_name }} / {{ row.shade_name }} — {{ "%.1f"|format(row.balance_kg) }} kg available
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
         <div class="form-group">
             <label for="use_ink_name">Ink Name</label>
             <input type="text" id="use_ink_name" name="ink_name" list="use-ink-names-list" required placeholder="Select ink name">
@@ -112,12 +125,13 @@
         </div>
         <div class="form-group">
             <label for="use_shade_name">Shade Name</label>
-            <input type="text" id="use_shade_name" name="shade_name" list="use-shade-names-list" placeholder="Select shade">
+            <input type="text" id="use_shade_name" name="shade_name" list="use-shade-names-list" placeholder="Required if ink has multiple shades">
             <datalist id="use-shade-names-list">
                 {% for name in shade_names %}
                 <option value="{{ name }}"></option>
                 {% endfor %}
             </datalist>
+            <small class="field-note" id="use_available_hint"></small>
         </div>
         <div class="form-group">
             <label for="use_quantity_kg">Quantity Used (kg)</label>
@@ -188,4 +202,62 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var stockPick = document.getElementById('use_stock_pick');
+    var inkInput = document.getElementById('use_ink_name');
+    var shadeInput = document.getElementById('use_shade_name');
+    var hint = document.getElementById('use_available_hint');
+    var stockRows = [
+        {% for row in balances if row.balance_kg > 0.001 %}
+        { ink: {{ row.ink_name|tojson }}, shade: {{ (row.shade_name if row.shade_name != '—' else '')|tojson }}, balance: {{ row.balance_kg }} },
+        {% endfor %}
+    ];
+
+    function updateHint() {
+        if (!hint || !inkInput) return;
+        var ink = (inkInput.value || '').trim().toLowerCase();
+        var shade = (shadeInput && shadeInput.value || '').trim().toLowerCase();
+        var matches = stockRows.filter(function (row) {
+            return row.ink.toLowerCase() === ink;
+        });
+        if (!ink || !matches.length) {
+            hint.textContent = '';
+            return;
+        }
+        if (shade) {
+            var exact = matches.find(function (row) {
+                return (row.shade || '').toLowerCase() === shade;
+            });
+            hint.textContent = exact
+                ? 'Available: ' + exact.balance.toFixed(1) + ' kg'
+                : 'No stock for this ink/shade combination';
+            return;
+        }
+        if (matches.length === 1) {
+            hint.textContent = 'Available: ' + matches[0].balance.toFixed(1) + ' kg'
+                + (matches[0].shade ? ' (shade: ' + matches[0].shade + ')' : '');
+            return;
+        }
+        hint.textContent = 'Select shade — ' + matches.map(function (row) {
+            return (row.shade || '—') + ': ' + row.balance.toFixed(1) + ' kg';
+        }).join(', ');
+    }
+
+    if (stockPick) {
+        stockPick.addEventListener('change', function () {
+            if (!stockPick.value) return;
+            var parts = stockPick.value.split('|');
+            if (inkInput) inkInput.value = parts[0] || '';
+            if (shadeInput) shadeInput.value = parts[1] || '';
+            updateHint();
+        });
+    }
+    if (inkInput) inkInput.addEventListener('input', updateHint);
+    if (shadeInput) shadeInput.addEventListener('input', updateHint);
+})();
+</script>
 {% endblock %}

@@ -98,25 +98,75 @@ def get_used_ink_balance(ink_name: str, shade_name: str = "") -> float:
     if not cleaned_ink:
         return 0.0
 
-    added = float(
-        db.session.query(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
-        .filter(
-            func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
-            func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
-            UsedInkStock.entry_type == UsedInkStock.ENTRY_ADD,
+    if cleaned_shade:
+        added = float(
+            db.session.query(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
+            .filter(
+                func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
+                func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
+                UsedInkStock.entry_type == UsedInkStock.ENTRY_ADD,
+            )
+            .scalar()
         )
-        .scalar()
-    )
-    used = float(
-        db.session.query(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
-        .filter(
-            func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
-            func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
-            UsedInkStock.entry_type == UsedInkStock.ENTRY_USE,
+        used = float(
+            db.session.query(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
+            .filter(
+                func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
+                func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
+                UsedInkStock.entry_type == UsedInkStock.ENTRY_USE,
+            )
+            .scalar()
         )
-        .scalar()
+        return added - used
+
+    return sum(
+        row["balance_kg"]
+        for row in get_used_ink_balances()
+        if row["ink_name"].lower() == cleaned_ink.lower()
     )
-    return added - used
+
+
+def _balances_for_ink(ink_name: str) -> list[dict]:
+    cleaned_ink = (ink_name or "").strip().lower()
+    if not cleaned_ink:
+        return []
+    return [
+        row
+        for row in get_used_ink_balances()
+        if row["ink_name"].lower() == cleaned_ink and row["balance_kg"] > 0.001
+    ]
+
+
+def _shade_from_balance_row(row: dict) -> str:
+    shade = row.get("shade_name") or ""
+    return "" if shade == "—" else shade
+
+
+def resolve_used_ink_for_usage(ink_name: str, shade_name: str) -> tuple[str, str, float]:
+    """Resolve ink/shade for a usage entry and return the available balance."""
+    resolved_ink = ensure_used_ink_name(ink_name)
+    cleaned_shade = (shade_name or "").strip()
+
+    if cleaned_shade:
+        resolved_shade = ensure_used_ink_shade(cleaned_shade)
+        balance = get_used_ink_balance(resolved_ink, resolved_shade)
+        return resolved_ink, resolved_shade, balance
+
+    matches = _balances_for_ink(resolved_ink)
+    if not matches:
+        return resolved_ink, "", 0.0
+    if len(matches) == 1:
+        resolved_shade = _shade_from_balance_row(matches[0])
+        return resolved_ink, resolved_shade, matches[0]["balance_kg"]
+
+    total = sum(row["balance_kg"] for row in matches)
+    options = ", ".join(
+        f"{_shade_from_balance_row(row) or '—'} ({row['balance_kg']:.1f} kg)"
+        for row in matches
+    )
+    raise ValueError(
+        f"Please select a shade for {resolved_ink}. Stock available by shade: {options}."
+    )
 
 
 def get_used_ink_balances() -> list[dict]:
@@ -216,14 +266,16 @@ def record_used_ink_usage(
     notes: str = "",
     created_by_id: Optional[int] = None,
 ) -> UsedInkStock:
-    balance = get_used_ink_balance(ink_name, shade_name)
+    resolved_ink, resolved_shade, balance = resolve_used_ink_for_usage(ink_name, shade_name)
     if quantity_kg > balance + 0.001:
+        shade_label = resolved_shade or "—"
         raise ValueError(
-            f"Not enough used ink stock. Available: {balance:.1f} kg, requested: {quantity_kg:.1f} kg."
+            f"Not enough used ink stock for {resolved_ink} / {shade_label}. "
+            f"Available: {balance:.1f} kg, requested: {quantity_kg:.1f} kg."
         )
     return record_used_ink_stock(
-        ink_name=ink_name,
-        shade_name=shade_name,
+        ink_name=resolved_ink,
+        shade_name=resolved_shade,
         quantity_kg=quantity_kg,
         entry_date=entry_date,
         notes=notes,
