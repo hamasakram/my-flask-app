@@ -14,6 +14,7 @@ from app.models import (
     ShPartnerCompany,
     ShPaymentReceipt,
     ShPaymentScreenshot,
+    ShProfitLossRecord,
     ShPurchase,
     ShSaleInvoice,
     ShSupplierCompany,
@@ -64,12 +65,20 @@ from app.services.sh_sale_invoice import (
     save_invoice_lines,
 )
 from app.services.sh_sale_invoice_pdf import generate_sale_invoice_pdf
+from app.services.sh_profit_loss import (
+    apply_record_fields,
+    build_record_from_form,
+    get_dashboard_stats as get_profit_loss_dashboard_stats,
+    scoped_records_query,
+)
+from app.services.sh_profit_loss_pdf import (
+    generate_profit_loss_record_pdf,
+    generate_profit_loss_report_pdf,
+)
 from app.services.sh_traders import (
     calculate_total_amount,
     get_current_ledger_balance,
-    get_dashboard_stats,
     get_ledger_rows,
-    parse_multi_item_purchase_lines,
 )
 from app.services.sh_uploads import (
     apply_gate_pass_screenshot,
@@ -175,7 +184,7 @@ def banks():
 def dashboard():
     from datetime import date
 
-    stats = get_dashboard_stats(date.today())
+    stats = get_profit_loss_dashboard_stats(date.today())
     return render_template(
         "sh_traders/dashboard.html",
         stats=stats,
@@ -348,162 +357,83 @@ def partners():
     )
 
 
-@sh_main_bp.route("/purchases", methods=["GET", "POST"])
+@sh_main_bp.route("/purchases")
 @login_required
 def purchases():
+    return redirect(url_for("sh_main.profit_loss"))
+
+
+@sh_main_bp.route("/profit-loss", methods=["GET", "POST"])
+@login_required
+def profit_loss():
     if not get_current_sh_bank():
         flash("Add a bank first.", "warning")
         return redirect(url_for("sh_main.banks"))
 
-    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
-    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
-
     if request.method == "POST":
         require_edit_access()
-        if not suppliers:
-            flash("Add at least one supplier company first.", "danger")
-            return redirect(url_for("sh_main.suppliers"))
-        if not clients:
-            flash("Add at least one client company (Purchased For) first.", "danger")
-            return redirect(url_for("sh_main.clients"))
-
-        date_purchased = request.form.get("date_purchased")
-        supplier_id = request.form.get("supplier_company_id", type=int)
-        client_id = request.form.get("client_company_id", type=int)
-        notes = request.form.get("notes", "").strip()
-        multi_mode = request.form.get("multi_mode") == "1"
-
-        if not date_purchased or not supplier_id or not client_id:
-            flash("Date, supplier, and purchased-for are required.", "danger")
-            return redirect(url_for("sh_main.purchases"))
-
-        parsed_date = _parse_date(date_purchased)
-
-        if multi_mode:
-            try:
-                lines = parse_multi_item_purchase_lines(request.form)
-            except ValueError as exc:
-                flash(str(exc), "danger")
-                return redirect(url_for("sh_main.purchases"))
-
-            created = 0
-            item_names = []
-            for line in lines:
-                client_rate = line["client_rate_per_kg"]
-                total_kg = line["total_kg"]
-                rate_per_kg = line["rate_per_kg"]
-                purchase = ShPurchase(
-                    date_purchased=parsed_date,
-                    supplier_company_id=supplier_id,
-                    material_name=line["material_name"],
-                    size=line["size"],
-                    micron=line["micron"] or None,
-                    total_kg=total_kg,
-                    rate_per_1000_kg=rate_per_kg,
-                    total_amount=calculate_total_amount(total_kg, rate_per_kg),
-                    paid_amount=0,
-                    client_rate_per_kg=client_rate if client_rate > 0 else None,
-                    client_total_amount=(
-                        calculate_total_amount(total_kg, client_rate)
-                        if client_rate > 0
-                        else None
-                    ),
-                    client_company_id=client_id,
-                    notes=notes or None,
-                    created_by_id=current_user.id,
-                )
-                ensure_bank_on_create(purchase)
-                db.session.add(purchase)
-                db.session.flush()
-                try:
-                    apply_partnership_from_form(purchase, request.form)
-                except ValueError as exc:
-                    db.session.rollback()
-                    flash(str(exc), "danger")
-                    return redirect(url_for("sh_main.purchases"))
-                item_names.append(line["material_name"])
-                created += 1
-
-            log_audit(
-                current_user.id,
-                "CREATE",
-                "ShPurchase",
-                None,
-                f"SH multi-item purchase: {created} items",
-            )
-            db.session.commit()
-            flash(
-                f"{created} purchase records saved ({', '.join(item_names[:3])}{'…' if created > 3 else ''}).",
-                "success",
-            )
-            return redirect(url_for("sh_main.purchases"))
-
-        material_name = request.form.get("material_name", "").strip()
-        size = request.form.get("size", "").strip()
-        micron = request.form.get("micron", "").strip()
-        rate_per_1000 = request.form.get("rate_per_1000_kg", type=float)
-        client_rate = request.form.get("client_rate_per_kg", type=float) or 0
-        total_kg = request.form.get("total_kg", type=float)
-        paid_amount = request.form.get("paid_amount", type=float) or 0
-
-        if (
-            not material_name
-            or not rate_per_1000
-            or rate_per_1000 <= 0
-            or not total_kg
-            or total_kg <= 0
-        ):
-            flash("Material, rate, and total KG are required.", "danger")
-            return redirect(url_for("sh_main.purchases"))
-
-        purchase = ShPurchase(
-            date_purchased=parsed_date,
-            supplier_company_id=supplier_id,
-            material_name=material_name,
-            size=size,
-            micron=micron or None,
-            total_kg=total_kg,
-            rate_per_1000_kg=rate_per_1000,
-            total_amount=calculate_total_amount(total_kg, rate_per_1000),
-            paid_amount=paid_amount,
-            client_rate_per_kg=client_rate if client_rate > 0 else None,
-            client_total_amount=(
-                calculate_total_amount(total_kg, client_rate) if client_rate > 0 else None
-            ),
-            client_company_id=client_id,
-            notes=notes or None,
-            created_by_id=current_user.id,
-        )
-        ensure_bank_on_create(purchase)
-        db.session.add(purchase)
-        db.session.flush()
         try:
-            apply_partnership_from_form(purchase, request.form)
+            data = build_record_from_form(request.form)
         except ValueError as exc:
-            db.session.rollback()
             flash(str(exc), "danger")
-            return redirect(url_for("sh_main.purchases"))
+            return redirect(url_for("sh_main.profit_loss"))
+
+        record = ShProfitLossRecord(created_by_id=current_user.id)
+        ensure_bank_on_create(record)
+        apply_record_fields(record, data, _parse_date(data["record_date"]))
+        db.session.add(record)
+        db.session.flush()
         log_audit(
             current_user.id,
             "CREATE",
-            "ShPurchase",
-            purchase.id,
-            f"SH purchase: {material_name} {total_kg} kg",
+            "ShProfitLossRecord",
+            record.id,
+            f"SH P/L: {record.material_name} ({record.broker_label})",
         )
         db.session.commit()
-        flash("Purchase recorded.", "success")
-        return redirect(url_for("sh_main.purchases"))
+        flash("Profit / loss record saved.", "success")
+        return redirect(url_for("sh_main.profit_loss"))
 
-    purchase_list = _bank_purchases().all()
-    partner_list = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+    records = scoped_records_query().all()
+    from app.services.sh_profit_loss import get_broker_summaries
+
     return render_template(
-        "sh_traders/purchases.html",
-        purchases=purchase_list,
-        suppliers=suppliers,
-        clients=clients,
-        partners=partner_list,
+        "sh_traders/profit_loss.html",
+        records=records,
+        broker_summaries=get_broker_summaries(records),
+        brokers=ShProfitLossRecord.BROKER_LABELS,
         banks=get_all_banks(),
         current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/profit-loss/pdf")
+@login_required
+def profit_loss_report_pdf():
+    broker = request.args.get("broker")
+    if broker and broker not in ShProfitLossRecord.BROKER_LABELS:
+        abort(400)
+    output = generate_profit_loss_report_pdf(broker=broker or None)
+    suffix = f"_{broker}" if broker else ""
+    return send_file(
+        output,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"sh_profit_loss{suffix}_{datetime.now().strftime('%Y%m%d')}.pdf",
+    )
+
+
+@sh_main_bp.route("/profit-loss/<int:record_id>/pdf")
+@login_required
+def profit_loss_record_pdf(record_id):
+    record = ShProfitLossRecord.query.get_or_404(record_id)
+    output = generate_profit_loss_record_pdf(record)
+    safe_name = record.material_name.replace(" ", "_")[:30]
+    return send_file(
+        output,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"pl_{record.id}_{safe_name}.pdf",
     )
 
 

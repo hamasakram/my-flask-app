@@ -20,6 +20,7 @@ from app.module_context import (
 from app.services.glue_chemical_inventory import chemical_live_stock, glue_live_stock
 from app.services.inventory import calculate_live_stock
 from app.services.materials_inventory import calculate_live_stock as material_live_stock
+from app.services.sh_profit_loss import get_profit_loss_pdf_rows
 from app.services.sh_traders import get_ledger_pdf_rows, get_purchase_pdf_rows
 
 LOGO_PATH = Path(__file__).resolve().parent.parent / "static" / "images" / "rn-colour-logo.png"
@@ -77,19 +78,18 @@ MODULE_PDF_FIELDS = {
         ("status", "Status"),
     ],
     MODULE_SH_TRADERS: [
-        ("date", "Date Purchased"),
-        ("supplier", "Supplier"),
+        ("date", "Date"),
         ("material", "Material"),
         ("size", "Size"),
-        ("micron", "Micron"),
-        ("total_kg", "Total KG"),
-        ("rate_1000", "Rate / KG"),
-        ("total_amount", "Total Amount"),
-        ("paid", "Paid"),
-        ("amount_due", "Amount Due"),
-        ("client", "Purchased For"),
-        ("client_rate", "Client Rate / KG"),
-        ("client_total", "Client Total Amount"),
+        ("purchase_kg", "Pur. KG"),
+        ("purchase_rate", "Pur. Rate"),
+        ("purchase_total", "Pur. Total"),
+        ("sold_kg", "Sold KG"),
+        ("sold_rate", "Sold Rate"),
+        ("sold_total", "Sold Total"),
+        ("profit", "Profit"),
+        ("loss", "Loss"),
+        ("broker", "Broker"),
         ("notes", "Notes"),
     ],
 }
@@ -119,7 +119,9 @@ def get_module_rows(module: str, company_id=None, report_type: str = "purchases"
     if module == MODULE_SH_TRADERS:
         if report_type == "ledger":
             return get_ledger_pdf_rows()
-        return get_purchase_pdf_rows(supplier_id=company_id)
+        if report_type == "profit_loss":
+            return get_profit_loss_pdf_rows()
+        return get_profit_loss_pdf_rows()
     return []
 
 

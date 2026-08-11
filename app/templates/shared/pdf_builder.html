@@ -24,7 +24,7 @@
                 data-builder-url="{{ url_for('pdf.builder', module=module) }}"
                 onchange="window.location.href = this.dataset.builderUrl + '&report_type=' + encodeURIComponent(this.value)"
             >
-                <option value="purchases" {% if report_type == 'purchases' %}selected{% endif %}>Purchases</option>
+                <option value="profit_loss" {% if report_type in ('profit_loss', 'purchases') %}selected{% endif %}>Profit / Loss Records</option>
                 <option value="ledger" {% if report_type == 'ledger' %}selected{% endif %}>Payment Ledger</option>
             </select>
         </div>

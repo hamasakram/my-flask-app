@@ -34,6 +34,7 @@ from app.models import (
     UsedInkStock,
     ShPaymentScreenshot,
     ShPartnerCompany,
+    ShProfitLossRecord,
     ShPurchase,
     ShSupplierCompany,
     ShSupplierLedgerEntry,
@@ -491,6 +492,19 @@ def delete_sh_partner(company_id):
         "ShPartnerCompany",
         f"Deleted SH partner: {company.name}",
         url_for("sh_main.partners"),
+    )
+
+
+@stock_deletes_bp.route("/sh/profit-loss/<int:record_id>", methods=["POST"])
+@login_required
+def delete_sh_profit_loss(record_id):
+    require_edit_access()
+    record = ShProfitLossRecord.query.get_or_404(record_id)
+    return _delete_entity(
+        record,
+        "ShProfitLossRecord",
+        f"Deleted SH profit/loss #{record_id}",
+        url_for("sh_main.profit_loss"),
     )
 
 

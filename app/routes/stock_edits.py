@@ -33,6 +33,7 @@ from app.models import (
     ShGatePassScreenshot,
     ShPaymentScreenshot,
     ShPartnerCompany,
+    ShProfitLossRecord,
     ShPurchase,
     ShSupplierCompany,
     ShSupplierLedgerEntry,
@@ -56,6 +57,7 @@ from app.services.sh_sale_invoice import (
     save_invoice_lines,
 )
 from app.services.sh_traders import calculate_total_amount
+from app.services.sh_profit_loss import apply_record_fields, build_record_from_form
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
@@ -1283,6 +1285,39 @@ def edit_sh_client(company_id):
         company=company,
         module_label="SH Traders (Client)",
         cancel_url=url_for("sh_main.clients"),
+    )
+
+
+@stock_edits_bp.route("/sh/profit-loss/<int:record_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_profit_loss(record_id):
+    record = ShProfitLossRecord.query.get_or_404(record_id)
+
+    if request.method == "POST":
+        require_edit_access()
+        try:
+            data = build_record_from_form(request.form)
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("stock_edits.edit_sh_profit_loss", record_id=record_id))
+
+        apply_record_fields(record, data, _parse_date(data["record_date"]))
+        log_audit(
+            current_user.id,
+            "UPDATE",
+            "ShProfitLossRecord",
+            record.id,
+            f"Updated SH profit/loss #{record_id}",
+        )
+        db.session.commit()
+        flash("Record updated.", "success")
+        return redirect(url_for("sh_main.profit_loss"))
+
+    return render_template(
+        "sh_traders/edit_profit_loss.html",
+        record=record,
+        brokers=ShProfitLossRecord.BROKER_LABELS,
+        cancel_url=url_for("sh_main.profit_loss"),
     )
 
 

@@ -539,6 +539,48 @@ class ShPartnerCompany(db.Model):
     )
 
 
+class ShProfitLossRecord(db.Model):
+    """Standalone profit/loss record — does not affect bank or party ledgers."""
+
+    __tablename__ = "sh_profit_loss_records"
+
+    BROKER_HAMAS = "hamas"
+    BROKER_AKRAM = "akram"
+    BROKER_LABELS = {
+        BROKER_HAMAS: "Hamas Broker",
+        BROKER_AKRAM: "Akram Broker (Askari)",
+    }
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
+    record_date = db.Column(db.Date, nullable=False)
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    purchase_kg = db.Column(db.Float, nullable=False)
+    purchase_rate_per_kg = db.Column(db.Float, nullable=False)
+    purchase_total = db.Column(db.Float, nullable=False)
+    sold_kg = db.Column(db.Float, nullable=False)
+    sold_rate_per_kg = db.Column(db.Float, nullable=False)
+    sold_total = db.Column(db.Float, nullable=False)
+    profit_amount = db.Column(db.Float, nullable=False, default=0)
+    loss_amount = db.Column(db.Float, nullable=False, default=0)
+    broker = db.Column(db.String(20), nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def broker_label(self) -> str:
+        return self.BROKER_LABELS.get(self.broker, self.broker)
+
+    @property
+    def net_result(self) -> float:
+        return float(self.sold_total or 0) - float(self.purchase_total or 0)
+
+
 class ShPurchase(db.Model):
     __tablename__ = "sh_purchases"
 

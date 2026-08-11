@@ -22,14 +22,17 @@ def builder():
 
     set_active_module(module)
 
-    report_type = request.args.get("report_type") or request.form.get("report_type") or "purchases"
+    default_report = "profit_loss" if module == MODULE_SH_TRADERS else "purchases"
+    report_type = (
+        request.args.get("report_type") or request.form.get("report_type") or default_report
+    )
     fields = get_pdf_fields(module, report_type=report_type)
     companies = _companies_for_module(module, report_type=report_type)
 
     if request.method == "POST":
         selected = request.form.getlist("fields")
         company_id = request.form.get("company_id", type=int)
-        report_type = request.form.get("report_type") or "purchases"
+        report_type = request.form.get("report_type") or default_report
         if not selected:
             from flask import flash
 
@@ -72,8 +75,8 @@ def _companies_for_module(module, report_type="purchases"):
         "glue": get_glue_companies,
         "chemicals": get_chemical_companies,
     }
-    if module == MODULE_SH_TRADERS and report_type == "purchases":
-        return ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    if module == MODULE_SH_TRADERS and report_type in ("purchases", "profit_loss"):
+        return []
     getter = mapping.get(module)
     if getter:
         return getter()

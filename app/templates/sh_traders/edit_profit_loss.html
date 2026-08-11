@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Edit Profit / Loss - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Edit Profit / Loss Record') }}
+
+<div class="card">
+    <form method="POST" class="form-grid" id="pl-form">
+        <div class="form-group">
+            <label for="record_date">Date</label>
+            <input type="date" id="record_date" name="record_date" value="{{ record.record_date.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="broker">Purchased From (Broker)</label>
+            <select id="broker" name="broker" required>
+                {% for key, label in brokers.items() %}
+                <option value="{{ key }}" {% if record.broker == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" value="{{ record.material_name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size" value="{{ record.size or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="purchase_kg">Quantity Purchased (Total KG)</label>
+            <input type="number" id="purchase_kg" name="purchase_kg" step="0.01" min="0.01" value="{{ record.purchase_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_rate_per_kg">Purchase Rate / KG</label>
+            <input type="number" id="purchase_rate_per_kg" name="purchase_rate_per_kg" step="0.01" min="0.01" value="{{ record.purchase_rate_per_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_total_display">Purchase Total (auto)</label>
+            <input type="text" id="purchase_total_display" readonly class="readonly-field">
+        </div>
+        <div class="form-group">
+            <label for="sold_kg">Total Sold (KG)</label>
+            <input type="number" id="sold_kg" name="sold_kg" step="0.01" min="0.01" value="{{ record.sold_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_rate_per_kg">Sold Rate / KG</label>
+            <input type="number" id="sold_rate_per_kg" name="sold_rate_per_kg" step="0.01" min="0.01" value="{{ record.sold_rate_per_kg }}" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_total_display">Sold Total (auto)</label>
+            <input type="text" id="sold_total_display" readonly class="readonly-field">
+        </div>
+        <div class="form-group">
+            <label>Profit (auto)</label>
+            <input type="text" id="profit_display" readonly class="readonly-field text-success">
+        </div>
+        <div class="form-group">
+            <label>Loss (auto)</label>
+            <input type="text" id="loss_display" readonly class="readonly-field text-danger">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes (optional)</label>
+            <textarea id="notes" name="notes" rows="2">{{ record.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Update</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+            <a href="{{ url_for('sh_main.profit_loss_record_pdf', record_id=record.id) }}" class="btn btn-secondary">Download PDF</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const ids = ['purchase_kg', 'purchase_rate_per_kg', 'sold_kg', 'sold_rate_per_kg'];
+    const purchaseTotal = document.getElementById('purchase_total_display');
+    const soldTotal = document.getElementById('sold_total_display');
+    const profitDisplay = document.getElementById('profit_display');
+    const lossDisplay = document.getElementById('loss_display');
+
+    function formatAmount(value) {
+        return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function updateTotals() {
+        const pKg = parseFloat(document.getElementById('purchase_kg').value) || 0;
+        const pRate = parseFloat(document.getElementById('purchase_rate_per_kg').value) || 0;
+        const sKg = parseFloat(document.getElementById('sold_kg').value) || 0;
+        const sRate = parseFloat(document.getElementById('sold_rate_per_kg').value) || 0;
+        const pTotal = pKg * pRate;
+        const sTotal = sKg * sRate;
+        purchaseTotal.value = formatAmount(pTotal);
+        soldTotal.value = formatAmount(sTotal);
+        const net = sTotal - pTotal;
+        if (net >= 0) {
+            profitDisplay.value = formatAmount(net);
+            lossDisplay.value = '0.00';
+        } else {
+            profitDisplay.value = '0.00';
+            lossDisplay.value = formatAmount(Math.abs(net));
+        }
+    }
+
+    ids.forEach(function (id) {
+        document.getElementById(id)?.addEventListener('input', updateTotals);
+    });
+    updateTotals();
+})();
+</script>
+{% endblock %}

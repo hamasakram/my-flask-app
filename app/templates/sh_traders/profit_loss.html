@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Profit / Loss Records - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Profit / Loss Records', 'Track purchase vs sale profit or loss by broker — does not affect ledgers') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+<p class="field-note balance-note">
+    These records are for your internal profit/loss tracking only.
+    Bank payments, client ledger, and supplier ledger are <strong>not</strong> changed here.
+</p>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>New Record</h2>
+    <form method="POST" class="form-grid" id="pl-form">
+        <div class="form-group">
+            <label for="record_date">Date</label>
+            <input type="date" id="record_date" name="record_date" required>
+        </div>
+        <div class="form-group">
+            <label for="broker">Purchased From (Broker)</label>
+            <select id="broker" name="broker" required>
+                <option value="">Select broker</option>
+                {% for key, label in brokers.items() %}
+                <option value="{{ key }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size">
+        </div>
+
+        <div class="form-group full-width"><h3>Purchase</h3></div>
+        <div class="form-group">
+            <label for="purchase_kg">Quantity Purchased (Total KG)</label>
+            <input type="number" id="purchase_kg" name="purchase_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_rate_per_kg">Purchase Rate / KG</label>
+            <input type="number" id="purchase_rate_per_kg" name="purchase_rate_per_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_total_display">Purchase Total (auto)</label>
+            <input type="text" id="purchase_total_display" readonly class="readonly-field" value="0.00">
+            <small class="field-note">KG × Purchase Rate / KG</small>
+        </div>
+
+        <div class="form-group full-width"><h3>Sale</h3></div>
+        <div class="form-group">
+            <label for="sold_kg">Total Sold (KG)</label>
+            <input type="number" id="sold_kg" name="sold_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_rate_per_kg">Sold Rate / KG</label>
+            <input type="number" id="sold_rate_per_kg" name="sold_rate_per_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="sold_total_display">Sold Total (auto)</label>
+            <input type="text" id="sold_total_display" readonly class="readonly-field" value="0.00">
+            <small class="field-note">KG × Sold Rate / KG</small>
+        </div>
+
+        <div class="form-group full-width highlight-totals purchase-entry-grid">
+            <div class="form-group">
+                <label>Profit (auto)</label>
+                <input type="text" id="profit_display" readonly class="readonly-field text-success" value="0.00">
+            </div>
+            <div class="form-group">
+                <label>Loss (auto)</label>
+                <input type="text" id="loss_display" readonly class="readonly-field text-danger" value="0.00">
+            </div>
+        </div>
+
+        <div class="form-group full-width">
+            <label for="notes">Notes (optional)</label>
+            <textarea id="notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Record</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="stats-grid">
+    {% for key, bucket in broker_summaries.items() %}
+    <div class="stat-card">
+        <span class="stat-label">{{ bucket.label }}</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(bucket.profit - bucket.loss) }}</span>
+        <small class="field-note">Profit ₨ {{ "{:,.2f}".format(bucket.profit) }} · Loss ₨ {{ "{:,.2f}".format(bucket.loss) }} · {{ bucket.count }} record(s)</small>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card">
+    <div class="card-header-row">
+        <h2>Records</h2>
+        <div class="quick-actions inline-actions">
+            <a href="{{ url_for('sh_main.profit_loss_report_pdf') }}" class="btn btn-secondary">Download All PDF</a>
+            <a href="{{ url_for('sh_main.profit_loss_report_pdf', broker='hamas') }}" class="btn btn-secondary">Hamas PDF</a>
+            <a href="{{ url_for('sh_main.profit_loss_report_pdf', broker='akram') }}" class="btn btn-secondary">Akram PDF</a>
+        </div>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Material</th>
+                    <th>Size</th>
+                    <th>Pur. KG</th>
+                    <th>Pur. Rate</th>
+                    <th>Pur. Total</th>
+                    <th>Sold KG</th>
+                    <th>Sold Rate</th>
+                    <th>Sold Total</th>
+                    <th>Profit</th>
+                    <th>Loss</th>
+                    <th>Broker</th>
+                    <th>PDF</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in records %}
+                <tr>
+                    <td>{{ r.record_date.strftime('%d-%m-%Y') }}</td>
+                    <td><strong>{{ r.material_name }}</strong></td>
+                    <td>{{ r.size or '—' }}</td>
+                    <td>{{ "{:,.1f}".format(r.purchase_kg) }}</td>
+                    <td>{{ "{:,.2f}".format(r.purchase_rate_per_kg) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(r.purchase_total) }}</td>
+                    <td>{{ "{:,.1f}".format(r.sold_kg) }}</td>
+                    <td>{{ "{:,.2f}".format(r.sold_rate_per_kg) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(r.sold_total) }}</td>
+                    <td class="text-success">{% if r.profit_amount %}₨ {{ "{:,.2f}".format(r.profit_amount) }}{% else %}—{% endif %}</td>
+                    <td class="text-danger">{% if r.loss_amount %}₨ {{ "{:,.2f}".format(r.loss_amount) }}{% else %}—{% endif %}</td>
+                    <td>{{ r.broker_label }}</td>
+                    <td><a href="{{ url_for('sh_main.profit_loss_record_pdf', record_id=r.id) }}" class="btn btn-secondary btn-sm">PDF</a></td>
+                    {% if current_user.can_edit() %}
+                    {{ row_actions(
+                        url_for('stock_edits.edit_sh_profit_loss', record_id=r.id),
+                        url_for('stock_deletes.delete_sh_profit_loss', record_id=r.id)
+                    ) }}
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{% if current_user.can_edit() %}14{% else %}13{% endif %}" class="empty">No profit / loss records yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const form = document.getElementById('pl-form');
+    if (!form) return;
+
+    const ids = ['purchase_kg', 'purchase_rate_per_kg', 'sold_kg', 'sold_rate_per_kg'];
+    const purchaseTotal = document.getElementById('purchase_total_display');
+    const soldTotal = document.getElementById('sold_total_display');
+    const profitDisplay = document.getElementById('profit_display');
+    const lossDisplay = document.getElementById('loss_display');
+
+    function formatAmount(value) {
+        return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function updateTotals() {
+        const pKg = parseFloat(document.getElementById('purchase_kg').value) || 0;
+        const pRate = parseFloat(document.getElementById('purchase_rate_per_kg').value) || 0;
+        const sKg = parseFloat(document.getElementById('sold_kg').value) || 0;
+        const sRate = parseFloat(document.getElementById('sold_rate_per_kg').value) || 0;
+        const pTotal = pKg * pRate;
+        const sTotal = sKg * sRate;
+        purchaseTotal.value = formatAmount(pTotal);
+        soldTotal.value = formatAmount(sTotal);
+        const net = sTotal - pTotal;
+        if (net >= 0) {
+            profitDisplay.value = formatAmount(net);
+            lossDisplay.value = '0.00';
+        } else {
+            profitDisplay.value = '0.00';
+            lossDisplay.value = formatAmount(Math.abs(net));
+        }
+    }
+
+    ids.forEach(function (id) {
+        document.getElementById(id)?.addEventListener('input', updateTotals);
+    });
+
+    document.getElementById('record_date').valueAsDate = new Date();
+    updateTotals();
+})();
+</script>
+{% endblock %}
