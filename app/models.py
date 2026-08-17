@@ -1027,12 +1027,16 @@ class ShPaymentReceipt(db.Model):
     amount_received = db.Column(db.Float, nullable=False)
     total_received = db.Column(db.Float, nullable=False)
     total_due = db.Column(db.Float, nullable=False)
+    sale_invoice_id = db.Column(
+        db.Integer, db.ForeignKey("sh_sale_invoices.id"), nullable=True
+    )
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
     bank = db.relationship("ShBank")
     client = db.relationship("ShClientCompany")
+    sale_invoice = db.relationship("ShSaleInvoice")
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 

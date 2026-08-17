@@ -28,9 +28,15 @@ from app.services.sh_bank import (
     get_current_sh_bank,
     set_current_sh_bank,
 )
+from app.services.sh_client_ledger_report import (
+    build_client_ledger_timeline,
+    generate_complete_client_ledger_pdf,
+)
 from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supplier_ledger_pdf
 from app.services.sh_ledger_sync import (
+    compute_invoice_balances,
     get_client_ledger_balance_before,
+    get_invoice_remaining,
     get_last_client_ledger_balance,
     get_last_supplier_ledger_balance,
     get_supplier_ledger_balance_before,
@@ -642,6 +648,72 @@ def client_ledger_party_pdf(client_id):
     )
 
 
+@sh_main_bp.route("/client-ledger-report", methods=["GET"])
+@login_required
+def client_ledger_report():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    client_id = request.args.get("client_id", type=int)
+    date_from_str = request.args.get("date_from", "").strip()
+    date_to_str = request.args.get("date_to", "").strip()
+
+    preview = None
+    if client_id:
+        date_from = _parse_date(date_from_str) if date_from_str else None
+        date_to = _parse_date(date_to_str) if date_to_str else None
+        preview = build_client_ledger_timeline(client_id, date_from, date_to)
+
+    return render_template(
+        "sh_traders/client_ledger_report.html",
+        clients=clients,
+        selected_client_id=client_id,
+        date_from=date_from_str,
+        date_to=date_to_str,
+        preview=preview,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/client-ledger-report/pdf")
+@login_required
+def client_ledger_report_pdf():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    client_id = request.args.get("client_id", type=int)
+    if not client_id:
+        flash("Select a client for the ledger report.", "danger")
+        return redirect(url_for("sh_main.client_ledger_report"))
+
+    date_from_str = request.args.get("date_from", "").strip()
+    date_to_str = request.args.get("date_to", "").strip()
+    date_from = _parse_date(date_from_str) if date_from_str else None
+    date_to = _parse_date(date_to_str) if date_to_str else None
+
+    report = build_client_ledger_timeline(client_id, date_from, date_to)
+    output = generate_complete_client_ledger_pdf(report)
+    client_slug = report["client"].name.replace(" ", "_")
+    range_suffix = ""
+    if date_from and date_to:
+        range_suffix = f"_{date_from.strftime('%Y%m%d')}_{date_to.strftime('%Y%m%d')}"
+    elif date_from:
+        range_suffix = f"_from_{date_from.strftime('%Y%m%d')}"
+    elif date_to:
+        range_suffix = f"_to_{date_to.strftime('%Y%m%d')}"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"ledger_report_{client_slug}{range_suffix}.pdf",
+        mimetype="application/pdf",
+    )
+
+
 @sh_main_bp.route("/supplier-ledger", methods=["GET", "POST"])
 @login_required
 def supplier_ledger():
@@ -808,6 +880,7 @@ def payment_receipt():
         amount_received = request.form.get("amount_received", type=float)
         total_received = request.form.get("total_received", type=float)
         total_due = request.form.get("total_due", type=float)
+        sale_invoice_id = request.form.get("sale_invoice_id", type=int) or None
         notes = request.form.get("notes", "").strip()
         receipt_number = request.form.get("receipt_number", "").strip()
 
@@ -824,6 +897,19 @@ def payment_receipt():
         if total_received is None or total_received < 0:
             total_received = suggest_total_received(client_id, amount_received)
 
+        if sale_invoice_id:
+            invoice = ShSaleInvoice.query.get_or_404(sale_invoice_id)
+            if invoice.sold_to_client_id != client_id:
+                flash("Selected invoice does not belong to this client.", "danger")
+                return redirect(url_for("sh_main.payment_receipt"))
+            remaining = get_invoice_remaining(sale_invoice_id)
+            if amount_received > remaining + 0.01:
+                flash(
+                    f"Amount exceeds invoice balance (₨ {remaining:,.2f} remaining on {invoice.invoice_number}).",
+                    "danger",
+                )
+                return redirect(url_for("sh_main.payment_receipt"))
+
         receipt = ShPaymentReceipt(
             receipt_number=receipt_number or next_payment_receipt_number(),
             receipt_date=_parse_date(receipt_date),
@@ -831,6 +917,7 @@ def payment_receipt():
             amount_received=amount_received,
             total_received=total_received,
             total_due=total_due,
+            sale_invoice_id=sale_invoice_id,
             notes=notes or None,
             created_by_id=current_user.id,
         )
@@ -848,11 +935,32 @@ def payment_receipt():
         flash("Payment receipt created.", "success")
         return redirect(url_for("sh_main.payment_receipt_pdf", receipt_id=receipt.id))
 
+    client_invoice_options = {}
+    balance_cache = {}
+    for invoice in _bank_sale_invoices().all():
+        client_id = invoice.sold_to_client_id
+        if client_id not in balance_cache:
+            balance_cache[client_id] = compute_invoice_balances(client_id)
+        balance = balance_cache[client_id].get(
+            invoice.id,
+            {"remaining": float(invoice.total_amount or 0), "paid": 0.0},
+        )
+        client_invoice_options.setdefault(client_id, []).append(
+            {
+                "id": invoice.id,
+                "number": invoice.invoice_number,
+                "date": invoice.invoice_date.strftime("%d-%m-%Y"),
+                "total": float(invoice.total_amount or 0),
+                "remaining": float(balance.get("remaining", 0)),
+            }
+        )
+
     return render_template(
         "sh_traders/payment_receipt.html",
         receipts=get_payment_receipts(),
         clients=clients,
         next_receipt_number=next_payment_receipt_number(),
+        client_invoice_options=client_invoice_options,
         banks=get_all_banks(),
         current_bank=get_current_sh_bank(),
     )
@@ -1119,9 +1227,27 @@ def sale_invoices():
         return redirect(url_for("sh_main.sale_invoice_pdf", invoice_id=invoice.id))
 
     invoice_list = _bank_sale_invoices().all()
+    balance_cache = {}
+    invoice_rows = []
+    for invoice in invoice_list:
+        client_id = invoice.sold_to_client_id
+        if client_id not in balance_cache:
+            balance_cache[client_id] = compute_invoice_balances(client_id)
+        balance = balance_cache[client_id].get(
+            invoice.id,
+            {"paid": 0.0, "remaining": float(invoice.total_amount or 0)},
+        )
+        invoice_rows.append(
+            {
+                "invoice": invoice,
+                "paid": balance.get("paid", 0.0),
+                "remaining": balance.get("remaining", float(invoice.total_amount or 0)),
+            }
+        )
+
     return render_template(
         "sh_traders/sale_invoices.html",
-        invoices=invoice_list,
+        invoice_rows=invoice_rows,
         clients=clients,
         next_invoice_number=next_sale_invoice_number(),
         banks=get_all_banks(),

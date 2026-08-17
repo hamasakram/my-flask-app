@@ -104,12 +104,15 @@
                 <th>Challan No</th>
                 <th>Lines</th>
                 <th>Total</th>
+                <th>Paid</th>
+                <th>Remaining</th>
                 <th>PDF</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
-            {% for inv in invoices %}
+            {% for row in invoice_rows %}
+            {% set inv = row.invoice %}
             <tr>
                 <td><strong>{{ inv.invoice_number }}</strong></td>
                 <td>{{ inv.invoice_date.strftime('%d-%m-%Y') }}</td>
@@ -117,6 +120,14 @@
                 <td>{{ inv.factory_challan_no or '—' }}</td>
                 <td>{{ inv.lines|length }}</td>
                 <td>₨ {{ "{:,.0f}".format(inv.total_amount) }}</td>
+                <td>₨ {{ "{:,.2f}".format(row.paid) }}</td>
+                <td>
+                    {% if row.remaining <= 0.01 %}
+                    <span class="badge badge-gray">Paid</span>
+                    {% else %}
+                    <strong>₨ {{ "{:,.2f}".format(row.remaining) }}</strong>
+                    {% endif %}
+                </td>
                 <td>
                     <a href="{{ url_for('sh_main.sale_invoice_pdf', invoice_id=inv.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
                 </td>
@@ -128,7 +139,7 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No sale invoices created yet</td></tr>
+            <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No sale invoices created yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

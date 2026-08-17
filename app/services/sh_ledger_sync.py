@@ -106,6 +106,38 @@ def get_last_client_ledger_balance(client_id: int) -> tuple[float, str]:
     return get_client_account_balance(client_id)
 
 
+def compute_invoice_balances(client_id: int) -> dict[int, dict]:
+    """FIFO allocation of ledger payments to sale invoices (oldest first)."""
+    bank_id = get_current_sh_bank_id()
+    invoices = _client_sale_invoices(client_id, bank_id)
+    payment_pool = 0.0
+    for entry in _client_ledger_entries(client_id):
+        if _entry_kind(entry) == ENTRY_PAYMENT:
+            payment_pool += float(entry.total_amount or 0)
+
+    result = {}
+    for invoice in invoices:
+        total = float(invoice.total_amount or 0)
+        paid = min(total, payment_pool)
+        payment_pool = max(0.0, payment_pool - paid)
+        result[invoice.id] = {
+            "total": total,
+            "paid": paid,
+            "remaining": max(0.0, total - paid),
+        }
+    return result
+
+
+def get_invoice_remaining(invoice_id: int) -> float:
+    from app.models import ShSaleInvoice
+
+    invoice = ShSaleInvoice.query.get(invoice_id)
+    if not invoice:
+        return 0.0
+    balances = compute_invoice_balances(invoice.sold_to_client_id)
+    return balances.get(invoice_id, {}).get("remaining", float(invoice.total_amount or 0))
+
+
 def _apply_supplier_ledger_entry(
     running: float, running_type: str, entry: ShSupplierLedgerEntry
 ) -> tuple[float, str]:

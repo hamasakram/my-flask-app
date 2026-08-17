@@ -91,6 +91,9 @@ COLUMN_MIGRATIONS = {
         "entry_type": "VARCHAR(20) DEFAULT 'sale'",
         "source_bank_ledger_id": "INTEGER",
     },
+    "sh_payment_receipts": {
+        "sale_invoice_id": "INTEGER",
+    },
     "bank_ledger_entries": {
         "entry_type": "VARCHAR(20) DEFAULT 'standard'",
         "transfer_id": "INTEGER",

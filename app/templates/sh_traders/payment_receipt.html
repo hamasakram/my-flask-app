@@ -32,6 +32,13 @@
             </select>
         </div>
         <div class="form-group">
+            <label for="sale_invoice_id">Against Invoice <small>(optional)</small></label>
+            <select id="sale_invoice_id" name="sale_invoice_id">
+                <option value="">General payment — not tied to one invoice</option>
+            </select>
+            <small class="field-note" id="invoice-remaining-note"></small>
+        </div>
+        <div class="form-group">
             <label for="amount_received">Received On This Date</label>
             <input type="number" id="amount_received" name="amount_received" step="0.01" min="0.01" required placeholder="Amount paid today">
         </div>
@@ -67,6 +74,7 @@
                 <th>Received Today</th>
                 <th>Total Received</th>
                 <th>Total Due</th>
+                <th>Invoice Ref</th>
                 <th>PDF</th>
             </tr>
         </thead>
@@ -79,12 +87,13 @@
                 <td>₨ {{ "{:,.2f}".format(receipt.amount_received) }}</td>
                 <td>₨ {{ "{:,.2f}".format(receipt.total_received) }}</td>
                 <td>₨ {{ "{:,.2f}".format(receipt.total_due) }}</td>
+                <td>{{ receipt.sale_invoice.invoice_number if receipt.sale_invoice else '—' }}</td>
                 <td>
                     <a href="{{ url_for('sh_main.payment_receipt_pdf', receipt_id=receipt.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty">No payment receipts yet</td></tr>
+            <tr><td colspan="8" class="empty">No payment receipts yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -95,5 +104,57 @@
 <script>
 var receiptDate = document.getElementById('receipt_date');
 if (receiptDate) receiptDate.valueAsDate = new Date();
+
+var clientInvoiceMap = {{ client_invoice_options | tojson }};
+var clientSelect = document.getElementById('client_company_id');
+var invoiceSelect = document.getElementById('sale_invoice_id');
+var invoiceNote = document.getElementById('invoice-remaining-note');
+var totalDueInput = document.getElementById('total_due');
+
+function formatMoney(value) {
+    return Number(value || 0).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function refreshInvoiceOptions() {
+    if (!invoiceSelect || !clientSelect) return;
+    var clientId = clientSelect.value;
+    invoiceSelect.innerHTML = '<option value="">General payment — not tied to one invoice</option>';
+    if (invoiceNote) invoiceNote.textContent = '';
+    if (!clientId || !clientInvoiceMap[clientId]) return;
+    clientInvoiceMap[clientId].forEach(function(inv) {
+        var opt = document.createElement('option');
+        opt.value = inv.id;
+        opt.textContent = inv.number + ' (' + inv.date + ') — remaining Rs ' + formatMoney(inv.remaining);
+        opt.dataset.remaining = inv.remaining;
+        invoiceSelect.appendChild(opt);
+    });
+}
+
+function onInvoiceChange() {
+    if (!invoiceSelect || !invoiceNote) return;
+    var selected = invoiceSelect.options[invoiceSelect.selectedIndex];
+    if (!selected || !selected.value) {
+        invoiceNote.textContent = '';
+        return;
+    }
+    var remaining = parseFloat(selected.dataset.remaining || '0');
+    invoiceNote.textContent = 'Outstanding on this invoice: Rs ' + formatMoney(remaining);
+    if (totalDueInput && !totalDueInput.dataset.userEdited) {
+        totalDueInput.value = remaining.toFixed(2);
+    }
+}
+
+if (clientSelect) {
+    clientSelect.addEventListener('change', refreshInvoiceOptions);
+}
+if (invoiceSelect) {
+    invoiceSelect.addEventListener('change', onInvoiceChange);
+}
+if (totalDueInput) {
+    totalDueInput.addEventListener('input', function() {
+        totalDueInput.dataset.userEdited = '1';
+    });
+}
+refreshInvoiceOptions();
 </script>
 {% endblock %}

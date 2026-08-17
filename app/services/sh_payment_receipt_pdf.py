@@ -126,19 +126,30 @@ def generate_payment_receipt_pdf(receipt: ShPaymentReceipt) -> BytesIO:
             Paragraph("Client", label_style),
             Paragraph(receipt.client.name, value_style),
         ],
-        [
-            Paragraph("Received On This Date", label_style),
-            Paragraph(f"Rs {_format_money(receipt.amount_received)}", amount_style),
-        ],
-        [
-            Paragraph("Total Received", label_style),
-            Paragraph(f"Rs {_format_money(receipt.total_received)}", value_style),
-        ],
-        [
-            Paragraph("Total Due", label_style),
-            Paragraph(f"Rs {_format_money(receipt.total_due)}", value_style),
-        ],
     ]
+    if receipt.sale_invoice:
+        detail_rows.append(
+            [
+                Paragraph("Against Invoice", label_style),
+                Paragraph(receipt.sale_invoice.invoice_number, value_style),
+            ]
+        )
+    detail_rows.extend(
+        [
+            [
+                Paragraph("Received On This Date", label_style),
+                Paragraph(f"Rs {_format_money(receipt.amount_received)}", amount_style),
+            ],
+            [
+                Paragraph("Total Received", label_style),
+                Paragraph(f"Rs {_format_money(receipt.total_received)}", value_style),
+            ],
+            [
+                Paragraph("Total Due", label_style),
+                Paragraph(f"Rs {_format_money(receipt.total_due)}", value_style),
+            ],
+        ]
+    )
     if receipt.notes:
         detail_rows.append(
             [Paragraph("Notes", label_style), Paragraph(receipt.notes, value_style)]

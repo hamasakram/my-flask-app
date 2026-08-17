@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Ledger Report Complete - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Ledger Report Complete', 'Traditional client ledger with debit, credit, and running balance — print for any date range or full history') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Generate Ledger Report</h2>
+    <p class="field-note">Sales and material billed to the client increase balance (DEBIT). Payments received reduce it (CREDIT).</p>
+    <form method="GET" class="form-grid" id="ledger-report-form">
+        <div class="form-group">
+            <label for="client_id">Client</label>
+            <select id="client_id" name="client_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="date_from">From Date <small>(optional)</small></label>
+            <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+            <small class="field-note">Leave blank for complete ledger from start</small>
+        </div>
+        <div class="form-group">
+            <label for="date_to">To Date <small>(optional)</small></label>
+            <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-secondary">Preview</button>
+            {% if selected_client_id %}
+            <a href="{{ url_for('sh_main.client_ledger_report_pdf', client_id=selected_client_id, date_from=date_from, date_to=date_to) }}"
+               target="_blank" class="btn btn-primary">Download PDF</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if preview %}
+<div class="card">
+    <div class="ledger-report-header">
+        <h2>LEDGER REPORT — {{ preview.client.name }}</h2>
+        <p class="field-note">
+            {% if preview.date_from and preview.date_to %}
+            Dated: {{ preview.date_from.strftime('%d-%b-%y') }} TO {{ preview.date_to.strftime('%d-%b-%y') }}
+            {% elif preview.date_from %}
+            From {{ preview.date_from.strftime('%d-%b-%y') }}
+            {% elif preview.date_to %}
+            Up to {{ preview.date_to.strftime('%d-%b-%y') }}
+            {% else %}
+            Complete ledger from start
+            {% endif %}
+            · Closing balance:
+            {% if preview.closing_type == 'CR' %}
+            (₨ {{ "{:,.2f}".format(preview.closing_balance) }})
+            {% else %}
+            ₨ {{ "{:,.2f}".format(preview.closing_balance) }}
+            {% endif %}
+        </p>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table ledger-report-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>No</th>
+                    <th>E-#</th>
+                    <th>Narration</th>
+                    <th class="num">DEBIT</th>
+                    <th class="num">CREDIT</th>
+                    <th class="num">BALANCE</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview.rows %}
+                <tr class="{% if row.is_opening %}ledger-opening-row{% endif %}">
+                    <td>{{ row.date.strftime('%d-%b-%y') }}</td>
+                    <td>{{ row.type or '—' }}</td>
+                    <td>{{ row.number or '—' }}</td>
+                    <td>{{ row.extra or '—' }}</td>
+                    <td>{{ row.narration }}</td>
+                    <td class="num">{% if row.debit %}₨ {{ "{:,.2f}".format(row.debit) }}{% endif %}</td>
+                    <td class="num">{% if row.credit %}₨ {{ "{:,.2f}".format(row.credit) }}{% endif %}</td>
+                    <td class="num">
+                        {% if row.balance_type == 'CR' %}
+                        (₨ {{ "{:,.2f}".format(row.balance) }})
+                        {% else %}
+                        ₨ {{ "{:,.2f}".format(row.balance) }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No ledger entries for this client in the selected range</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if preview.rows %}
+            <tfoot>
+                <tr class="ledger-totals-row">
+                    <td colspan="5"><strong>Totals</strong></td>
+                    <td class="num"><strong>₨ {{ "{:,.2f}".format(preview.total_debit) }}</strong></td>
+                    <td class="num"><strong>₨ {{ "{:,.2f}".format(preview.total_credit) }}</strong></td>
+                    <td class="num">
+                        <strong>
+                            {% if preview.closing_type == 'CR' %}
+                            (₨ {{ "{:,.2f}".format(preview.closing_balance) }})
+                            {% else %}
+                            ₨ {{ "{:,.2f}".format(preview.closing_balance) }}
+                            {% endif %}
+                        </strong>
+                    </td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
