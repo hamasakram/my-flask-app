@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% block title %}Edit Investor Payment - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Edit Investor Payment') }}
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="payment_date">Date</label>
+            <input type="date" id="payment_date" name="payment_date" value="{{ payment.payment_date.isoformat() }}" required>
+        </div>
+        <div class="form-group">
+            <label for="partner_company_id">Investor</label>
+            <select id="partner_company_id" name="partner_company_id" required>
+                {% for p in partners %}
+                <option value="{{ p.id }}" {% if payment.partner_company_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Party</label>
+            <select id="client_company_id" name="client_company_id" required>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if payment.client_company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="sale_id">Against Invoice</label>
+            <select id="sale_id" name="sale_id" required>
+                {% for s in sales %}
+                <option value="{{ s.id }}" {% if payment.sale_id == s.id %}selected{% endif %}>
+                    {{ s.invoice_number }} · {{ s.sale_date.strftime('%d-%m-%Y') }} · {{ s.client.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="amount_received">Amount Received</label>
+            <input type="number" id="amount_received" name="amount_received" step="0.01" min="0.01" value="{{ payment.amount_received }}" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <textarea id="notes" name="notes" rows="2">{{ payment.notes or '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

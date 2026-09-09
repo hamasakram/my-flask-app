@@ -32,6 +32,9 @@ from app.models import (
     ShOpeningBalance,
     ShGatePassScreenshot,
     ShPaymentScreenshot,
+    ShInvestorPurchase,
+    ShInvestorSale,
+    ShInvestorSalePayment,
     ShPartnerCompany,
     ShProfitLossRecord,
     ShPurchase,
@@ -58,6 +61,16 @@ from app.services.sh_sale_invoice import (
 )
 from app.services.sh_traders import calculate_total_amount
 from app.services.sh_profit_loss import apply_record_fields, build_record_from_form
+from app.services.sh_investor_stock import (
+    apply_payment_fields,
+    apply_purchase_fields,
+    apply_sale_fields,
+    build_payment_from_form,
+    build_purchase_from_form,
+    build_sale_from_form,
+    scoped_purchases_query,
+    scoped_sales_query,
+)
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_partnership import apply_partnership_from_form
 from app.services.sh_uploads import apply_gate_pass_screenshot, apply_payment_screenshot, delete_gate_pass_screenshot, delete_payment_screenshot, save_gate_pass_screenshot, save_payment_screenshot
@@ -1318,6 +1331,112 @@ def edit_sh_profit_loss(record_id):
         record=record,
         brokers=ShProfitLossRecord.BROKER_LABELS,
         cancel_url=url_for("sh_main.profit_loss"),
+    )
+
+
+@stock_edits_bp.route("/sh/investor-purchase/<int:purchase_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_investor_purchase(purchase_id):
+    purchase = ShInvestorPurchase.query.get_or_404(purchase_id)
+    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        try:
+            data = build_purchase_from_form(request.form, purchase_id=purchase.id)
+            apply_purchase_fields(purchase, data, _parse_date(data["purchase_date"]))
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "ShInvestorPurchase",
+                purchase.id,
+                f"Updated investor purchase #{purchase_id}",
+            )
+            db.session.commit()
+            flash("Purchase updated.", "success")
+            return redirect(url_for("sh_main.investor_stock"))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+
+    return render_template(
+        "sh_traders/edit_investor_purchase.html",
+        purchase=purchase,
+        partners=partners,
+        cancel_url=url_for("sh_main.investor_stock"),
+    )
+
+
+@stock_edits_bp.route("/sh/investor-sale/<int:sale_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_investor_sale(sale_id):
+    sale = ShInvestorSale.query.get_or_404(sale_id)
+    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    purchases = scoped_purchases_query().filter(
+        ShInvestorPurchase.partner_company_id == sale.partner_company_id
+    ).all()
+
+    if request.method == "POST":
+        require_edit_access()
+        try:
+            data = build_sale_from_form(request.form, exclude_sale_id=sale.id)
+            apply_sale_fields(sale, data, _parse_date(data["sale_date"]))
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "ShInvestorSale",
+                sale.id,
+                f"Updated investor sale #{sale_id}",
+            )
+            db.session.commit()
+            flash("Sale updated.", "success")
+            return redirect(url_for("sh_main.investor_stock"))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+
+    return render_template(
+        "sh_traders/edit_investor_sale.html",
+        sale=sale,
+        partners=partners,
+        clients=clients,
+        purchases=purchases,
+        cancel_url=url_for("sh_main.investor_stock"),
+    )
+
+
+@stock_edits_bp.route("/sh/investor-payment/<int:payment_id>", methods=["GET", "POST"])
+@login_required
+def edit_sh_investor_payment(payment_id):
+    payment = ShInvestorSalePayment.query.get_or_404(payment_id)
+    partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    sales = scoped_sales_query().all()
+
+    if request.method == "POST":
+        require_edit_access()
+        try:
+            data = build_payment_from_form(request.form, exclude_payment_id=payment.id)
+            apply_payment_fields(payment, data, _parse_date(data["payment_date"]))
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "ShInvestorSalePayment",
+                payment.id,
+                f"Updated investor payment #{payment_id}",
+            )
+            db.session.commit()
+            flash("Payment updated.", "success")
+            return redirect(url_for("sh_main.investor_stock"))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+
+    return render_template(
+        "sh_traders/edit_investor_payment.html",
+        payment=payment,
+        partners=partners,
+        clients=clients,
+        sales=sales,
+        cancel_url=url_for("sh_main.investor_stock"),
     )
 
 

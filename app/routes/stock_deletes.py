@@ -33,6 +33,9 @@ from app.models import (
     UsedInkShade,
     UsedInkStock,
     ShPaymentScreenshot,
+    ShInvestorPurchase,
+    ShInvestorSale,
+    ShInvestorSalePayment,
     ShPartnerCompany,
     ShProfitLossRecord,
     ShPurchase,
@@ -505,6 +508,48 @@ def delete_sh_profit_loss(record_id):
         "ShProfitLossRecord",
         f"Deleted SH profit/loss #{record_id}",
         url_for("sh_main.profit_loss"),
+    )
+
+
+@stock_deletes_bp.route("/sh/investor-purchase/<int:purchase_id>", methods=["POST"])
+@login_required
+def delete_sh_investor_purchase(purchase_id):
+    require_edit_access()
+    purchase = ShInvestorPurchase.query.get_or_404(purchase_id)
+    if purchase.sales.count():
+        flash("Cannot delete — sales are linked to this purchase. Edit or delete those first.", "danger")
+        return redirect(url_for("sh_main.investor_stock"))
+    return _delete_entity(
+        purchase,
+        "ShInvestorPurchase",
+        f"Deleted investor purchase #{purchase_id}",
+        url_for("sh_main.investor_stock"),
+    )
+
+
+@stock_deletes_bp.route("/sh/investor-sale/<int:sale_id>", methods=["POST"])
+@login_required
+def delete_sh_investor_sale(sale_id):
+    require_edit_access()
+    sale = ShInvestorSale.query.get_or_404(sale_id)
+    return _delete_entity(
+        sale,
+        "ShInvestorSale",
+        f"Deleted investor sale #{sale_id}",
+        url_for("sh_main.investor_stock"),
+    )
+
+
+@stock_deletes_bp.route("/sh/investor-payment/<int:payment_id>", methods=["POST"])
+@login_required
+def delete_sh_investor_payment(payment_id):
+    require_edit_access()
+    payment = ShInvestorSalePayment.query.get_or_404(payment_id)
+    return _delete_entity(
+        payment,
+        "ShInvestorSalePayment",
+        f"Deleted investor payment #{payment_id}",
+        url_for("sh_main.investor_stock"),
     )
 
 

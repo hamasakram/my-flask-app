@@ -581,6 +581,101 @@ class ShProfitLossRecord(db.Model):
         return float(self.sold_total or 0) - float(self.purchase_total or 0)
 
 
+class ShInvestorPurchase(db.Model):
+    """Investor stock purchase — internal record only, no ledger impact."""
+
+    __tablename__ = "sh_investor_purchases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
+    purchase_date = db.Column(db.Date, nullable=False)
+    partner_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_partner_companies.id"), nullable=False
+    )
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    quantity_kg = db.Column(db.Float, nullable=False)
+    rate_per_kg = db.Column(db.Float, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
+    investment_amount = db.Column(db.Float, nullable=False)
+    supplier_name = db.Column(db.String(150))
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    partner = db.relationship("ShPartnerCompany")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    sales = db.relationship("ShInvestorSale", back_populates="purchase", lazy="dynamic")
+
+
+class ShInvestorSale(db.Model):
+    """Investor-attributed sale bill — internal record only."""
+
+    __tablename__ = "sh_investor_sales"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
+    sale_date = db.Column(db.Date, nullable=False)
+    invoice_number = db.Column(db.String(30), nullable=False)
+    partner_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_partner_companies.id"), nullable=False
+    )
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    purchase_id = db.Column(db.Integer, db.ForeignKey("sh_investor_purchases.id"))
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    quantity_kg = db.Column(db.Float, nullable=False)
+    rate_per_kg = db.Column(db.Float, nullable=False)
+    total_amount = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    partner = db.relationship("ShPartnerCompany")
+    client = db.relationship("ShClientCompany")
+    purchase = db.relationship("ShInvestorPurchase", back_populates="sales")
+    payments = db.relationship(
+        "ShInvestorSalePayment",
+        back_populates="sale",
+        lazy="dynamic",
+        cascade="all, delete-orphan",
+    )
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class ShInvestorSalePayment(db.Model):
+    """Payment received against an investor sale invoice — internal record only."""
+
+    __tablename__ = "sh_investor_sale_payments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=True)
+    payment_date = db.Column(db.Date, nullable=False)
+    partner_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_partner_companies.id"), nullable=False
+    )
+    client_company_id = db.Column(
+        db.Integer, db.ForeignKey("sh_client_companies.id"), nullable=False
+    )
+    sale_id = db.Column(
+        db.Integer, db.ForeignKey("sh_investor_sales.id", ondelete="CASCADE"), nullable=False
+    )
+    amount_received = db.Column(db.Float, nullable=False)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    bank = db.relationship("ShBank")
+    partner = db.relationship("ShPartnerCompany")
+    client = db.relationship("ShClientCompany")
+    sale = db.relationship("ShInvestorSale", back_populates="payments")
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
 class ShPurchase(db.Model):
     __tablename__ = "sh_purchases"
 

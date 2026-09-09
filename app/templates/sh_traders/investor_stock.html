@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Investor Stock Records - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Investor Stock Records', 'Track purchases, sales, and payments per investor — does not affect ledgers') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+<p class="field-note balance-note">
+    For your internal investor records only. Bank ledger, client ledger, supplier ledger, and sale invoices are <strong>not</strong> changed here.
+    Add investors under <a href="{{ url_for('sh_main.partners') }}">Partners</a> first.
+</p>
+
+{% if partner_summaries %}
+<div class="stats-grid">
+    {% for s in partner_summaries %}
+    <div class="stat-card">
+        <span class="stat-label">{{ s.partner.name }}</span>
+        <span class="stat-value">₨ {{ "{:,.2f}".format(s.outstanding) }}</span>
+        <small class="field-note">
+            Invested ₨ {{ "{:,.2f}".format(s.invested) }} ·
+            Billed ₨ {{ "{:,.2f}".format(s.billed) }} ·
+            Collected ₨ {{ "{:,.2f}".format(s.collected) }}
+        </small>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if current_user.can_edit() %}
+{% if not partners %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.partners') }}">investors (partners)</a> first.</div>
+{% elif not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> for sale records.</div>
+{% else %}
+
+<div class="card highlight-card">
+    <h2>Record Stock Purchase (Investor Investment)</h2>
+    <form method="POST" class="form-grid" id="purchase-form">
+        <input type="hidden" name="action" value="record_purchase">
+        <div class="form-group">
+            <label for="purchase_date">Date</label>
+            <input type="date" id="purchase_date" name="purchase_date" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_partner_id">Investor</label>
+            <select id="purchase_partner_id" name="partner_company_id" required>
+                <option value="">Select investor</option>
+                {% for p in partners %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="purchase_material">Material</label>
+            <input type="text" id="purchase_material" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_size">Size</label>
+            <input type="text" id="purchase_size" name="size">
+        </div>
+        <div class="form-group">
+            <label for="quantity_kg">Quantity (KG)</label>
+            <input type="number" id="quantity_kg" name="quantity_kg" step="0.001" min="0.001" required>
+        </div>
+        <div class="form-group">
+            <label for="rate_per_kg">Rate / KG</label>
+            <input type="number" id="rate_per_kg" name="rate_per_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="purchase_total_display">Purchase Total (auto)</label>
+            <input type="text" id="purchase_total_display" readonly class="readonly-field" value="0.00">
+        </div>
+        <div class="form-group">
+            <label for="investment_amount">Investor Paid</label>
+            <input type="number" id="investment_amount" name="investment_amount" step="0.01" min="0.01" placeholder="Defaults to purchase total">
+            <small class="field-note">Amount this investor put in for this purchase</small>
+        </div>
+        <div class="form-group">
+            <label for="supplier_name">Supplier (optional)</label>
+            <input type="text" id="supplier_name" name="supplier_name">
+        </div>
+        <div class="form-group full-width">
+            <label for="purchase_notes">Notes</label>
+            <textarea id="purchase_notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Purchase</button>
+        </div>
+    </form>
+</div>
+
+<div class="card highlight-card">
+    <h2>Record Sale (Investor Stock Sold)</h2>
+    <form method="POST" class="form-grid" id="sale-form">
+        <input type="hidden" name="action" value="record_sale">
+        <div class="form-group">
+            <label for="sale_date">Date</label>
+            <input type="date" id="sale_date" name="sale_date" required>
+        </div>
+        <div class="form-group">
+            <label for="invoice_number">Invoice #</label>
+            <input type="text" id="invoice_number" name="invoice_number" value="{{ next_sale_number }}" placeholder="Auto if blank">
+        </div>
+        <div class="form-group">
+            <label for="sale_partner_id">Investor</label>
+            <select id="sale_partner_id" name="partner_company_id" required>
+                <option value="">Select investor</option>
+                {% for p in partners %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="client_company_id">Sold To (Party)</label>
+            <select id="client_company_id" name="client_company_id" required>
+                <option value="">Select party</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="purchase_id">From Purchase (optional)</label>
+            <select id="purchase_id" name="purchase_id">
+                <option value="">— Not linked to a purchase batch —</option>
+            </select>
+            <small class="field-note" id="purchase-remaining-note"></small>
+        </div>
+        <div class="form-group">
+            <label for="sale_material">Material</label>
+            <input type="text" id="sale_material" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="sale_size">Size</label>
+            <input type="text" id="sale_size" name="size">
+        </div>
+        <div class="form-group">
+            <label for="sale_quantity_kg">Quantity Sold (KG)</label>
+            <input type="number" id="sale_quantity_kg" name="quantity_kg" step="0.001" min="0.001" required>
+        </div>
+        <div class="form-group">
+            <label for="sale_rate_per_kg">Sale Rate / KG</label>
+            <input type="number" id="sale_rate_per_kg" name="rate_per_kg" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="sale_total_display">Bill Total (auto)</label>
+            <input type="text" id="sale_total_display" readonly class="readonly-field" value="0.00">
+        </div>
+        <div class="form-group full-width">
+            <label for="sale_notes">Notes</label>
+            <textarea id="sale_notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Sale</button>
+        </div>
+    </form>
+</div>
+
+<div class="card highlight-card">
+    <h2>Record Payment Received</h2>
+    <p class="field-note">Apply a party payment to a whole investor sale invoice — balance will reduce on that invoice.</p>
+    <form method="POST" class="form-grid" id="payment-form">
+        <input type="hidden" name="action" value="record_payment">
+        <div class="form-group">
+            <label for="payment_date">Date</label>
+            <input type="date" id="payment_date" name="payment_date" required>
+        </div>
+        <div class="form-group">
+            <label for="payment_partner_id">Investor</label>
+            <select id="payment_partner_id" name="partner_company_id" required>
+                <option value="">Select investor</option>
+                {% for p in partners %}
+                <option value="{{ p.id }}">{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="payment_client_id">Party (Client)</label>
+            <select id="payment_client_id" name="client_company_id" required>
+                <option value="">Select party</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="sale_id">Against Invoice</label>
+            <select id="sale_id" name="sale_id" required>
+                <option value="">Select investor sale invoice</option>
+            </select>
+            <small class="field-note" id="sale-remaining-note"></small>
+        </div>
+        <div class="form-group">
+            <label for="amount_received">Amount Received</label>
+            <input type="number" id="amount_received" name="amount_received" step="0.01" min="0.01" required>
+        </div>
+        <div class="form-group full-width">
+            <label for="payment_notes">Notes</label>
+            <textarea id="payment_notes" name="notes" rows="2"></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Payment</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endif %}
+
+<div class="card">
+    <h2>Purchase Records</h2>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Investor</th>
+                    <th>Material</th>
+                    <th>Size</th>
+                    <th>KG</th>
+                    <th>Rate</th>
+                    <th>Total</th>
+                    <th>Investor Paid</th>
+                    <th>Sold KG</th>
+                    <th>Left KG</th>
+                    <th>Supplier</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in purchase_rows %}
+                {% set p = row.purchase %}
+                <tr>
+                    <td>{{ p.purchase_date.strftime('%d-%m-%Y') }}</td>
+                    <td><strong>{{ p.partner.name }}</strong></td>
+                    <td>{{ p.material_name }}</td>
+                    <td>{{ p.size or '—' }}</td>
+                    <td>{{ "{:,.3f}".format(p.quantity_kg) }}</td>
+                    <td>{{ "{:,.2f}".format(p.rate_per_kg) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(p.total_amount) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(p.investment_amount) }}</td>
+                    <td>{{ "{:,.3f}".format(row.sold_kg) }}</td>
+                    <td>{{ "{:,.3f}".format(row.remaining_kg) }}</td>
+                    <td>{{ p.supplier_name or '—' }}</td>
+                    {% if current_user.can_edit() %}
+                    {{ row_actions(
+                        url_for('stock_edits.edit_sh_investor_purchase', purchase_id=p.id),
+                        url_for('stock_deletes.delete_sh_investor_purchase', purchase_id=p.id)
+                    ) }}
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{% if current_user.can_edit() %}12{% else %}11{% endif %}" class="empty">No investor purchases yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Sale Records (Investor Invoices)</h2>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Date</th>
+                    <th>Investor</th>
+                    <th>Party</th>
+                    <th>Material</th>
+                    <th>KG</th>
+                    <th>Bill Total</th>
+                    <th>Paid</th>
+                    <th>Remaining</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in sale_rows %}
+                {% set s = row.sale %}
+                <tr>
+                    <td><strong>{{ s.invoice_number }}</strong></td>
+                    <td>{{ s.sale_date.strftime('%d-%m-%Y') }}</td>
+                    <td>{{ s.partner.name }}</td>
+                    <td>{{ s.client.name }}</td>
+                    <td>{{ s.material_name }}{% if s.size %} ({{ s.size }}){% endif %}</td>
+                    <td>{{ "{:,.3f}".format(s.quantity_kg) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(s.total_amount) }}</td>
+                    <td>₨ {{ "{:,.2f}".format(row.paid) }}</td>
+                    <td>
+                        {% if row.remaining <= 0.01 %}
+                        <span class="badge badge-gray">Paid</span>
+                        {% else %}
+                        <strong>₨ {{ "{:,.2f}".format(row.remaining) }}</strong>
+                        {% endif %}
+                    </td>
+                    {% if current_user.can_edit() %}
+                    {{ row_actions(
+                        url_for('stock_edits.edit_sh_investor_sale', sale_id=s.id),
+                        url_for('stock_deletes.delete_sh_investor_sale', sale_id=s.id)
+                    ) }}
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{% if current_user.can_edit() %}10{% else %}9{% endif %}" class="empty">No investor sales yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Payment Records</h2>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Investor</th>
+                    <th>Party</th>
+                    <th>Invoice #</th>
+                    <th>Amount</th>
+                    <th>Notes</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for pay in payments %}
+                <tr>
+                    <td>{{ pay.payment_date.strftime('%d-%m-%Y') }}</td>
+                    <td>{{ pay.partner.name }}</td>
+                    <td>{{ pay.client.name }}</td>
+                    <td>{{ pay.sale.invoice_number }}</td>
+                    <td>₨ {{ "{:,.2f}".format(pay.amount_received) }}</td>
+                    <td>{{ pay.notes or '—' }}</td>
+                    {% if current_user.can_edit() %}
+                    {{ row_actions(
+                        url_for('stock_edits.edit_sh_investor_payment', payment_id=pay.id),
+                        url_for('stock_deletes.delete_sh_investor_payment', payment_id=pay.id)
+                    ) }}
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{% if current_user.can_edit() %}7{% else %}6{% endif %}" class="empty">No payments recorded yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var partnerPurchaseMap = {{ partner_purchase_map | tojson }};
+    var partnerSaleMap = {{ partner_sale_map | tojson }};
+
+    function formatMoney(v) {
+        return Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function formatKg(v) {
+        return Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    }
+
+    // Purchase totals
+    var pForm = document.getElementById('purchase-form');
+    if (pForm) {
+        document.getElementById('purchase_date').valueAsDate = new Date();
+        var qty = document.getElementById('quantity_kg');
+        var rate = document.getElementById('rate_per_kg');
+        var totalDisplay = document.getElementById('purchase_total_display');
+        function updatePurchaseTotal() {
+            var t = (parseFloat(qty.value) || 0) * (parseFloat(rate.value) || 0);
+            totalDisplay.value = formatMoney(t);
+        }
+        qty.addEventListener('input', updatePurchaseTotal);
+        rate.addEventListener('input', updatePurchaseTotal);
+        updatePurchaseTotal();
+    }
+
+    // Sale form
+    var sForm = document.getElementById('sale-form');
+    if (sForm) {
+        document.getElementById('sale_date').valueAsDate = new Date();
+        var salePartner = document.getElementById('sale_partner_id');
+        var purchaseSelect = document.getElementById('purchase_id');
+        var purchaseNote = document.getElementById('purchase-remaining-note');
+        var saleQty = document.getElementById('sale_quantity_kg');
+        var saleRate = document.getElementById('sale_rate_per_kg');
+        var saleTotal = document.getElementById('sale_total_display');
+
+        function refreshPurchases() {
+            purchaseSelect.innerHTML = '<option value="">— Not linked to a purchase batch —</option>';
+            if (purchaseNote) purchaseNote.textContent = '';
+            var pid = salePartner.value;
+            if (!pid || !partnerPurchaseMap[pid]) return;
+            partnerPurchaseMap[pid].forEach(function (p) {
+                var opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.date + ' · ' + p.material + ' · ' + formatKg(p.remaining_kg) + ' KG left';
+                opt.dataset.material = p.material;
+                opt.dataset.remaining = p.remaining_kg;
+                purchaseSelect.appendChild(opt);
+            });
+        }
+
+        function onPurchasePick() {
+            var sel = purchaseSelect.options[purchaseSelect.selectedIndex];
+            if (!sel || !sel.value) {
+                if (purchaseNote) purchaseNote.textContent = '';
+                return;
+            }
+            if (purchaseNote) purchaseNote.textContent = 'Remaining on this batch: ' + formatKg(sel.dataset.remaining) + ' KG';
+            if (sel.dataset.material && !document.getElementById('sale_material').value) {
+                document.getElementById('sale_material').value = sel.dataset.material;
+            }
+        }
+
+        function updateSaleTotal() {
+            var t = (parseFloat(saleQty.value) || 0) * (parseFloat(saleRate.value) || 0);
+            saleTotal.value = formatMoney(t);
+        }
+
+        salePartner.addEventListener('change', refreshPurchases);
+        purchaseSelect.addEventListener('change', onPurchasePick);
+        saleQty.addEventListener('input', updateSaleTotal);
+        saleRate.addEventListener('input', updateSaleTotal);
+        refreshPurchases();
+        updateSaleTotal();
+    }
+
+    // Payment form
+    var payForm = document.getElementById('payment-form');
+    if (payForm) {
+        document.getElementById('payment_date').valueAsDate = new Date();
+        var payPartner = document.getElementById('payment_partner_id');
+        var payClient = document.getElementById('payment_client_id');
+        var saleSelect = document.getElementById('sale_id');
+        var saleNote = document.getElementById('sale-remaining-note');
+        var amountInput = document.getElementById('amount_received');
+
+        function refreshSales() {
+            saleSelect.innerHTML = '<option value="">Select investor sale invoice</option>';
+            if (saleNote) saleNote.textContent = '';
+            var partnerId = payPartner.value;
+            var clientId = payClient.value;
+            if (!partnerId || !clientId || !partnerSaleMap[partnerId]) return;
+            partnerSaleMap[partnerId].forEach(function (s) {
+                if (String(s.client_id) !== String(clientId)) return;
+                if (s.remaining <= 0.01) return;
+                var opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.number + ' (' + s.date + ') — remaining Rs ' + formatMoney(s.remaining);
+                opt.dataset.remaining = s.remaining;
+                saleSelect.appendChild(opt);
+            });
+        }
+
+        function onSalePick() {
+            var sel = saleSelect.options[saleSelect.selectedIndex];
+            if (!sel || !sel.value) {
+                if (saleNote) saleNote.textContent = '';
+                return;
+            }
+            var rem = parseFloat(sel.dataset.remaining || '0');
+            if (saleNote) saleNote.textContent = 'Outstanding on this invoice: Rs ' + formatMoney(rem);
+            if (amountInput && !amountInput.dataset.userEdited) {
+                amountInput.value = rem.toFixed(2);
+            }
+        }
+
+        payPartner.addEventListener('change', refreshSales);
+        payClient.addEventListener('change', refreshSales);
+        saleSelect.addEventListener('change', onSalePick);
+        if (amountInput) {
+            amountInput.addEventListener('input', function () {
+                amountInput.dataset.userEdited = '1';
+            });
+        }
+    }
+})();
+</script>
+{% endblock %}

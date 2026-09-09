@@ -9,6 +9,9 @@ from app.models import (
     ShClientCompany,
     ShClientLedgerEntry,
     ShGatePassScreenshot,
+    ShInvestorPurchase,
+    ShInvestorSale,
+    ShInvestorSalePayment,
     ShLedgerEntry,
     ShOrderConfirmation,
     ShPartnerCompany,
@@ -80,6 +83,15 @@ from app.services.sh_profit_loss import (
 from app.services.sh_profit_loss_pdf import (
     generate_profit_loss_record_pdf,
     generate_profit_loss_report_pdf,
+)
+from app.services.sh_investor_stock import (
+    apply_payment_fields,
+    apply_purchase_fields,
+    apply_sale_fields,
+    build_page_context,
+    build_payment_from_form,
+    build_purchase_from_form,
+    build_sale_from_form,
 )
 from app.services.sh_traders import (
     calculate_total_amount,
@@ -440,6 +452,83 @@ def profit_loss_record_pdf(record_id):
         mimetype="application/pdf",
         as_attachment=True,
         download_name=f"pl_{record.id}_{safe_name}.pdf",
+    )
+
+
+@sh_main_bp.route("/investor-stock", methods=["GET", "POST"])
+@login_required
+def investor_stock():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    if request.method == "POST":
+        require_edit_access()
+        action = request.form.get("action", "record_purchase")
+        try:
+            if action == "record_purchase":
+                data = build_purchase_from_form(request.form)
+                purchase = ShInvestorPurchase(created_by_id=current_user.id)
+                ensure_bank_on_create(purchase)
+                apply_purchase_fields(purchase, data, _parse_date(data["purchase_date"]))
+                db.session.add(purchase)
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "ShInvestorPurchase",
+                    purchase.id,
+                    f"Investor purchase: {purchase.material_name}",
+                )
+                db.session.commit()
+                flash("Investor purchase recorded.", "success")
+
+            elif action == "record_sale":
+                data = build_sale_from_form(request.form)
+                sale = ShInvestorSale(created_by_id=current_user.id)
+                ensure_bank_on_create(sale)
+                apply_sale_fields(sale, data, _parse_date(data["sale_date"]))
+                db.session.add(sale)
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "ShInvestorSale",
+                    sale.id,
+                    f"Investor sale {sale.invoice_number}",
+                )
+                db.session.commit()
+                flash("Investor sale recorded.", "success")
+
+            elif action == "record_payment":
+                data = build_payment_from_form(request.form)
+                payment = ShInvestorSalePayment(created_by_id=current_user.id)
+                ensure_bank_on_create(payment)
+                apply_payment_fields(payment, data, _parse_date(data["payment_date"]))
+                db.session.add(payment)
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "ShInvestorSalePayment",
+                    payment.id,
+                    f"Investor payment on sale #{data['sale_id']}",
+                )
+                db.session.commit()
+                flash("Payment applied to investor sale invoice.", "success")
+            else:
+                flash("Unknown action.", "danger")
+        except ValueError as exc:
+            flash(str(exc), "danger")
+        return redirect(url_for("sh_main.investor_stock"))
+
+    ctx = build_page_context()
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    return render_template(
+        "sh_traders/investor_stock.html",
+        clients=clients,
+        banks=get_all_banks(),
+        **ctx,
     )
 
 
