@@ -14,6 +14,7 @@ from app.services.hall_stock import (
     transfer_to_machine_hall,
     update_item_fields,
 )
+from app.services.hall_stock_pdf import generate_hall_stock_pdf
 from app.services.inventory import log_audit
 from app.services.materials_inventory import (
     calculate_live_stock,
@@ -289,6 +290,23 @@ def in_hall_stock():
     )
 
 
+@materials_bp.route("/in-hall-stock/pdf")
+@login_required
+def in_hall_stock_pdf():
+    output = generate_hall_stock_pdf(
+        "In Hall Stock",
+        list_items(HallStockItem.LOCATION_IN_HALL),
+        list_movements(HallStockMovement.TYPE_TRANSFER, limit=200),
+        "Transfers to Machine Hall",
+    )
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"in_hall_stock_{datetime.now().strftime('%Y%m%d')}.pdf",
+        mimetype="application/pdf",
+    )
+
+
 @materials_bp.route("/machine-hall-stock", methods=["GET", "POST"])
 @login_required
 def machine_hall_stock():
@@ -320,6 +338,24 @@ def machine_hall_stock():
         "materials/machine_hall_stock.html",
         items=list_items(HallStockItem.LOCATION_MACHINE),
         usages=list_movements(HallStockMovement.TYPE_USED),
+    )
+
+
+@materials_bp.route("/machine-hall-stock/pdf")
+@login_required
+def machine_hall_stock_pdf():
+    output = generate_hall_stock_pdf(
+        "Machine Hall Stock",
+        list_items(HallStockItem.LOCATION_MACHINE),
+        list_movements(HallStockMovement.TYPE_USED, limit=200),
+        "Material Used",
+        include_where_used=True,
+    )
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"machine_hall_stock_{datetime.now().strftime('%Y%m%d')}.pdf",
+        mimetype="application/pdf",
     )
 
 
