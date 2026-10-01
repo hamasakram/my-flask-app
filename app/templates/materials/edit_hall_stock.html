@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Edit Hall Stock - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Edit {{ item.location_label }} Stock</h1>
+</div>
+<div class="card">
+    <form method="POST" class="form-grid">
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" value="{{ item.material_name }}" required>
+        </div>
+        <div class="form-group">
+            <label for="material_type">Type of Material</label>
+            <input type="text" id="material_type" name="material_type" value="{{ item.material_type }}" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size" value="{{ item.size or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron" value="{{ item.micron or '' }}">
+        </div>
+        <div class="form-group">
+            <label for="rolls_left">Rolls Left</label>
+            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0" value="{{ item.rolls_left if item.rolls_left is not none else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="kg">KGs</label>
+            <input type="number" id="kg" name="kg" step="0.001" min="0" value="{{ item.kg if item.kg is not none else '' }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Changes</button>
+            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

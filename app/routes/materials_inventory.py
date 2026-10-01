@@ -4,7 +4,16 @@ from flask import Blueprint, abort, flash, jsonify, redirect, render_template, r
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import Material, MaterialTransaction
+from app.models import HallStockItem, HallStockMovement, Material, MaterialTransaction
+from app.services.hall_stock import (
+    add_or_increase_stock,
+    list_items,
+    list_movements,
+    parse_stock_fields,
+    record_machine_usage,
+    transfer_to_machine_hall,
+    update_item_fields,
+)
 from app.services.inventory import log_audit
 from app.services.materials_inventory import (
     calculate_live_stock,
@@ -224,3 +233,151 @@ def api_stock(material_id):
             "material_name": material.display_name,
         }
     )
+
+
+def _save_hall_entry(location: str, redirect_endpoint: str):
+    data = parse_stock_fields(request.form)
+    item, created = add_or_increase_stock(location, data, current_user.id)
+    db.session.flush()
+    log_audit(
+        current_user.id,
+        "CREATE" if created else "UPDATE",
+        "HallStockItem",
+        item.id,
+        f"{item.location_label}: {item.material_name}",
+    )
+    db.session.commit()
+    if created:
+        flash(f"{item.material_name} added to {item.location_label}.", "success")
+    else:
+        flash(f"Added onto existing {item.material_name} in {item.location_label}.", "success")
+    return redirect(url_for(redirect_endpoint))
+
+
+@materials_bp.route("/in-hall-stock", methods=["GET", "POST"])
+@login_required
+def in_hall_stock():
+    if request.method == "POST":
+        require_edit_access()
+        action = request.form.get("action", "add")
+        try:
+            if action == "transfer":
+                movement = transfer_to_machine_hall(request.form, current_user.id)
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "HallStockMovement",
+                    movement.id,
+                    f"Transferred {movement.gross_kg} kg of {movement.material_name} to Machine Hall",
+                )
+                db.session.commit()
+                flash(
+                    f"Transferred {movement.gross_kg:,.3f} kg of {movement.material_name} to Machine Hall.",
+                    "success",
+                )
+            else:
+                return _save_hall_entry(HallStockItem.LOCATION_IN_HALL, "materials.in_hall_stock")
+        except ValueError as exc:
+            flash(str(exc), "danger")
+        return redirect(url_for("materials.in_hall_stock"))
+
+    return render_template(
+        "materials/in_hall_stock.html",
+        items=list_items(HallStockItem.LOCATION_IN_HALL),
+        transfers=list_movements(HallStockMovement.TYPE_TRANSFER),
+    )
+
+
+@materials_bp.route("/machine-hall-stock", methods=["GET", "POST"])
+@login_required
+def machine_hall_stock():
+    if request.method == "POST":
+        require_edit_access()
+        action = request.form.get("action", "add")
+        try:
+            if action == "use":
+                movement = record_machine_usage(request.form, current_user.id)
+                db.session.flush()
+                log_audit(
+                    current_user.id,
+                    "CREATE",
+                    "HallStockMovement",
+                    movement.id,
+                    f"Used {movement.material_name} at {movement.where_used}",
+                )
+                db.session.commit()
+                flash(f"Usage recorded for {movement.material_name}.", "success")
+            else:
+                return _save_hall_entry(
+                    HallStockItem.LOCATION_MACHINE, "materials.machine_hall_stock"
+                )
+        except ValueError as exc:
+            flash(str(exc), "danger")
+        return redirect(url_for("materials.machine_hall_stock"))
+
+    return render_template(
+        "materials/machine_hall_stock.html",
+        items=list_items(HallStockItem.LOCATION_MACHINE),
+        usages=list_movements(HallStockMovement.TYPE_USED),
+    )
+
+
+@materials_bp.route("/hall-stock/<int:item_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_hall_stock(item_id):
+    item = HallStockItem.query.get_or_404(item_id)
+    back = (
+        "materials.machine_hall_stock"
+        if item.location == HallStockItem.LOCATION_MACHINE
+        else "materials.in_hall_stock"
+    )
+    if request.method == "POST":
+        require_edit_access()
+        try:
+            data = parse_stock_fields(request.form, require_quantity=False)
+            update_item_fields(item, data)
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "HallStockItem",
+                item.id,
+                f"Updated {item.location_label} {item.material_name}",
+            )
+            db.session.commit()
+            flash("Stock row updated.", "success")
+            return redirect(url_for(back))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+    return render_template(
+        "materials/edit_hall_stock.html",
+        item=item,
+        cancel_url=url_for(back),
+    )
+
+
+@materials_bp.route("/hall-stock/<int:item_id>/delete", methods=["POST"])
+@login_required
+def delete_hall_stock(item_id):
+    require_edit_access()
+    item = HallStockItem.query.get_or_404(item_id)
+    back = (
+        "materials.machine_hall_stock"
+        if item.location == HallStockItem.LOCATION_MACHINE
+        else "materials.in_hall_stock"
+    )
+    HallStockMovement.query.filter(
+        (HallStockMovement.source_item_id == item.id)
+        | (HallStockMovement.dest_item_id == item.id)
+    ).delete(synchronize_session=False)
+    log_audit(
+        current_user.id,
+        "DELETE",
+        "HallStockItem",
+        item.id,
+        f"Deleted {item.location_label} {item.material_name}",
+    )
+    db.session.delete(item)
+    db.session.commit()
+    flash("Stock row deleted.", "success")
+    return redirect(url_for(back))

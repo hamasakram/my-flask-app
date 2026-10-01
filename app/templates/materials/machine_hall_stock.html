@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% from "shared/macros.html" import row_actions with context %}
+{% block title %}Machine Hall Stock - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Machine Hall Stock</h1>
+    <p class="page-subtitle">Material at the machine. Record what is used, how much, and where it went. Printing Materials stock is not changed.</p>
+</div>
+
+{% if current_user.can_edit() %}
+<div class="card highlight-card">
+    <h2>Add Machine Hall Stock</h2>
+    <form method="POST" class="form-grid">
+        <input type="hidden" name="action" value="add">
+        <div class="form-group">
+            <label for="material_name">Material Name</label>
+            <input type="text" id="material_name" name="material_name" required>
+        </div>
+        <div class="form-group">
+            <label for="material_type">Type of Material</label>
+            <input type="text" id="material_type" name="material_type" required>
+        </div>
+        <div class="form-group">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size">
+        </div>
+        <div class="form-group">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron">
+        </div>
+        <div class="form-group">
+            <label for="rolls_left">Rolls Left <small>(optional)</small></label>
+            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+            <label for="kg">KGs <small>(optional)</small></label>
+            <input type="number" id="kg" name="kg" step="0.001" min="0">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Save Machine Hall Stock</button>
+        </div>
+    </form>
+    <p class="field-note">Same name, type, size, and micron are added onto the existing row. Stock transferred from In Hall is added the same way.</p>
+</div>
+
+<div class="card highlight-card">
+    <h2>Material Used / Gone</h2>
+    {% if not items %}
+    <p class="empty-state">Add Machine Hall stock, or transfer from In Hall, first.</p>
+    {% else %}
+    <form method="POST" class="form-grid" id="usage-form">
+        <input type="hidden" name="action" value="use">
+        <div class="form-group">
+            <label for="movement_date">Date</label>
+            <input type="date" id="movement_date" name="movement_date" required>
+        </div>
+        <div class="form-group">
+            <label for="item_id">Which Material</label>
+            <select id="item_id" name="item_id" required>
+                <option value="">Select machine hall material</option>
+                {% for item in items %}
+                <option value="{{ item.id }}" data-kg="{{ item.kg or 0 }}" data-rolls="{{ item.rolls_left or 0 }}">
+                    {{ item.material_name }} · {{ item.material_type }}{% if item.size %} · {{ item.size }}{% endif %}{% if item.micron %} · {{ item.micron }}μ{% endif %}
+                    — {{ "{:,.3f}".format(item.kg or 0) }} kg
+                </option>
+                {% endfor %}
+            </select>
+            <small class="field-note" id="usage-hint"></small>
+        </div>
+        <div class="form-group">
+            <label for="used_kg">How Much (KG)</label>
+            <input type="number" id="used_kg" name="used_kg" step="0.001" min="0">
+        </div>
+        <div class="form-group">
+            <label for="rolls">Rolls used <small>(optional)</small></label>
+            <input type="number" id="rolls" name="rolls" step="0.01" min="0">
+        </div>
+        <div class="form-group full-width">
+            <label for="where_used">Where Used</label>
+            <input type="text" id="where_used" name="where_used" required placeholder="Job, machine, or order">
+        </div>
+        <div class="form-group full-width">
+            <label for="notes">Notes</label>
+            <input type="text" id="notes" name="notes">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Record Usage</button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+    <h2>Machine Hall Stock</h2>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Material Name</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Micron</th>
+                    <th>Rolls Left</th>
+                    <th>KGs</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td><strong>{{ item.material_name }}</strong></td>
+                    <td>{{ item.material_type }}</td>
+                    <td>{{ item.size or '—' }}</td>
+                    <td>{{ item.micron or '—' }}</td>
+                    <td>{% if item.rolls_left is not none %}{{ "{:,.2f}".format(item.rolls_left) }}{% else %}—{% endif %}</td>
+                    <td>{% if item.kg is not none %}{{ "{:,.3f}".format(item.kg) }}{% else %}—{% endif %}</td>
+                    {% if current_user.can_edit() %}
+                    {{ row_actions(
+                        url_for('materials.edit_hall_stock', item_id=item.id),
+                        url_for('materials.delete_hall_stock', item_id=item.id)
+                    ) }}
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No Machine Hall stock yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Usage History</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Material</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Micron</th>
+                <th>KG Used</th>
+                <th>Rolls</th>
+                <th>Where Used</th>
+                <th>Notes</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in usages %}
+            <tr>
+                <td>{{ row.movement_date.strftime('%d-%m-%Y') }}</td>
+                <td>{{ row.material_name }}</td>
+                <td>{{ row.material_type or '—' }}</td>
+                <td>{{ row.size or '—' }}</td>
+                <td>{{ row.micron or '—' }}</td>
+                <td>{% if row.gross_kg %}{{ "{:,.3f}".format(row.gross_kg) }}{% else %}—{% endif %}</td>
+                <td>{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
+                <td>{{ row.where_used or '—' }}</td>
+                <td>{{ row.notes or '—' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="empty">No usage recorded yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var dateInput = document.getElementById('movement_date');
+    if (dateInput) dateInput.valueAsDate = new Date();
+    var select = document.getElementById('item_id');
+    var hint = document.getElementById('usage-hint');
+    if (!select || !hint) return;
+    select.addEventListener('change', function () {
+        var opt = select.options[select.selectedIndex];
+        if (!opt || !opt.value) {
+            hint.textContent = '';
+            return;
+        }
+        hint.textContent = 'Left at machine: ' + opt.dataset.kg + ' kg · ' + opt.dataset.rolls + ' rolls';
+    });
+})();
+</script>
+{% endblock %}

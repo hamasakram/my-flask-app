@@ -44,6 +44,8 @@
             <li><a href="{{ url_for('materials.materials_list') }}">Materials</a></li>
             <li><a href="{{ url_for('materials.stock_in') }}">Stock In</a></li>
             <li><a href="{{ url_for('materials.stock_left') }}">Stock Left</a></li>
+            <li><a href="{{ url_for('materials.in_hall_stock') }}">In Hall Stock</a></li>
+            <li><a href="{{ url_for('materials.machine_hall_stock') }}">Machine Hall Stock</a></li>
             <li><a href="{{ url_for('materials_reports.daily_report') }}">Daily Report</a></li>
             {% endif %}
             {% elif active_module == 'glue' %}

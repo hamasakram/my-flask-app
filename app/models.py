@@ -255,6 +255,64 @@ class MaterialTransaction(db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
+class HallStockItem(db.Model):
+    """In-hall or machine-hall material balance. Separate from printing stock ledgers."""
+
+    __tablename__ = "hall_stock_items"
+
+    LOCATION_IN_HALL = "in_hall"
+    LOCATION_MACHINE = "machine_hall"
+
+    id = db.Column(db.Integer, primary_key=True)
+    location = db.Column(db.String(20), nullable=False)
+    material_name = db.Column(db.String(150), nullable=False)
+    material_type = db.Column(db.String(100), nullable=False, default="")
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50), default="")
+    rolls_left = db.Column(db.Float, nullable=True)
+    kg = db.Column(db.Float, nullable=True)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def location_label(self) -> str:
+        if self.location == self.LOCATION_MACHINE:
+            return "Machine Hall"
+        return "In Hall"
+
+
+class HallStockMovement(db.Model):
+    """Transfer into machine hall, or material used from machine hall."""
+
+    __tablename__ = "hall_stock_movements"
+
+    TYPE_TRANSFER = "transfer"
+    TYPE_USED = "used"
+
+    id = db.Column(db.Integer, primary_key=True)
+    movement_type = db.Column(db.String(20), nullable=False)
+    movement_date = db.Column(db.Date, nullable=False)
+    source_item_id = db.Column(db.Integer, db.ForeignKey("hall_stock_items.id"), nullable=True)
+    dest_item_id = db.Column(db.Integer, db.ForeignKey("hall_stock_items.id"), nullable=True)
+    material_name = db.Column(db.String(150), nullable=False)
+    material_type = db.Column(db.String(100), default="")
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50), default="")
+    gross_kg = db.Column(db.Float, nullable=True)
+    rolls = db.Column(db.Float, nullable=True)
+    where_used = db.Column(db.Text)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    source_item = db.relationship("HallStockItem", foreign_keys=[source_item_id])
+    dest_item = db.relationship("HallStockItem", foreign_keys=[dest_item_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
 class ProductionJob(db.Model):
     """Saved job names for Stock Left 'Where Used' autocomplete."""
 
