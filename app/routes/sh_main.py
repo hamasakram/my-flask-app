@@ -31,6 +31,7 @@ from app.services.sh_bank import (
     get_current_sh_bank,
     set_current_sh_bank,
 )
+from app.services.sh_aging_report import build_customer_aging_report, generate_customer_aging_pdf
 from app.services.sh_client_ledger_report import (
     build_client_ledger_timeline,
     generate_complete_client_ledger_pdf,
@@ -799,6 +800,58 @@ def client_ledger_report_pdf():
         output,
         as_attachment=True,
         download_name=f"ledger_report_{client_slug}{range_suffix}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/aging-report", methods=["GET"])
+@login_required
+def aging_report():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
+    client_id = request.args.get("client_id", type=int)
+    as_on_str = request.args.get("as_on", "").strip()
+    as_on = _parse_date(as_on_str) if as_on_str else datetime.now().date()
+
+    report = None
+    if client_id:
+        report = build_customer_aging_report(client_id, as_on)
+
+    return render_template(
+        "sh_traders/aging_report.html",
+        clients=clients,
+        selected_client_id=client_id,
+        as_on=as_on.strftime("%Y-%m-%d"),
+        report=report,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/aging-report/pdf")
+@login_required
+def aging_report_pdf():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    client_id = request.args.get("client_id", type=int)
+    if not client_id:
+        flash("Select a client for the aging report.", "danger")
+        return redirect(url_for("sh_main.aging_report"))
+
+    as_on_str = request.args.get("as_on", "").strip()
+    as_on = _parse_date(as_on_str) if as_on_str else datetime.now().date()
+    report = build_customer_aging_report(client_id, as_on)
+    output = generate_customer_aging_pdf(report)
+    client_slug = report["client"].name.replace(" ", "_")
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"aging_report_{client_slug}_{as_on.strftime('%Y%m%d')}.pdf",
         mimetype="application/pdf",
     )
 

@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Invoice Aging Report - SH Traders{% endblock %}
+{% block content %}
+{{ sh_page_header('Invoice Aging Report', 'How many days each sale invoice and material has been outstanding — updates every time you open it') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if not clients %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Customer Aging Report</h2>
+    <p class="field-note">Each sale invoice line is listed with its material. Aging days are counted from the invoice date up to the As On date, so they increase as days pass.</p>
+    <form method="GET" class="form-grid">
+        <div class="form-group">
+            <label for="client_id">Customer</label>
+            <select id="client_id" name="client_id" required>
+                <option value="">Select client</option>
+                {% for c in clients %}
+                <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="as_on">As On</label>
+            <input type="date" id="as_on" name="as_on" value="{{ as_on }}" required>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-secondary">Preview</button>
+            {% if report %}
+            <a href="{{ url_for('sh_main.aging_report_pdf', client_id=selected_client_id, as_on=as_on) }}"
+               target="_blank" class="btn btn-primary">Download PDF</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if report %}
+<div class="card">
+    <h2>Customer Name: {{ report.client.name }}</h2>
+    <p class="field-note">As On {{ report.as_on.strftime('%d/%m/%Y') }}</p>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Invoice Date</th>
+                    <th>Invoice No</th>
+                    <th>Material</th>
+                    <th class="num">Invoice Amount</th>
+                    <th class="num">Total Balance</th>
+                    <th class="num">Aging Days</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in report.rows %}
+                <tr>
+                    <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
+                    <td>{{ row.invoice_number }}</td>
+                    <td>{{ row.material }}</td>
+                    <td class="num">{{ "{:,.2f}".format(row.amount) }}</td>
+                    <td class="num">{{ "{:,.2f}".format(row.running_balance) }}</td>
+                    <td class="num">{{ row.aging_days }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">No invoices on or before this date</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p style="text-align:center; margin-top:1rem;"><strong>Total Balance: {{ "{:,.2f}".format(report.total_balance) }}</strong></p>
+
+    <div class="table-scroll" style="margin-top:1rem;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% for key, label in report.bucket_labels[:4] %}
+                    <th>{{ label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    {% for key, label in report.bucket_labels[:4] %}
+                    <td style="text-align:center;">{{ "{:,.2f}".format(report.buckets[key]) }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="table-scroll" style="margin-top:0.75rem;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    {% for key, label in report.bucket_labels[4:] %}
+                    <th>{{ label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    {% for key, label in report.bucket_labels[4:] %}
+                    <td style="text-align:center;">{{ "{:,.2f}".format(report.buckets[key]) }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}
