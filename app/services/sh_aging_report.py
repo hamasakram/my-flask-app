@@ -12,6 +12,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from app.models import ShClientCompany, ShSaleInvoice
 from app.services.sh_bank import filter_by_bank
+from app.services.sh_ledger_sync import compute_invoice_balances
 
 BUCKETS = (
     ("first_15", "First 15 days", 0, 15),
@@ -50,8 +51,30 @@ def _bucket_key(aging_days: int) -> str:
     return "above_120"
 
 
+def _split_remaining(lines, remaining: float) -> list[float]:
+    """Split an invoice's exact remaining across its lines. Last line absorbs rounding."""
+    if not lines:
+        return [round(remaining, 2)]
+    gross = sum(float(line.line_total or 0) for line in lines)
+    if gross <= 0:
+        amounts = [0.0] * len(lines)
+        amounts[-1] = round(remaining, 2)
+        return amounts
+    amounts = []
+    used = 0.0
+    for index, line in enumerate(lines):
+        if index == len(lines) - 1:
+            amounts.append(round(remaining - used, 2))
+        else:
+            share = round(float(line.line_total or 0) / gross * remaining, 2)
+            amounts.append(share)
+            used += share
+    return amounts
+
+
 def build_customer_aging_report(client_id: int, as_on: date) -> dict:
     client = ShClientCompany.query.get_or_404(client_id)
+    balances = compute_invoice_balances(client_id)
     invoices = (
         filter_by_bank(ShSaleInvoice.query, ShSaleInvoice)
         .filter(
@@ -67,34 +90,30 @@ def build_customer_aging_report(client_id: int, as_on: date) -> dict:
     buckets = {key: 0.0 for key, *_rest in BUCKETS}
 
     for invoice in invoices:
+        total = float(invoice.total_amount or 0)
+        remaining = round(
+            float(balances.get(invoice.id, {}).get("remaining", total)),
+            2,
+        )
+        if remaining <= 0.01:
+            continue
+
         aging_days = (as_on - invoice.invoice_date).days
         bucket = _bucket_key(aging_days)
         lines = list(invoice.lines) if invoice.lines else []
-        if not lines:
-            amount = float(invoice.total_amount or 0)
-            running += amount
-            buckets[bucket] += amount
-            rows.append(
-                {
-                    "date": invoice.invoice_date,
-                    "invoice_number": invoice.invoice_number,
-                    "material": invoice.notes or "—",
-                    "amount": amount,
-                    "running_balance": running,
-                    "aging_days": aging_days,
-                }
-            )
-            continue
+        portions = _split_remaining(lines, remaining)
+        materials = [_material_label(line) for line in lines] or [invoice.notes or "—"]
 
-        for line in lines:
-            amount = float(line.line_total or 0)
-            running += amount
-            buckets[bucket] += amount
+        for material, amount in zip(materials, portions):
+            if amount <= 0:
+                continue
+            running = round(running + amount, 2)
+            buckets[bucket] = round(buckets[bucket] + amount, 2)
             rows.append(
                 {
                     "date": invoice.invoice_date,
                     "invoice_number": invoice.invoice_number,
-                    "material": _material_label(line),
+                    "material": material,
                     "amount": amount,
                     "running_balance": running,
                     "aging_days": aging_days,
@@ -186,7 +205,7 @@ def generate_customer_aging_pdf(report: dict) -> BytesIO:
         Paragraph("Invoice Date", head),
         Paragraph("Invoice No", head),
         Paragraph("Material", head),
-        Paragraph("Invoice Amount", head),
+        Paragraph("Balance Left", head),
         Paragraph("Total Balance", head),
         Paragraph("Aging Days", head),
     ]

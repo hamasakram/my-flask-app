@@ -3,7 +3,7 @@
 {% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
 {% block title %}Invoice Aging Report - SH Traders{% endblock %}
 {% block content %}
-{{ sh_page_header('Invoice Aging Report', 'How many days each sale invoice and material has been outstanding — updates every time you open it') }}
+{{ sh_page_header('Invoice Aging Report', 'Outstanding sale invoices only — paid invoices are excluded, and balance left matches Sale Invoices') }}
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if not clients %}
@@ -11,7 +11,7 @@
 {% else %}
 <div class="card highlight-card">
     <h2>Customer Aging Report</h2>
-    <p class="field-note">Each sale invoice line is listed with its material. Aging days are counted from the invoice date up to the As On date, so they increase as days pass.</p>
+    <p class="field-note">Paid invoices are left out. Balance Left is the exact amount still due on Sale Invoices. Aging days are counted from the invoice date up to the As On date.</p>
     <form method="GET" class="form-grid">
         <div class="form-group">
             <label for="client_id">Customer</label>
@@ -47,7 +47,7 @@
                     <th>Invoice Date</th>
                     <th>Invoice No</th>
                     <th>Material</th>
-                    <th class="num">Invoice Amount</th>
+                    <th class="num">Balance Left</th>
                     <th class="num">Total Balance</th>
                     <th class="num">Aging Days</th>
                 </tr>
