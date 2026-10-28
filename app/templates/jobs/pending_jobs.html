@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% import "jobs/_macros.html" as jm with context %}
+{% block title %}Pending Jobs - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>Pending Jobs</h1>
+        <p class="page-subtitle">Jobs waiting to print or on the machine, oldest first, with live material and ink stock.</p>
+    </div>
+    <div class="header-actions">
+        {% if current_user.can_edit() %}
+        <a href="{{ url_for('jobs.new_job') }}" class="btn btn-secondary">+ Add New Job</a>
+        {% endif %}
+        <a href="{{ url_for('jobs.pending_jobs_pdf') }}" class="btn btn-primary" target="_blank">Download Pending Jobs PDF</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Pending / In Printing</span>
+        <span class="stat-value">{{ rows|length }}</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Ready to Run</span>
+        <span class="stat-value">{{ ready_count }}</span>
+    </div>
+    <div class="stat-card accent-red">
+        <span class="stat-label">Stock Short</span>
+        <span class="stat-value">{{ short_count }}</span>
+    </div>
+</div>
+
+{% for row in rows %}
+{% set job = row.job %}
+<div class="card job-card {{ 'job-card-ready' if row.ready else 'job-card-short' }}">
+    <div class="job-card-head">
+        <div>
+            <div class="job-card-number">{{ job.job_number }} · {{ job.job_date.strftime('%d-%m-%Y') }}</div>
+            <h2 class="job-card-title"><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}">{{ job.job_name }}</a></h2>
+            <div class="job-card-meta">
+                {{ jm.status_badge(job) }}
+                <span>Customer / Party: <strong>{{ job.customer_name or '—' }}</strong></span>
+            </div>
+        </div>
+        <div class="job-card-verdict">
+            {% if row.ready %}
+            <span class="badge badge-green job-badge-lg">Ready to run</span>
+            {% else %}
+            <span class="badge badge-red job-badge-lg">{{ row.problem_count }} item(s) short</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid-2 job-card-body">
+        <div>
+            <h3 class="job-subhead">Materials</h3>
+            <table class="data-table compact">
+                <thead><tr><th>Material</th><th>Required</th><th>Available</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for m in row.materials %}
+                    <tr>
+                        <td>{{ m.label }}</td>
+                        <td class="job-nowrap">{% if m.required_kg %}{{ jm.kg(m.required_kg) }} kg{% else %}—{% endif %}</td>
+                        <td class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
+                        <td>{{ jm.line_badge(m) }} {{ jm.shortfall_note(m) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="empty">No materials</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div>
+            <h3 class="job-subhead">Inks</h3>
+            <table class="data-table compact">
+                <thead><tr><th>Ink</th><th>Required</th><th>Available</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for i in row.inks %}
+                    <tr>
+                        <td>{{ i.label }}</td>
+                        <td class="job-nowrap">{% if i.required_kg %}{{ jm.kg(i.required_kg) }} kg{% else %}—{% endif %}</td>
+                        <td class="job-nowrap"><strong>{{ jm.cans(i.cans) }} cans</strong>{% if i.weight_per_can > 0 %} / {{ jm.kg(i.kg) }} kg{% endif %}</td>
+                        <td>{{ jm.line_badge(i) }} {{ jm.shortfall_note(i) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="empty">No inks</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="job-card-actions">
+        <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a>
+        <a href="{{ url_for('jobs.job_pdf', job_id=job.id) }}" class="btn btn-sm btn-secondary" target="_blank">Job Card PDF</a>
+        {% if current_user.can_edit() %}
+        <a href="{{ url_for('jobs.edit_job', job_id=job.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+        <span class="job-actions-divider"></span>
+        {{ jm.status_buttons(job, request.path) }}
+        {% endif %}
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <p class="empty-state">No pending jobs right now.{% if current_user.can_edit() %} <a href="{{ url_for('jobs.new_job') }}">Add a new job</a>.{% endif %}</p>
+</div>
+{% endfor %}
+{% endblock %}

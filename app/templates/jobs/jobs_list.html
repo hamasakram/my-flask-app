@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% import "jobs/_macros.html" as jm with context %}
+{% block title %}New Jobs Added - RN COLOUR{% endblock %}
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1>New Jobs Added</h1>
+        <p class="page-subtitle">Every job entered for printing, newest first, with a live stock check for open jobs.</p>
+    </div>
+    <div class="header-actions">
+        {% if current_user.can_edit() %}
+        <a href="{{ url_for('jobs.new_job') }}" class="btn btn-primary">+ Add New Job</a>
+        {% endif %}
+        <a href="{{ url_for('jobs.pending_jobs') }}" class="btn btn-secondary">Pending Jobs</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="GET" action="{{ url_for('jobs.jobs_list') }}" class="filter-bar job-filter-bar">
+        <div class="form-group">
+            <label for="status">Status</label>
+            <select id="status" name="status" onchange="this.form.submit()">
+                <option value="" {% if not status %}selected{% endif %}>All jobs</option>
+                <option value="open" {% if status == 'open' %}selected{% endif %}>Open (Pending + In Printing)</option>
+                {% for key, label in status_labels.items() %}
+                <option value="{{ key }}" {% if status == key %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group job-filter-search">
+            <label for="q">Search</label>
+            <input type="search" id="q" name="q" value="{{ search }}" placeholder="Job no, job name or customer">
+        </div>
+        <div class="form-group job-filter-buttons">
+            <span class="job-label-spacer">&nbsp;</span>
+            <div class="form-inline">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                {% if status or search %}
+                <a href="{{ url_for('jobs.jobs_list') }}" class="btn btn-secondary">Clear</a>
+                {% endif %}
+            </div>
+        </div>
+    </form>
+
+    <p class="field-note job-result-count">
+        Showing {{ rows|length }} job{{ '' if rows|length == 1 else 's' }}
+        {%- if status %} · status: {{ 'Open' if status == 'open' else status_labels.get(status, status) }}{% endif %}
+        {%- if search %} · matching “{{ search }}”{% endif %}
+    </p>
+
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Job No</th>
+                    <th>Date</th>
+                    <th>Job Name</th>
+                    <th>Customer / Party</th>
+                    <th>Materials</th>
+                    <th>Inks</th>
+                    <th>Status</th>
+                    <th>Stock</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                {% set job = row.job %}
+                <tr{% if job.is_open and not row.ready %} class="job-row-short"{% endif %}>
+                    <td class="job-nowrap"><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link"><strong>{{ job.job_number }}</strong></a></td>
+                    <td class="job-nowrap">{{ job.job_date.strftime('%d-%m-%Y') }}</td>
+                    <td><strong>{{ job.job_name }}</strong></td>
+                    <td>{{ job.customer_name or '—' }}</td>
+                    <td class="job-cell-lines">
+                        {% for m in row.materials %}
+                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(m) }}{% endif %}{{ m.label }}</div>
+                        {% else %}—{% endfor %}
+                    </td>
+                    <td class="job-cell-lines">
+                        {% for i in row.inks %}
+                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(i) }}{% endif %}{{ i.label }}</div>
+                        {% else %}—{% endfor %}
+                    </td>
+                    <td>{{ jm.status_badge(job) }}</td>
+                    <td class="job-nowrap">{{ jm.verdict_badge(row) }}</td>
+                    <td>
+                        <div class="table-actions">
+                            <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a>
+                            <a href="{{ url_for('jobs.job_pdf', job_id=job.id) }}" class="btn btn-sm btn-secondary" target="_blank">PDF</a>
+                            {% if current_user.can_edit() %}
+                            <a href="{{ url_for('jobs.edit_job', job_id=job.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                            {{ jm.delete_form(job) }}
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="empty">
+                    {% if status or search %}No jobs match this filter.{% else %}No jobs added yet.{% endif %}
+                    {% if current_user.can_edit() %}<a href="{{ url_for('jobs.new_job') }}">Add a new job</a>.{% endif %}
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="field-note job-legend">
+        <span class="job-dot job-dot-ok"></span> In stock
+        <span class="job-dot job-dot-short"></span> Short
+        <span class="job-dot job-dot-out"></span> Out of stock
+        <span class="job-dot job-dot-unlisted"></span> Not in stock list
+        · Stock is checked for open jobs only.
+    </p>
+</div>
+{% endblock %}

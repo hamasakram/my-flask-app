@@ -1,0 +1,80 @@
+{# Shared helpers for the Job Planning screens. Import "with context". #}
+
+{% set JOB_STATUS_BADGES = {
+    'pending': 'orange',
+    'in_progress': 'blue',
+    'completed': 'green',
+    'cancelled': 'gray',
+} %}
+{% set LINE_STATUS_BADGES = {
+    'ok': 'green',
+    'short': 'orange',
+    'out': 'red',
+    'unlisted': 'gray',
+} %}
+
+{% macro kg(value) -%}
+{%- if value is none or value == '' -%}—{%- else -%}{{ "{:,.2f}".format(value) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro cans(value) -%}
+{%- if value is none or value == '' -%}—{%- else -%}{{ "{:,.1f}".format(value) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro status_badge(job, large=False) -%}
+<span class="badge badge-{{ JOB_STATUS_BADGES.get(job.status, 'gray') }}{% if large %} job-badge-lg{% endif %}">{{ job.status_label }}</span>
+{%- endmacro %}
+
+{% macro line_badge(row) -%}
+<span class="badge badge-{{ LINE_STATUS_BADGES.get(row.status, 'gray') }}">{{ row.status_label }}</span>
+{%- endmacro %}
+
+{% macro line_dot(row) -%}
+<span class="job-dot job-dot-{{ row.status }}" title="{{ row.status_label }}"></span>
+{%- endmacro %}
+
+{% macro shortfall_note(row) -%}
+{%- if row.status == 'short' and row.shortfall_kg -%}
+<span class="job-shortfall">Short by {{ kg(row.shortfall_kg) }} kg</span>
+{%- elif row.status in ('out', 'unlisted') and row.required_kg -%}
+<span class="job-shortfall">Need {{ kg(row.required_kg) }} kg</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro verdict_badge(check, large=False) -%}
+{%- if not check.job.is_open -%}
+<span class="job-muted">—</span>
+{%- elif check.ready -%}
+<span class="badge badge-green{% if large %} job-badge-lg{% endif %}">Ready</span>
+{%- else -%}
+<span class="badge badge-red{% if large %} job-badge-lg{% endif %}">{{ check.problem_count }} short</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro status_form(job, status, label, css='btn-secondary', confirm_text=None, next_url=None) -%}
+<form method="POST" action="{{ url_for('jobs.change_status', job_id=job.id) }}" class="inline-action-form"{% if confirm_text %} onsubmit='return confirm({{ confirm_text|tojson }});'{% endif %}>
+    <input type="hidden" name="status" value="{{ status }}">
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    <button type="submit" class="btn btn-sm {{ css }}">{{ label }}</button>
+</form>
+{%- endmacro %}
+
+{% macro status_buttons(job, next_url=None) -%}
+{%- if job.status == 'pending' -%}
+{{ status_form(job, 'in_progress', 'Start Printing', 'btn-primary', None, next_url) }}
+{{ status_form(job, 'completed', 'Mark Completed', 'job-btn-success', None, next_url) }}
+{{ status_form(job, 'cancelled', 'Cancel Job', 'btn-secondary', 'Cancel ' ~ job.job_number ~ ' (' ~ job.job_name ~ ')?', next_url) }}
+{%- elif job.status == 'in_progress' -%}
+{{ status_form(job, 'completed', 'Mark Completed', 'job-btn-success', None, next_url) }}
+{{ status_form(job, 'pending', 'Back to Pending', 'btn-secondary', None, next_url) }}
+{{ status_form(job, 'cancelled', 'Cancel Job', 'btn-secondary', 'Cancel ' ~ job.job_number ~ ' (' ~ job.job_name ~ ')?', next_url) }}
+{%- else -%}
+{{ status_form(job, 'pending', 'Reopen as Pending', 'btn-secondary', None, next_url) }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro delete_form(job, label='Delete') -%}
+<form method="POST" action="{{ url_for('jobs.delete_job', job_id=job.id) }}" class="inline-action-form" onsubmit='return confirm({{ ("Delete " ~ job.job_number ~ " (" ~ job.job_name ~ ") permanently?")|tojson }});'>
+    <button type="submit" class="btn btn-sm btn-danger">{{ label }}</button>
+</form>
+{%- endmacro %}

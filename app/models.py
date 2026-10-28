@@ -1355,3 +1355,101 @@ class BankTransfer(db.Model):
         passive_deletes=True,
     )
     created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+
+class PrintJob(db.Model):
+    """Planned printing job with the materials and inks it needs."""
+
+    __tablename__ = "print_jobs"
+
+    STATUS_PENDING = "pending"
+    STATUS_IN_PROGRESS = "in_progress"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+    STATUSES = (STATUS_PENDING, STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_CANCELLED)
+    OPEN_STATUSES = (STATUS_PENDING, STATUS_IN_PROGRESS)
+    STATUS_LABELS = {
+        STATUS_PENDING: "Pending",
+        STATUS_IN_PROGRESS: "In Printing",
+        STATUS_COMPLETED: "Completed",
+        STATUS_CANCELLED: "Cancelled",
+    }
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_number = db.Column(db.String(30), unique=True, nullable=False)
+    job_date = db.Column(db.Date, nullable=False)
+    job_name = db.Column(db.String(200), nullable=False)
+    customer_name = db.Column(db.String(150))
+    status = db.Column(db.String(20), nullable=False, default=STATUS_PENDING)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+    materials = db.relationship(
+        "PrintJobMaterial",
+        back_populates="job",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="PrintJobMaterial.position",
+    )
+    inks = db.relationship(
+        "PrintJobInk",
+        back_populates="job",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="PrintJobInk.line_number",
+    )
+
+    @property
+    def status_label(self) -> str:
+        return self.STATUS_LABELS.get(self.status, self.status)
+
+    @property
+    def is_open(self) -> bool:
+        return self.status in self.OPEN_STATUSES
+
+
+class PrintJobMaterial(db.Model):
+    """Material slot (1-3) on a print job. Stock is matched by material_key."""
+
+    __tablename__ = "print_job_materials"
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(
+        db.Integer, db.ForeignKey("print_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    position = db.Column(db.Integer, nullable=False)
+    material_key = db.Column(db.String(300), nullable=False)
+    category = db.Column(db.String(100), default="")
+    material_name = db.Column(db.String(150), nullable=False)
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50), default="")
+    required_kg = db.Column(db.Float, nullable=True)
+
+    job = db.relationship("PrintJob", back_populates="materials")
+
+    __table_args__ = (
+        db.UniqueConstraint("job_id", "position", name="uq_print_job_material_position"),
+    )
+
+
+class PrintJobInk(db.Model):
+    """Ink needed by a print job. ink_type_id points at InkType when chosen from stock."""
+
+    __tablename__ = "print_job_inks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    job_id = db.Column(
+        db.Integer, db.ForeignKey("print_jobs.id", ondelete="CASCADE"), nullable=False
+    )
+    line_number = db.Column(db.Integer, nullable=False)
+    ink_type_id = db.Column(db.Integer, nullable=True)
+    ink_company = db.Column(db.String(100), default="")
+    ink_name = db.Column(db.String(150), nullable=False)
+    shade = db.Column(db.String(50), default="")
+    required_kg = db.Column(db.Float, nullable=True)
+
+    job = db.relationship("PrintJob", back_populates="inks")

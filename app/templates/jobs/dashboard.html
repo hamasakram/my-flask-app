@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% import "jobs/_macros.html" as jm with context %}
+{% block title %}Job Planning - RN COLOUR{% endblock %}
+{% block content %}
+{% set full_access = not current_user.is_dashboard_only() %}
+<div class="page-header">
+    <div>
+        <h1>Job Planning</h1>
+        <p class="page-subtitle">Overview — {{ stats.today.strftime('%d %B %Y') }}. Every open job is checked live against Printing Materials, In Hall, Machine Hall and Ink stock.</p>
+    </div>
+    {% if full_access %}
+    <div class="header-actions">
+        {% if current_user.can_edit() %}
+        <a href="{{ url_for('jobs.new_job') }}" class="btn btn-primary">+ Add New Job</a>
+        {% endif %}
+        <a href="{{ url_for('jobs.pending_jobs_pdf') }}" class="btn btn-secondary" target="_blank">Pending Jobs PDF</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-orange">
+        <span class="stat-label">Open Jobs</span>
+        <span class="stat-value">{{ stats.open_count }}</span>
+        <span class="job-stat-note">{{ stats.counts.get('pending', 0) }} pending · {{ stats.counts.get('in_progress', 0) }} in printing</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Ready to Run</span>
+        <span class="stat-value">{{ stats.ready_count }}</span>
+        <span class="job-stat-note">All materials &amp; inks in stock</span>
+    </div>
+    <div class="stat-card accent-red">
+        <span class="stat-label">Stock Short</span>
+        <span class="stat-value">{{ stats.short_count }}</span>
+        <span class="job-stat-note">Open jobs needing stock</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Completed This Month</span>
+        <span class="stat-value">{{ stats.completed_this_month }}</span>
+        <span class="job-stat-note">{{ stats.total }} job(s) recorded in total</span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header-row">
+        <h2>Open Jobs</h2>
+        {% if full_access %}
+        <a href="{{ url_for('jobs.pending_jobs') }}" class="btn btn-sm btn-secondary">Open Pending Jobs</a>
+        {% endif %}
+    </div>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Job No</th>
+                    <th>Date</th>
+                    <th>Job Name</th>
+                    <th>Customer / Party</th>
+                    <th>Status</th>
+                    <th>Stock Check</th>
+                    {% if full_access %}<th></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in stats.open %}
+                {% set job = row.job %}
+                <tr{% if not row.ready %} class="job-row-short"{% endif %}>
+                    <td><strong>{{ job.job_number }}</strong></td>
+                    <td>{{ job.job_date.strftime('%d-%m-%Y') }}</td>
+                    <td>{{ job.job_name }}</td>
+                    <td>{{ job.customer_name or '—' }}</td>
+                    <td>{{ jm.status_badge(job) }}</td>
+                    <td>{{ jm.verdict_badge(row) }}</td>
+                    {% if full_access %}
+                    <td><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ 7 if full_access else 6 }}" class="empty">No open jobs. {% if full_access and current_user.can_edit() %}<a href="{{ url_for('jobs.new_job') }}">Add a new job</a>.{% endif %}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header-row">
+        <h2>Recent Jobs</h2>
+        {% if full_access %}
+        <a href="{{ url_for('jobs.jobs_list') }}" class="btn btn-sm btn-secondary">All Jobs Added</a>
+        {% endif %}
+    </div>
+    <div class="table-scroll">
+        <table class="data-table compact">
+            <thead>
+                <tr>
+                    <th>Job No</th>
+                    <th>Date</th>
+                    <th>Job Name</th>
+                    <th>Customer / Party</th>
+                    <th>Materials</th>
+                    <th>Inks</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in stats.recent %}
+                <tr>
+                    <td>
+                        {% if full_access %}
+                        <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link"><strong>{{ job.job_number }}</strong></a>
+                        {% else %}
+                        <strong>{{ job.job_number }}</strong>
+                        {% endif %}
+                    </td>
+                    <td>{{ job.job_date.strftime('%d-%m-%Y') }}</td>
+                    <td>{{ job.job_name }}</td>
+                    <td>{{ job.customer_name or '—' }}</td>
+                    <td>{{ job.materials|length }}</td>
+                    <td>{{ job.inks|length }}</td>
+                    <td>{{ jm.status_badge(job) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="empty">No jobs added yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if full_access %}
+<div class="quick-actions">
+    {% if current_user.can_edit() %}
+    <a href="{{ url_for('jobs.new_job') }}" class="btn btn-primary">+ Add New Job</a>
+    {% endif %}
+    <a href="{{ url_for('jobs.jobs_list') }}" class="btn btn-secondary">New Jobs Added</a>
+    <a href="{{ url_for('jobs.pending_jobs') }}" class="btn btn-secondary">Pending Jobs</a>
+</div>
+{% endif %}
+{% endblock %}

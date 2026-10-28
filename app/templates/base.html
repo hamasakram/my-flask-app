@@ -112,6 +112,16 @@
             <li><a href="{{ url_for('bank_ledger.rokar_monthly') }}" class="{% if request.endpoint == 'bank_ledger.rokar_monthly' %}active{% endif %}">Monthly Rokar</a></li>
             <li><a href="{{ url_for('bank_ledger.transfers') }}">Cross-Bank Transfers</a></li>
             {% endif %}
+            {% elif active_module == 'jobs' %}
+            <li><a href="{{ url_for('jobs.dashboard') }}" class="{% if request.endpoint == 'jobs.dashboard' %}active{% endif %}">Dashboard</a></li>
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
+            <li class="nav-section">Job Planning</li>
+            <li><a href="{{ url_for('jobs.new_job') }}" class="{% if request.endpoint == 'jobs.new_job' %}active{% endif %}">Add New Job</a></li>
+            <li><a href="{{ url_for('jobs.jobs_list') }}" class="{% if request.endpoint in ('jobs.jobs_list', 'jobs.job_detail', 'jobs.edit_job') %}active{% endif %}">New Jobs Added</a></li>
+            <li><a href="{{ url_for('jobs.pending_jobs') }}" class="{% if request.endpoint == 'jobs.pending_jobs' %}active{% endif %}">Pending Jobs</a></li>
+            <li class="nav-section">Reports</li>
+            <li><a href="{{ url_for('jobs.pending_jobs_pdf') }}" target="_blank">Pending Jobs PDF</a></li>
+            {% endif %}
             {% endif %}
             {% if current_user.is_admin() %}
             <li class="nav-section">Admin</li>
@@ -139,7 +149,7 @@
                 <option value="{{ mod.url }}" {% if mod.active %}selected{% endif %}>{{ mod.label }}</option>
                 {% endfor %}
             </select>
-            {% if current_user.is_authenticated and not current_user.is_dashboard_only() and active_module not in ('home_ledger', 'bank_ledger') %}
+            {% if current_user.is_authenticated and not current_user.is_dashboard_only() and active_module not in ('home_ledger', 'bank_ledger', 'jobs') %}
             <a href="{{ url_for('pdf.builder', module=active_module) }}" class="btn btn-sm btn-primary">Generate PDF</a>
             {% endif %}
         </div>
