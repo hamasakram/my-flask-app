@@ -5,7 +5,7 @@
 <div class="page-header">
     <div>
         <h1>{{ job.job_number }} · {{ job.job_name }}</h1>
-        <p class="page-subtitle">{{ jm.status_badge(job) }} &nbsp;Job date {{ job.job_date.strftime('%d-%m-%Y') }}{% if job.customer_name %} · {{ job.customer_name }}{% endif %}</p>
+        <p class="page-subtitle">{{ jm.status_badge(job) }} &nbsp;Job date {{ job.job_date.strftime('%d-%m-%Y') }}{% if job.customer_name %} · {{ job.customer_name }}{% endif %}{% if job.production_label %} · To produce <strong>{{ job.production_label }}</strong>{% endif %}</p>
     </div>
     <div class="header-actions">
         <a href="{{ url_for('jobs.job_pdf', job_id=job.id) }}" class="btn btn-primary" target="_blank">Print Job Card (PDF)</a>
@@ -21,39 +21,44 @@
     <div class="job-verdict-icon">{{ '✓' if job.status == 'completed' else '✕' }}</div>
     <div>
         <strong>This job is {{ job.status_label|lower }}.</strong>
-        <span>Stock below is today's live stock, shown for reference.{% if job.completed_at %} Completed {{ job.completed_at.strftime('%d-%m-%Y %H:%M') }} UTC.{% endif %}</span>
+        <span>Stock below is today's live stock, shown for reference.{% if job.completed_at %} Completed {{ to_pkt(job.completed_at).strftime('%d-%m-%Y %I:%M %p') }} PKT.{% endif %}</span>
     </div>
 </div>
 {% elif check.ready %}
 <div class="job-verdict job-verdict-ready">
     <div class="job-verdict-icon">✓</div>
     <div>
-        <strong>Ready to run — all materials and inks are in stock</strong>
-        <span>{{ check.materials|length }} material(s) and {{ check.inks|length }} ink(s) checked against live stock.</span>
+        <strong>Ready to run — all materials are in stock</strong>
+        <span>{{ check.materials|length }} material(s) checked against live In Hall + Machine Hall stock.</span>
     </div>
 </div>
 {% else %}
 <div class="job-verdict job-verdict-short">
     <div class="job-verdict-icon">!</div>
     <div>
-        <strong>Stock short — {{ check.problem_count }} item(s) need attention</strong>
+        <strong>Stock short — {{ check.problem_count }} material(s) need attention</strong>
         <span>
-            {% if not check.materials_ok %}Materials need attention.{% else %}All materials in stock.{% endif %}
-            {% if not check.inks_ok %}Inks need attention.{% else %}All inks in stock.{% endif %}
+            {%- if check.not_in_stock %}{{ check.not_in_stock|length }} not in stock{% endif %}
+            {%- if check.not_in_stock and check.short %} · {% endif %}
+            {%- if check.short %}{{ check.short|length }} short{% endif %}
+            {%- set ok_count = check.materials|length - check.problem_count %}
+            {%- if ok_count %} · {{ ok_count }} in stock{% endif %}.
         </span>
     </div>
 </div>
+{{ jm.stock_alert(check) }}
 {% endif %}
 
 <div class="card">
     <h2>Job Details</h2>
     <dl class="job-details">
+        <div class="job-details-produce"><dt>Total to Produce</dt><dd>{{ job.production_label or '—' }}</dd></div>
         <div><dt>Job No</dt><dd>{{ job.job_number }}</dd></div>
         <div><dt>Job Date</dt><dd>{{ job.job_date.strftime('%d-%m-%Y') }}</dd></div>
         <div><dt>Job Name</dt><dd>{{ job.job_name }}</dd></div>
         <div><dt>Customer / Party</dt><dd>{{ job.customer_name or '—' }}</dd></div>
         <div><dt>Status</dt><dd>{{ jm.status_badge(job) }}</dd></div>
-        <div><dt>Created</dt><dd>{{ job.created_by.username if job.created_by else '—' }}{% if job.created_at %} · {{ job.created_at.strftime('%d-%m-%Y %H:%M') }} UTC{% endif %}</dd></div>
+        <div><dt>Created</dt><dd>{{ job.created_by.username if job.created_by else '—' }}{% if job.created_at %} · {{ to_pkt(job.created_at).strftime('%d-%m-%Y %I:%M %p') }} PKT{% endif %}</dd></div>
         <div class="job-details-wide"><dt>Notes</dt><dd class="job-notes">{{ job.notes or '—' }}</dd></div>
     </dl>
 </div>
@@ -89,45 +94,6 @@
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No materials on this job</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header-row">
-        <h2>Inks</h2>
-        {% if check.inks_ok %}<span class="badge badge-green">All in stock</span>{% else %}<span class="badge badge-red">Needs attention</span>{% endif %}
-    </div>
-    <div class="table-scroll">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>Ink Company</th>
-                    <th>Shade</th>
-                    <th>Ink</th>
-                    <th>Required KG</th>
-                    <th>Cans Available</th>
-                    <th>KG Available</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for i in check.inks %}
-                <tr{% if i.status != 'ok' %} class="job-row-short"{% endif %}>
-                    <td>{{ i.line_number }}</td>
-                    <td>{{ i.company or '—' }}</td>
-                    <td>{{ i.shade or '—' }}</td>
-                    <td><strong>{{ i.name }}</strong></td>
-                    <td class="job-nowrap">{{ jm.kg(i.required_kg) }}</td>
-                    <td class="job-nowrap">{{ jm.cans(i.cans) }}</td>
-                    <td class="job-nowrap">{% if i.weight_per_can > 0 %}{{ jm.kg(i.kg) }} kg{% else %}—{% endif %}</td>
-                    <td>{{ jm.line_badge(i) }}<div>{{ jm.shortfall_note(i) }}</div></td>
-                </tr>
-                {% else %}
-                <tr><td colspan="8" class="empty">No inks on this job</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -1,4 +1,4 @@
-"""Job Planning module: add jobs, check material and ink stock, track pending jobs."""
+"""Job Planning module: add jobs, check In Hall / Machine Hall material stock, track pending jobs."""
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
@@ -25,22 +25,19 @@ def _get_job_or_404(job_id: int) -> PrintJob:
 
 def _form_context(job=None, values=None):
     material_catalog = jobs_service.build_material_catalog()
-    ink_catalog = jobs_service.build_ink_catalog()
     return {
         "job": job,
-        "values": values or jobs_service.job_form_values(job, material_catalog, ink_catalog),
+        "values": values or jobs_service.job_form_values(job, material_catalog, {}),
         "material_groups": jobs_service.material_options(material_catalog),
-        "ink_groups": jobs_service.ink_options(ink_catalog),
         "material_slots": jobs_service.MATERIAL_SLOTS,
         "required_slots": jobs_service.REQUIRED_MATERIAL_SLOTS,
-        "new_choice": jobs_service.NEW_CHOICE,
-    }, material_catalog, ink_catalog
+        "production_units": jobs_service.PRODUCTION_UNITS,
+    }, material_catalog, None
 
 
 def _job_summary(job: PrintJob) -> str:
     materials = ", ".join(line.material_name for line in job.materials)
-    inks = ", ".join(line.ink_name for line in job.inks)
-    return f"{job.job_number} {job.job_name} | materials: {materials} | inks: {inks}"
+    return f"{job.job_number} {job.job_name} | produce: {job.production_label or '-'} | materials: {materials}"
 
 
 @jobs_bp.route("/")
@@ -68,10 +65,10 @@ def new_job():
 
         check = jobs_service.evaluate_job(job)
         if check["ready"]:
-            flash(f"{job.job_number} saved. All materials and inks are in stock.", "success")
+            flash(f"{job.job_number} saved. All materials are in stock.", "success")
         else:
             flash(
-                f"{job.job_number} saved, but {check['problem_count']} item(s) are short or not in stock.",
+                f"{job.job_number} saved, but {check['problem_count']} material(s) are short or not in stock.",
                 "warning",
             )
         return redirect(url_for("jobs.job_detail", job_id=job.id))
@@ -115,6 +112,7 @@ def job_detail(job_id):
         check=jobs_service.evaluate_job(job),
         job=job,
         statuses=PrintJob.STATUS_LABELS,
+        to_pkt=jobs_service.to_pkt,
     )
 
 

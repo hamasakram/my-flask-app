@@ -127,21 +127,60 @@ def _fmt_stamp(value) -> str:
     return value.strftime("%d-%m-%Y %I:%M %p PKT")
 
 
+MISSING_STATUSES = (STATUS_OUT, STATUS_UNLISTED)
+
+
+def _is_missing(row: dict) -> bool:
+    return row["status"] in MISSING_STATUSES
+
+
+def _status_colours(status: str) -> tuple:
+    """(text colour, light background); 'unlisted' is shown exactly like 'out'."""
+    if status in MISSING_STATUSES:
+        return STATUS_COLOURS[STATUS_OUT]
+    return STATUS_COLOURS.get(status, STATUS_COLOURS[STATUS_UNLISTED])
+
+
 def _status_text(row: dict) -> str:
+    """Status wording on the Job Card's materials table."""
     status = row["status"]
     if status == STATUS_SHORT:
-        return f"Short {_kg(row['shortfall_kg'])} kg"
+        return f"SHORT {_kg(row['shortfall_kg'])} kg"
+    if status in MISSING_STATUSES:
+        return "NOT IN STOCK"
+    if status == STATUS_OK:
+        return "In Stock"
     return row["status_label"]
 
 
 def _status_word(row: dict) -> str:
     """Compact status used in the pending-jobs report."""
-    return {
-        STATUS_OK: "OK",
-        STATUS_SHORT: "SHORT",
-        STATUS_OUT: "OUT",
-        STATUS_UNLISTED: "NOT LISTED",
-    }.get(row["status"], row["status_label"].upper())
+    status = row["status"]
+    if status in MISSING_STATUSES:
+        return "NOT IN STOCK"
+    return {STATUS_OK: "OK", STATUS_SHORT: "SHORT"}.get(status, row["status_label"].upper())
+
+
+def _problem_counts(check: dict) -> tuple[list[dict], list[dict]]:
+    """(materials not in stock, materials short) for one evaluated job."""
+    materials = check.get("materials", [])
+    missing = check.get("not_in_stock")
+    short = check.get("short")
+    if missing is None:
+        missing = [row for row in materials if _is_missing(row)]
+    if short is None:
+        short = [row for row in materials if row["status"] == STATUS_SHORT]
+    return missing, short
+
+
+def _problem_phrase(missing: int, short: int) -> str:
+    """e.g. '2 not in stock, 1 short'."""
+    parts = []
+    if missing:
+        parts.append(f"{missing} not in stock")
+    if short:
+        parts.append(f"{short} short")
+    return ", ".join(parts)
 
 
 # --------------------------------------------------------------------------- styles
@@ -197,6 +236,10 @@ S = {
     "status": _style("status", fontName="Helvetica-Bold", fontSize=7.5, leading=9.5,
                      alignment=TA_CENTER),
     "banner_head": _style("banner_head", fontSize=11, leading=14),
+    "alert_title": _style("alert_title", fontName="Helvetica-Bold", fontSize=10.5, leading=13,
+                          textColor=SHORT_COLOURS[0]),
+    "alert_line": _style("alert_line", fontSize=8.5, leading=11.5, leftIndent=9, firstLineIndent=-9),
+    "produce": _style("produce", fontName="Helvetica-Bold", fontSize=13, leading=16),
     "banner_sub": _style("banner_sub", fontSize=8, leading=10.5, textColor=colors.HexColor("#374151")),
     "notes": _style("notes", fontSize=9, leading=12.5),
     "sign": _style("sign", fontName="Helvetica-Bold", fontSize=8, leading=10, alignment=TA_CENTER),
@@ -209,6 +252,7 @@ S = {
     "small": _style("small", fontSize=7.5, leading=9.5),
     "small_r": _style("small_r", fontName="Helvetica-Bold", fontSize=6.8, leading=9.5,
                       alignment=TA_RIGHT),
+    "small_rr": _style("small_rr", fontSize=7.5, leading=9.5, alignment=TA_RIGHT),
     "small_c": _style("small_c", fontName="Helvetica-Bold", fontSize=7.5, leading=9.5,
                       alignment=TA_CENTER),
 }
@@ -312,14 +356,14 @@ def _letterhead(title: str, meta_lines: list[str], width: float) -> list:
     ]
 
 
-def _section_heading(title: str, note: str, width: float) -> list:
+def _section_heading(title: str, note: str, width: float, note_share: float = 0.4) -> list:
     """Heading row; starts a new page unless the heading plus a few table rows still fit.
 
     (keepWithNext would drag a long table and its heading to the next page as a whole.)
     """
     table = Table(
         [[Paragraph(_t(title), S["section"]), Paragraph(_t(note), S["section_note"])]],
-        colWidths=[width * 0.6, width * 0.4],
+        colWidths=[width * (1 - note_share), width * note_share],
         hAlign="LEFT",
     )
     table.setStyle(
@@ -359,7 +403,7 @@ def _data_table(data, widths, *, index_col=False, status_col=None, statuses=(), 
         style.append(("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, ZEBRA]))
     if status_col is not None:
         for index, status in enumerate(statuses, start=1):
-            _fg, bg = STATUS_COLOURS.get(status, STATUS_COLOURS[STATUS_UNLISTED])
+            _fg, bg = _status_colours(status)
             style.append(("BACKGROUND", (status_col, index), (status_col, index), bg))
     style.extend(extra)
     table.setStyle(TableStyle(style))
@@ -367,7 +411,7 @@ def _data_table(data, widths, *, index_col=False, status_col=None, statuses=(), 
 
 
 def _status_cell(row: dict) -> Paragraph:
-    fg, _bg = STATUS_COLOURS.get(row["status"], STATUS_COLOURS[STATUS_UNLISTED])
+    fg, _bg = _status_colours(row["status"])
     return Paragraph(f'<font color="{_hex(fg)}">{_t(_status_text(row))}</font>', S["status"])
 
 
@@ -468,8 +512,12 @@ def _job_details(job: PrintJob, printed_on: str, width: float) -> Table:
     def value(text, style="value"):
         return Paragraph(text, S[style])
 
+    production = (job.production_label or "").strip()
+    produce = _t(production) if production else f'<font color="{_hex(TEXT_SOFT)}">{DASH}</font>'
+
     data = [
         [label("Job Name"), value(_t(job.job_name), "job_name"), "", ""],
+        [label("Total to Produce"), value(produce, "produce"), "", ""],
         [label("Job No"), value(_t(job.job_number), "value_bold"),
          label("Job Date"), value(_fmt_date(job.job_date))],
         [label("Customer / Party"), value(_t(job.customer_name or DASH)),
@@ -483,10 +531,13 @@ def _job_details(job: PrintJob, printed_on: str, width: float) -> Table:
         TableStyle(
             [
                 ("SPAN", (1, 0), (3, 0)),
+                ("SPAN", (1, 1), (3, 1)),
                 ("BOX", (0, 0), (-1, -1), 0.6, BORDER_GREY),
                 ("INNERGRID", (0, 0), (-1, -1), 0.4, GRID_GREY),
                 ("BACKGROUND", (0, 0), (0, -1), LABEL_BG),
-                ("BACKGROUND", (2, 1), (2, -1), LABEL_BG),
+                ("BACKGROUND", (2, 2), (2, -1), LABEL_BG),
+                ("TOPPADDING", (0, 1), (-1, 1), 7),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 7),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 7),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 7),
@@ -500,47 +551,38 @@ def _job_details(job: PrintJob, printed_on: str, width: float) -> Table:
     return table
 
 
-def _problem_summary(check: dict) -> str:
-    parts = []
-    for row in check["materials"] + check["inks"]:
-        if row["status"] == STATUS_OK:
-            continue
-        if row["status"] == STATUS_SHORT:
-            issue = f"short {_kg(row['shortfall_kg'])} kg"
-        else:
-            issue = row["status_label"].lower()
-        parts.append(f"<b>{_t(row['name'])}</b> ({_t(issue)})")
-    return ", ".join(parts)
-
-
 def _verdict_banner(check: dict, printed_on: str, width: float) -> Table:
     job = check["job"]
     ready = check["ready"]
     count = check["problem_count"]
+    missing, short = _problem_counts(check)
     fg, bg, bar = READY_COLOURS if ready else SHORT_COLOURS
     colour = _hex(fg)
+    phrase = _problem_phrase(len(missing), len(short))
 
     if job.is_open:
         if ready:
-            head = f'<font color="{colour}"><b>READY TO RUN</b></font> — all materials and inks are in stock'
+            head = f'<font color="{colour}"><b>READY TO RUN</b></font> — all materials are in stock'
         else:
-            head = f'<font color="{colour}"><b>STOCK SHORT</b></font> — {count} item(s) need attention'
-        sub = (
-            "Checked against In Hall and Machine Hall (materials) and "
-            f"Ink Stock (inks) on {_t(printed_on)}."
-        )
+            head = (
+                f'<font color="{colour}"><b>STOCK SHORT</b></font> — '
+                f"{count} material(s) need attention"
+            )
+            if phrase:
+                head += f": <b>{_t(phrase)}</b>"
+        sub = f"Checked against In Hall and Machine Hall stock on {_t(printed_on)}."
     else:
         if ready:
-            result = "all materials and inks are in stock"
+            result = "all materials are in stock"
         else:
-            result = f"{count} item(s) short or not in stock"
+            result = f"<b>{_t(phrase or f'{count} material(s) need attention')}</b>"
         head = f'<font color="{colour}"><b>STOCK CHECK AT TIME OF PRINTING</b></font> — {result}'
         sub = (
-            f"This job is {_t(job.status_label)}; figures show stock on {_t(printed_on)}, "
-            "not stock when the job ran."
+            f"This job is {_t(job.status_label)}; figures show In Hall and Machine Hall stock on "
+            f"{_t(printed_on)}, not stock when the job ran."
         )
     if not ready:
-        sub += f"<br/>Attention: {_problem_summary(check)}."
+        sub += " Details are listed below."
 
     bar_w = 4
     table = Table(
@@ -560,6 +602,63 @@ def _verdict_banner(check: dict, printed_on: str, width: float) -> Table:
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 1),
                 ("TOPPADDING", (0, 1), (-1, 1), 1),
                 ("BOTTOMPADDING", (0, 1), (-1, 1), 8),
+            ]
+        )
+    )
+    return table
+
+
+def _stock_alert_box(check: dict, width: float) -> Table | None:
+    """Red-bordered box naming every material that is not in stock or short."""
+    missing, short = _problem_counts(check)
+    if not missing and not short:
+        return None
+    red = _hex(SHORT_COLOURS[0])
+    orange = _hex(STATUS_COLOURS[STATUS_SHORT][0])
+
+    if missing:
+        title = f"MATERIALS NOT IN STOCK ({len(missing)})"
+        if short:
+            title += f" · SHORT ({len(short)})"
+    else:
+        title = f"MATERIALS SHORT ({len(short)})"
+
+    rows = [[Paragraph(_t(title), S["alert_title"])]]
+    for row in missing:
+        parts = [f'<font color="{red}"><b>NOT IN STOCK:</b></font> <b>{_t(row["label"])}</b>']
+        if row["required_kg"] is not None:
+            parts.append(f"required {_kg(row['required_kg'])} kg")
+        parts.append("0 kg in In Hall / Machine Hall")
+        rows.append([Paragraph("• " + " — ".join(parts), S["alert_line"])])
+    for row in short:
+        need = _kg(row["required_kg"]) if row["required_kg"] is not None else DASH
+        rows.append(
+            [
+                Paragraph(
+                    f'• <font color="{orange}"><b>SHORT:</b></font> <b>{_t(row["label"])}</b> — '
+                    f"need {need} kg, available {_kg(row['total_kg'])} kg "
+                    f'<font color="{orange}">(short {_kg(row["shortfall_kg"])} kg)</font>',
+                    S["alert_line"],
+                )
+            ]
+        )
+
+    table = Table(rows, colWidths=[width], hAlign="LEFT")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 1.4, SHORT_COLOURS[2]),
+                ("BACKGROUND", (0, 0), (-1, 0), STATUS_COLOURS[STATUS_OUT][1]),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.white),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.8, SHORT_COLOURS[2]),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, 0), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+                ("TOPPADDING", (0, 1), (-1, -1), 2.5),
+                ("BOTTOMPADDING", (0, 1), (-1, -1), 2.5),
+                ("TOPPADDING", (0, 1), (-1, 1), 6),
+                ("BOTTOMPADDING", (0, -1), (-1, -1), 7),
             ]
         )
     )
@@ -625,57 +724,6 @@ def _materials_table(rows: list[dict], width: float) -> Table:
         data.append(["", Paragraph("No materials on this job.", S["cell_muted"])] + [""] * 5)
     return _data_table(
         data, widths, index_col=True, status_col=6, statuses=[r["status"] for r in rows],
-        extra=[("SPAN", (1, 1), (-1, 1))] if not rows else [],
-    )
-
-
-def _inks_table(rows: list[dict], width: float) -> Table:
-    fixed = {"#": 0.3, "company": 1.05, "shade": 0.95, "req": 0.84, "cans": 0.7, "kg": 0.76, "status": 1.0}
-    widths = [
-        fixed["#"] * inch, fixed["company"] * inch, fixed["shade"] * inch, 0,
-        fixed["req"] * inch, fixed["cans"] * inch, fixed["kg"] * inch, fixed["status"] * inch,
-    ]
-    widths[3] = width - sum(widths)
-    head = [
-        Paragraph("#", S["head_c"]),
-        Paragraph("Ink Company", S["head"]),
-        Paragraph("Shade", S["head"]),
-        Paragraph("Ink", S["head"]),
-        Paragraph("Required KG", S["head_r"]),
-        Paragraph("Cans Available", S["head_r"]),
-        Paragraph("KG Available", S["head_r"]),
-        Paragraph("Status", S["head_c"]),
-    ]
-    data = [head]
-    soft = _hex(TEXT_SOFT)
-    for row in rows:
-        listed = row["status"] != STATUS_UNLISTED
-        if not listed:
-            cans = kg = f'<font color="{soft}">{DASH}</font>'
-        else:
-            cans = _count(row["cans"]) if row["cans"] > 0.0005 else f'<font color="{soft}">0</font>'
-            if row["weight_per_can"] <= 0:
-                kg = f'<font color="{soft}">n/a</font>'  # no weight per can on file
-            elif row["kg"] > 0.0005:
-                kg = _kg(row["kg"])
-            else:
-                kg = f'<font color="{soft}">0.00</font>'
-        data.append(
-            [
-                Paragraph(str(row["line_number"]), S["cell_c"]),
-                Paragraph(_t(row["company"] or DASH), S["cell"]),
-                Paragraph(_t(row["shade"] or DASH), S["cell"]),
-                Paragraph(_t(row["name"]), S["cell"]),
-                Paragraph(_kg(row["required_kg"]), S["num_bold"]),
-                Paragraph(cans, S["num"]),
-                Paragraph(kg, S["num"]),
-                _status_cell(row),
-            ]
-        )
-    if not rows:
-        data.append(["", Paragraph("No inks on this job.", S["cell_muted"])] + [""] * 6)
-    return _data_table(
-        data, widths, index_col=True, status_col=7, statuses=[r["status"] for r in rows],
         extra=[("SPAN", (1, 1), (-1, 1))] if not rows else [],
     )
 
@@ -756,12 +804,18 @@ def generate_job_card_pdf(check: dict) -> BytesIO:
         _job_details(job, printed_on, width),
         Spacer(1, 12),
         _verdict_banner(check, printed_on, width),
+    ]
+    alert = _stock_alert_box(check, width)
+    if alert is not None:
+        story += [Spacer(1, 8), KeepTogether([alert])]
+    story += [
         Spacer(1, 16),
-        *_section_heading(f"Materials Required ({len(check['materials'])})", "All quantities in KG", width),
+        *_section_heading(
+            f"Materials Required ({len(check['materials'])})",
+            "All quantities in KG · Available = In Hall + Machine Hall",
+            width,
+        ),
         _materials_table(check["materials"], width),
-        Spacer(1, 16),
-        *_section_heading(f"Inks Required ({len(check['inks'])})", "KG Available = cans × weight per can", width),
-        _inks_table(check["inks"], width),
     ]
     if (job.notes or "").strip():
         story += [Spacer(1, 14), KeepTogether([_notes_box(job.notes, width)])]
@@ -823,10 +877,10 @@ def _line_list(lines: list[tuple[str, dict]], width: float) -> Table | Paragraph
     """Nested two-column list: description on the left, coloured status word on the right."""
     if not lines:
         return Paragraph(f'<font color="{_hex(TEXT_SOFT)}">{DASH}</font>', S["small"])
-    word_w = 0.56 * inch
+    word_w = 0.8 * inch
     data = []
     for text, row in lines:
-        fg, _bg = STATUS_COLOURS.get(row["status"], STATUS_COLOURS[STATUS_UNLISTED])
+        fg, _bg = _status_colours(row["status"])
         data.append(
             [
                 Paragraph(text, S["small"]),
@@ -852,8 +906,8 @@ def _line_list(lines: list[tuple[str, dict]], width: float) -> Table | Paragraph
 
 def _material_line(row: dict) -> str:
     muted = _hex(TEXT_MUTED)
-    if row["status"] == STATUS_UNLISTED:
-        stock = "not in stock list"
+    if _is_missing(row):
+        stock = "0 kg in In Hall / Machine Hall"
     else:
         stock = f"{_kg(row['total_kg'])} kg"
     if row["required_kg"] is not None:
@@ -861,16 +915,21 @@ def _material_line(row: dict) -> str:
     return f'{_t(row["label"])}<br/><font color="{muted}">{_t(stock)}</font>'
 
 
-def _ink_line(row: dict) -> str:
-    muted = _hex(TEXT_MUTED)
-    if row["status"] == STATUS_UNLISTED:
-        stock = "not in stock list"
-    else:
-        cans = _count(row["cans"])
-        stock = f"{cans} can" if cans == "1" else f"{cans} cans"
-    if row["required_kg"] is not None:
-        stock += f" (need {_kg(row['required_kg'])} kg)"
-    return f'{_t(row["label"])}<br/><font color="{muted}">{_t(stock)}</font>'
+def _stock_summary(row: dict) -> tuple[str, tuple]:
+    """Per-job Stock cell for the pending report: text and (fg, bg)."""
+    if row["ready"]:
+        fg, bg, _bar = READY_COLOURS
+        return "READY", (fg, bg)
+    missing, short = _problem_counts(row)
+    parts = []
+    if missing:
+        parts.append(f"{len(missing)} NOT IN STOCK")
+    if short:
+        parts.append(f"{len(short)} SHORT")
+    if not parts:
+        parts.append(f"{row['problem_count']} SHORT")
+    colours = SHORT_COLOURS[:2] if missing else STATUS_COLOURS[STATUS_SHORT]
+    return " /<br/>".join(parts), colours
 
 
 def generate_pending_jobs_pdf(rows: list[dict]) -> BytesIO:
@@ -900,22 +959,22 @@ def generate_pending_jobs_pdf(rows: list[dict]) -> BytesIO:
         )
     else:
         col = {
-            "no": 0.74, "date": 0.74, "name": 1.5, "customer": 1.15, "inks": 2.45, "status": 0.76,
-            "stock": 0.76,
+            "no": 0.74, "date": 0.74, "name": 1.5, "customer": 1.15, "produce": 0.95,
+            "status": 0.76, "stock": 1.12,
         }
         widths = [
             col["no"] * inch, col["date"] * inch, col["name"] * inch, col["customer"] * inch,
-            0, col["inks"] * inch, col["status"] * inch, col["stock"] * inch,
+            col["produce"] * inch, 0, col["status"] * inch, col["stock"] * inch,
         ]
-        widths[4] = width - sum(widths)
+        widths[5] = width - sum(widths)
         pad = 10  # left + right cell padding
         head = [
             Paragraph("Job No", S["head"]),
             Paragraph("Date", S["head"]),
             Paragraph("Job Name", S["head"]),
             Paragraph("Customer", S["head"]),
+            Paragraph("To Produce", S["head_r"]),
             Paragraph("Materials", S["head"]),
-            Paragraph("Inks", S["head"]),
             Paragraph("Status", S["head_c"]),
             Paragraph("Stock", S["head_c"]),
         ]
@@ -924,10 +983,12 @@ def generate_pending_jobs_pdf(rows: list[dict]) -> BytesIO:
         for index, row in enumerate(rows, start=1):
             job = row["job"]
             status_colour = JOB_STATUS_COLOURS.get(job.status, BRAND_BLACK)
-            if row["ready"]:
-                stock_text, (fg, bg, _bar) = "READY", READY_COLOURS
-            else:
-                stock_text, (fg, bg, _bar) = f"SHORT {row['problem_count']}", SHORT_COLOURS
+            stock_text, (fg, bg) = _stock_summary(row)
+            production = (job.production_label or "").strip()
+            produce = (
+                f"<b>{_t(production)}</b>" if production
+                else f'<font color="{_hex(TEXT_SOFT)}">{DASH}</font>'
+            )
             extra.append(("BACKGROUND", (7, index), (7, index), bg))
             data.append(
                 [
@@ -935,8 +996,8 @@ def generate_pending_jobs_pdf(rows: list[dict]) -> BytesIO:
                     Paragraph(_fmt_date(job.job_date), S["small"]),
                     Paragraph(f"<b>{_t(job.job_name)}</b>", S["small"]),
                     Paragraph(_t(job.customer_name or DASH), S["small"]),
-                    _line_list([(_material_line(m), m) for m in row["materials"]], widths[4] - pad),
-                    _line_list([(_ink_line(i), i) for i in row["inks"]], widths[5] - pad),
+                    Paragraph(produce, S["small_rr"]),
+                    _line_list([(_material_line(m), m) for m in row["materials"]], widths[5] - pad),
                     Paragraph(f'<font color="{_hex(status_colour)}">{_t(job.status_label)}</font>',
                               S["small_c"]),
                     Paragraph(f'<font color="{_hex(fg)}">{stock_text}</font>', S["small_c"]),
@@ -944,7 +1005,11 @@ def generate_pending_jobs_pdf(rows: list[dict]) -> BytesIO:
             )
         extra += [("VALIGN", (0, 1), (-1, -1), "TOP"), ("VALIGN", (6, 1), (7, -1), "MIDDLE")]
         story += _section_heading(
-            f"Open Jobs ({len(rows)})", "Stock word per line: OK / SHORT / OUT / NOT LISTED", width
+            f"Open Jobs ({len(rows)})",
+            "Stock per material: OK = enough · SHORT = not enough · "
+            "NOT IN STOCK = 0 kg in In Hall / Machine Hall",
+            width,
+            note_share=0.65,
         )
         story.append(_data_table(data, widths, extra=extra))
 

@@ -21,6 +21,7 @@ PKT = timezone(timedelta(hours=5), name="PKT")
 NEW_CHOICE = "__new__"
 MATERIAL_SLOTS = (1, 2, 3)
 REQUIRED_MATERIAL_SLOTS = (1, 2)
+PRODUCTION_UNITS = ("KG", "Pcs", "Meters", "Rolls")
 EPSILON = 0.0005
 
 STATUS_OK = "ok"
@@ -30,8 +31,8 @@ STATUS_UNLISTED = "unlisted"
 LINE_STATUS_LABELS = {
     STATUS_OK: "In Stock",
     STATUS_SHORT: "Short",
-    STATUS_OUT: "Out of Stock",
-    STATUS_UNLISTED: "Not in Stock List",
+    STATUS_OUT: "Not in Stock",
+    STATUS_UNLISTED: "Not in Stock",
 }
 
 
@@ -44,6 +45,15 @@ def pkt_now() -> datetime:
 
 def pkt_today() -> date:
     return pkt_now().date()
+
+
+def to_pkt(value: datetime | None) -> datetime | None:
+    """Stored timestamps are UTC (naive on SQLite/Postgres); show them in Pakistan time."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(PKT)
 
 
 # --------------------------------------------------------------------------- keys
@@ -295,26 +305,28 @@ def check_ink_line(line: PrintJobInk, catalog: dict[str, dict]) -> dict:
 
 
 def evaluate_job(job: PrintJob, material_catalog=None, ink_catalog=None) -> dict:
+    """Live stock check for one job. Jobs plan materials only; inks are no longer part of a job."""
     material_catalog = material_catalog if material_catalog is not None else build_material_catalog()
-    ink_catalog = ink_catalog if ink_catalog is not None else build_ink_catalog()
     materials = [check_material_line(line, material_catalog) for line in job.materials]
-    inks = [check_ink_line(line, ink_catalog) for line in job.inks]
-    problems = [row for row in materials + inks if row["status"] != STATUS_OK]
+    problems = [row for row in materials if row["status"] != STATUS_OK]
+    missing = [row for row in materials if row["status"] in (STATUS_OUT, STATUS_UNLISTED)]
+    short = [row for row in materials if row["status"] == STATUS_SHORT]
     return {
         "job": job,
         "materials": materials,
-        "inks": inks,
+        "inks": [],
         "ready": not problems,
         "problem_count": len(problems),
-        "materials_ok": all(row["status"] == STATUS_OK for row in materials),
-        "inks_ok": all(row["status"] == STATUS_OK for row in inks),
+        "not_in_stock": missing,
+        "short": short,
+        "materials_ok": not problems,
+        "inks_ok": True,
     }
 
 
 def evaluate_jobs(jobs: list[PrintJob]) -> list[dict]:
     material_catalog = build_material_catalog()
-    ink_catalog = build_ink_catalog()
-    return [evaluate_job(job, material_catalog, ink_catalog) for job in jobs]
+    return [evaluate_job(job, material_catalog) for job in jobs]
 
 
 # --------------------------------------------------------------------------- queries
@@ -394,7 +406,28 @@ def _parse_optional_kg(value, label: str) -> float | None:
     return amount or None
 
 
-def parse_job_form(form, material_catalog: dict, ink_catalog: dict) -> dict:
+def _parse_production_qty(value) -> float:
+    text = str(value or "").replace(",", "").strip()
+    if not text:
+        raise ValueError("Enter the total to produce for this job.")
+    try:
+        amount = float(text)
+    except ValueError as exc:
+        raise ValueError("Total to produce must be a number.") from exc
+    if amount <= 0:
+        raise ValueError("Total to produce must be more than zero.")
+    return amount
+
+
+def _parse_production_unit(value) -> str:
+    unit = _clean(value)
+    for allowed in PRODUCTION_UNITS:
+        if unit.casefold() == allowed.casefold():
+            return allowed
+    raise ValueError("Pick a unit for the total to produce.")
+
+
+def parse_job_form(form, material_catalog: dict, ink_catalog: dict | None = None) -> dict:
     job_name = _clean(form.get("job_name"))
     if not job_name:
         raise ValueError("Job name is required.")
@@ -404,6 +437,8 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict) -> dict:
         "job_name": job_name,
         "customer_name": _clean(form.get("customer_name")) or None,
         "notes": (form.get("notes") or "").strip() or None,
+        "production_qty": _parse_production_qty(form.get("production_qty")),
+        "production_unit": _parse_production_unit(form.get("production_unit")),
         "materials": [],
         "inks": [],
     }
@@ -462,7 +497,7 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict) -> dict:
                 "shade": _clean(at(shades, index)),
             }
         else:
-            entry = ink_catalog.get(choice)
+            entry = (ink_catalog or {}).get(choice)
             if not entry:
                 raise ValueError(f"{label}: that ink is no longer in the list. Pick it again.")
             ink = {
@@ -475,8 +510,6 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict) -> dict:
         ink["line_number"] = len(data["inks"]) + 1
         data["inks"].append(ink)
 
-    if not data["inks"]:
-        raise ValueError("Add at least one ink for this job.")
     return data
 
 
@@ -505,6 +538,8 @@ def create_job(data: dict, user_id: int | None) -> PrintJob:
         job_date=data["job_date"],
         job_name=data["job_name"],
         customer_name=data["customer_name"],
+        production_qty=data["production_qty"],
+        production_unit=data["production_unit"],
         notes=data["notes"],
         status=PrintJob.STATUS_PENDING,
         created_by_id=user_id,
@@ -519,6 +554,8 @@ def update_job(job: PrintJob, data: dict) -> PrintJob:
     job.job_date = data["job_date"]
     job.job_name = data["job_name"]
     job.customer_name = data["customer_name"]
+    job.production_qty = data["production_qty"]
+    job.production_unit = data["production_unit"]
     job.notes = data["notes"]
     _apply_lines(job, data)
     db.session.flush()
@@ -541,6 +578,8 @@ def job_form_values(job: PrintJob | None, material_catalog: dict, ink_catalog: d
             "job_date": pkt_today().isoformat(),
             "job_name": "",
             "customer_name": "",
+            "production_qty": "",
+            "production_unit": "KG",
             "notes": "",
             "materials": {slot: {"choice": "", "kg": ""} for slot in MATERIAL_SLOTS},
             "inks": [{"choice": "", "kg": ""}],
@@ -564,6 +603,8 @@ def job_form_values(job: PrintJob | None, material_catalog: dict, ink_catalog: d
         "job_date": job.job_date.isoformat(),
         "job_name": job.job_name,
         "customer_name": job.customer_name or "",
+        "production_qty": _fmt_kg_input(job.production_qty),
+        "production_unit": job.production_unit or "KG",
         "notes": job.notes or "",
         "materials": materials,
         "inks": inks or [{"choice": "", "kg": ""}],
@@ -573,4 +614,4 @@ def job_form_values(job: PrintJob | None, material_catalog: dict, ink_catalog: d
 def _fmt_kg_input(value) -> str:
     if value is None:
         return ""
-    return f"{float(value):g}"
+    return f"{float(value):.3f}".rstrip("0").rstrip(".")

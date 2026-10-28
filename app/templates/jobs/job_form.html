@@ -12,66 +12,7 @@
     data-machine_rolls="{{ opt.machine_rolls }}"
     data-listed="{{ '1' if opt.listed else '0' }}"
     data-search="{{ opt.label|lower }}"
-    {% if opt.key == selected_key %}selected{% endif %}>{{ opt.label }} — {% if opt.listed %}{{ "{:,.2f}".format(opt.total_kg) }} kg{% else %}not in stock list{% endif %}</option>
-{%- endmacro %}
-
-{% macro trim_num(value, digits) -%}
-{%- set text = ("{:,." ~ digits ~ "f}").format(value) -%}
-{%- if '.' in text -%}{{ text.rstrip('0').rstrip('.') }}{%- else -%}{{ text }}{%- endif -%}
-{%- endmacro %}
-
-{% macro ink_option(opt, selected_key) -%}
-<option value="{{ opt.key }}"
-    data-cans="{{ opt.cans }}"
-    data-kg="{{ opt.kg }}"
-    data-weight_per_can="{{ opt.weight_per_can }}"
-    data-listed="{{ '1' if opt.listed else '0' }}"
-    data-search="{{ opt.label|lower }}"
-    {% if opt.key == selected_key %}selected{% endif %}>{{ opt.label }} — {% if opt.listed %}{{ trim_num(opt.cans, 1) }} cans{% if opt.weight_per_can > 0 %} / {{ trim_num(opt.kg, 2) }} kg{% endif %}{% else %}not in stock list{% endif %}</option>
-{%- endmacro %}
-
-{% macro ink_row(idx, choice='', kg_value='') -%}
-<div class="job-line job-ink-row" data-kind="ink">
-    <div class="job-line-head">
-        <span class="job-line-title">Ink <span class="job-ink-number">{{ idx }}</span></span>
-        <button type="button" class="btn btn-sm btn-secondary job-remove-ink" title="Remove this ink">Remove</button>
-    </div>
-    <div class="job-line-grid">
-        <div class="form-group job-area-choice">
-            <label for="ink_choice_{{ idx }}">Ink</label>
-            <input type="search" class="job-search" placeholder="Search ink by company, shade or name…" aria-label="Search inks" autocomplete="off">
-            <select id="ink_choice_{{ idx }}" name="ink_choice" class="job-select">
-                <option value="">— Select ink —</option>
-                <option value="{{ new_choice }}" data-new="1">＋ Type a new ink…</option>
-                {% for group in ink_groups %}
-                <optgroup label="{{ group.label }}">
-                    {% for opt in group.options %}{{ ink_option(opt, choice) }}{% endfor %}
-                </optgroup>
-                {% endfor %}
-            </select>
-            <small class="field-note job-search-note"></small>
-        </div>
-        <div class="job-new-fields job-area-new job-hidden">
-            <div class="form-group">
-                <label for="ink_new_company_{{ idx }}">Ink Company</label>
-                <input type="text" id="ink_new_company_{{ idx }}" name="ink_new_company" placeholder="e.g. DIC, Siegwerk">
-            </div>
-            <div class="form-group">
-                <label for="ink_new_name_{{ idx }}">Ink Name <span class="job-required">*</span></label>
-                <input type="text" id="ink_new_name_{{ idx }}" name="ink_new_name" data-new-required="1" placeholder="e.g. Gold Metallic">
-            </div>
-            <div class="form-group">
-                <label for="ink_new_shade_{{ idx }}">Shade / Colour Code</label>
-                <input type="text" id="ink_new_shade_{{ idx }}" name="ink_new_shade" placeholder="e.g. SW-77">
-            </div>
-        </div>
-        <div class="form-group job-area-kg">
-            <label for="ink_kg_{{ idx }}">Required KG <span class="field-note">(optional)</span></label>
-            <input type="number" id="ink_kg_{{ idx }}" name="ink_kg" step="0.001" min="0" value="{{ kg_value }}" class="job-kg" placeholder="0.000">
-        </div>
-        <div class="job-stock-panel job-area-panel" aria-live="polite"></div>
-    </div>
-</div>
+    {% if opt.key == selected_key %}selected{% endif %}>{{ opt.label }} — {% if opt.listed and opt.in_stock %}{{ "{:,.2f}".format(opt.total_kg) }} kg{% else %}Not in Stock (0 kg){% endif %}</option>
 {%- endmacro %}
 
 {% block content %}
@@ -79,7 +20,7 @@
     <div>
         <h1>{{ page_title }}</h1>
         <p class="page-subtitle">
-            {% if job %}{{ job.job_name }} · {{ jm.status_badge(job) }}{% else %}Enter the job, pick its materials and inks from stock. Stock is checked live as you choose.{% endif %}
+            {% if job %}{{ job.job_name }} · {{ jm.status_badge(job) }}{% else %}Enter the job, how much to produce, and pick its materials from In Hall / Machine Hall stock. Stock is checked live as you choose.{% endif %}
         </p>
     </div>
     <div class="header-actions">
@@ -104,18 +45,30 @@
 
     <div class="card highlight-card">
         <h2>Job Details</h2>
-        <div class="form-grid">
+        <div class="form-grid job-details-grid">
             <div class="form-group">
                 <label for="job_date">Job Date <span class="job-required">*</span></label>
                 <input type="date" id="job_date" name="job_date" value="{{ values.job_date }}" required>
             </div>
-            <div class="form-group job-span-2">
+            <div class="form-group job-span-3">
                 <label for="job_name">Job Name <span class="job-required">*</span></label>
                 <input type="text" id="job_name" name="job_name" value="{{ values.job_name }}" required maxlength="200" placeholder="e.g. Nimco Chips 50g Pouch">
             </div>
-            <div class="form-group">
+            <div class="form-group job-span-2">
                 <label for="customer_name">Customer / Party <span class="field-note">(optional)</span></label>
                 <input type="text" id="customer_name" name="customer_name" value="{{ values.customer_name }}" maxlength="150" placeholder="Who is this job for?">
+            </div>
+            <div class="form-group job-span-2 job-produce-group">
+                <label for="production_qty">Total to Produce <span class="job-required">*</span> <span class="field-note">(how much of this job to make)</span></label>
+                <div class="job-qty-control">
+                    <input type="number" id="production_qty" name="production_qty" value="{{ values.production_qty }}" step="any" min="0" required placeholder="e.g. 25000" inputmode="decimal">
+                    {% set chosen_unit = values.production_unit or 'KG' %}
+                    <select id="production_unit" name="production_unit" aria-label="Unit for total to produce">
+                        {% for unit in production_units %}
+                        <option value="{{ unit }}"{% if unit|lower == chosen_unit|lower %} selected{% endif %}>{{ unit }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
     </div>
@@ -158,20 +111,6 @@
     </div>
 
     <div class="card">
-        <div class="card-header-row">
-            <h2>Inks</h2>
-            <span class="field-note">Add every ink this job uses. At least one is required. Checked against Ink stock (cans / KG).</span>
-        </div>
-        <div id="job-ink-rows">
-            {% for ink in values.inks %}
-            {{ ink_row(loop.index, ink.choice, ink.kg) }}
-            {% endfor %}
-        </div>
-        <button type="button" class="btn btn-secondary" id="job-add-ink">+ Add another ink</button>
-        <template id="job-ink-template">{{ ink_row('__IDX__') }}</template>
-    </div>
-
-    <div class="card">
         <h2>Notes</h2>
         <div class="form-grid">
             <div class="form-group full-width">
@@ -199,10 +138,7 @@
     var EPS = 0.0005;
     var form = document.getElementById('job-form');
     if (!form) return;
-    var inkRows = document.getElementById('job-ink-rows');
-    var inkTemplate = document.getElementById('job-ink-template');
     var summary = document.getElementById('job-live-summary');
-    var inkCounter = inkRows.querySelectorAll('.job-ink-row').length;
 
     function num(value) {
         var n = parseFloat(value);
@@ -225,8 +161,8 @@
         return c;
     }
     function badge(status, text) {
-        var colours = { ok: 'green', short: 'orange', out: 'red', unlisted: 'gray' };
-        return el('span', 'badge badge-' + colours[status], text);
+        var colours = { ok: 'green', short: 'orange', out: 'red', unlisted: 'red' };
+        return el('span', 'badge badge-' + (colours[status] || 'gray'), text);
     }
     function lineStatus(available, required, listed) {
         if (!listed) return { status: 'unlisted', short: required };
@@ -237,74 +173,41 @@
     function statusText(result) {
         if (result.status === 'ok') return 'In Stock';
         if (result.status === 'short') return 'Short by ' + fmt(result.short, 2) + ' kg';
-        if (result.status === 'out') return 'Out of Stock';
-        return 'Not in stock list';
-    }
-
-    function toggleNewFields(line, isNew) {
-        var box = line.querySelector('.job-new-fields');
-        if (!box) return;
-        box.classList.toggle('job-hidden', !isNew);
-        box.querySelectorAll('[data-new-required]').forEach(function (input) {
-            input.required = isNew;
-        });
+        return 'Not in Stock';
     }
 
     function renderPanel(line) {
         var select = line.querySelector('.job-select');
         var panel = line.querySelector('.job-stock-panel');
         var kgInput = line.querySelector('.job-kg');
-        var opt = select.options[select.selectedIndex];
-        var required = num(kgInput.value);
-        var isNew = !!(opt && opt.dataset.new);
-        toggleNewFields(line, isNew);
-        panel.innerHTML = '';
         line.dataset.status = '';
+        if (!select || !panel) return;
+        var opt = select.options[select.selectedIndex];
+        var required = kgInput ? num(kgInput.value) : 0;
+        panel.innerHTML = '';
 
         if (!opt || !opt.value) {
             panel.className = 'job-stock-panel job-area-panel job-stock-empty';
-            panel.textContent = line.dataset.kind === 'ink' ? 'Select an ink to see its stock.' : 'Select a material to see its stock.';
+            panel.textContent = 'Select a material to see its stock.';
             return;
         }
         panel.className = 'job-stock-panel job-area-panel';
         var cells = el('div', 'job-stock-cells');
-        var result;
-
-        if (isNew) {
-            result = { status: 'unlisted', short: required };
-            panel.appendChild(cells);
-            cells.appendChild(el('span', 'job-stock-note', 'New item — it is not in any stock book yet, so it will show as not in stock.'));
-        } else if (line.dataset.kind === 'material') {
-            var total = num(opt.dataset.total_kg);
-            cells.appendChild(cell('In Hall', fmt(opt.dataset.in_hall_kg, 2) + ' kg', fmt(opt.dataset.in_hall_rolls, 0) + ' rolls'));
-            cells.appendChild(cell('Machine Hall', fmt(opt.dataset.machine_kg, 2) + ' kg', fmt(opt.dataset.machine_rolls, 0) + ' rolls'));
-            var totalCell = cell('Total Available', fmt(total, 2) + ' kg', required ? 'need ' + fmt(required, 2) + ' kg' : '');
-            totalCell.classList.add('job-stock-total');
-            cells.appendChild(totalCell);
-            result = lineStatus(total, required, opt.dataset.listed === '1');
-            panel.appendChild(cells);
-        } else {
-            var cans = num(opt.dataset.cans);
-            var kg = num(opt.dataset.kg);
-            var perCan = num(opt.dataset.weight_per_can);
-            var listed = opt.dataset.listed === '1';
-            cells.appendChild(cell('Cans Available', fmt(cans, 1)));
-            cells.appendChild(cell('KG Available', perCan > 0 ? fmt(kg, 2) + ' kg' : '—', perCan > 0 ? fmt(perCan, 2) + ' kg per can' : 'weight per can not set'));
-            if (required) cells.appendChild(cell('Required', fmt(required, 2) + ' kg'));
-            if (listed && perCan <= 0) {
-                result = lineStatus(cans, 0, true);
-            } else {
-                result = lineStatus(perCan > 0 ? kg : cans, required, listed);
-            }
-            panel.appendChild(cells);
-            if (listed && perCan <= 0 && required) {
-                cells.appendChild(el('span', 'job-stock-note', 'Checked on cans only (no weight per can set for this ink).'));
-            }
+        var total = num(opt.dataset.total_kg);
+        cells.appendChild(cell('In Hall', fmt(opt.dataset.in_hall_kg, 2) + ' kg', fmt(opt.dataset.in_hall_rolls, 0) + ' rolls'));
+        cells.appendChild(cell('Machine Hall', fmt(opt.dataset.machine_kg, 2) + ' kg', fmt(opt.dataset.machine_rolls, 0) + ' rolls'));
+        var totalCell = cell('Total Available', fmt(total, 2) + ' kg', required ? 'need ' + fmt(required, 2) + ' kg' : '');
+        totalCell.classList.add('job-stock-total');
+        cells.appendChild(totalCell);
+        var result = lineStatus(total, required, opt.dataset.listed === '1');
+        panel.appendChild(cells);
+        if (result.status === 'out' || result.status === 'unlisted') {
+            cells.appendChild(el('span', 'job-stock-note job-stock-note-out', 'This material is NOT in stock (0 kg in In Hall + Machine Hall).'));
         }
         var badgeWrap = el('div', 'job-stock-verdict');
         badgeWrap.appendChild(badge(result.status, statusText(result)));
         panel.appendChild(badgeWrap);
-        panel.classList.add('job-stock-' + result.status);
+        panel.classList.add('job-stock-' + (result.status === 'unlisted' ? 'out' : result.status));
         line.dataset.status = result.status;
     }
 
@@ -312,6 +215,7 @@
         var search = line.querySelector('.job-search');
         var select = line.querySelector('.job-select');
         var note = line.querySelector('.job-search-note');
+        if (!search || !select) return null;
         var terms = search.value.toLowerCase().split(/\s+/).filter(Boolean);
         var shown = 0;
         var firstMatch = null;
@@ -331,36 +235,42 @@
             });
             group.hidden = visible === 0 && !group.querySelector('option:checked');
         });
-        if (!terms.length) {
-            note.textContent = '';
-        } else if (!shown) {
-            note.textContent = 'No match. Choose "＋ Type a new …" to enter it by hand.';
-        } else {
-            note.textContent = shown + ' match' + (shown === 1 ? '' : 'es') + ' — press Enter to pick the first.';
+        if (note) {
+            if (!terms.length) {
+                note.textContent = '';
+            } else if (!shown) {
+                note.textContent = 'No match in In Hall / Machine Hall stock.';
+            } else {
+                note.textContent = shown + ' match' + (shown === 1 ? '' : 'es') + ' — press Enter to pick the first.';
+            }
         }
         return firstMatch;
     }
 
     function updateSummary() {
-        var lines = form.querySelectorAll('.job-line');
+        if (!summary) return;
         var picked = 0;
-        var problems = 0;
-        lines.forEach(function (line) {
-            if (!line.dataset.status) return;
+        var missing = 0;
+        var short = 0;
+        form.querySelectorAll('.job-line').forEach(function (line) {
+            var status = line.dataset.status;
+            if (!status) return;
             picked += 1;
-            if (line.dataset.status !== 'ok') problems += 1;
+            if (status === 'out' || status === 'unlisted') missing += 1;
+            else if (status === 'short') short += 1;
         });
         summary.innerHTML = '';
         if (!picked) {
-            summary.appendChild(el('span', 'job-muted', 'Pick materials and inks to see the stock check.'));
+            summary.appendChild(el('span', 'job-muted', 'Pick materials to see the stock check.'));
             return;
         }
-        if (problems) {
-            summary.appendChild(badge('out', problems + ' item(s) short'));
-            summary.appendChild(el('span', '', ' ' + (picked - problems) + ' of ' + picked + ' selected items are in stock. You can still save — the job will show as stock short.'));
+        if (missing || short) {
+            if (missing) summary.appendChild(badge('out', missing + ' Not in Stock'));
+            if (short) summary.appendChild(badge('short', short + ' Short'));
+            summary.appendChild(el('span', '', ' ' + (picked - missing - short) + ' of ' + picked + ' selected material(s) are in stock. You can still save — the job will show as stock short.'));
         } else {
             summary.appendChild(badge('ok', 'Ready to run'));
-            summary.appendChild(el('span', '', ' All ' + picked + ' selected items are in stock.'));
+            summary.appendChild(el('span', '', ' All ' + picked + ' selected material(s) are in stock.'));
         }
     }
 
@@ -368,78 +278,34 @@
         var select = line.querySelector('.job-select');
         var search = line.querySelector('.job-search');
         var kgInput = line.querySelector('.job-kg');
+        if (!select) return;
         select.addEventListener('change', function () { renderPanel(line); updateSummary(); });
-        kgInput.addEventListener('input', function () { renderPanel(line); updateSummary(); });
-        search.addEventListener('input', function () { filterOptions(line); });
-        search.addEventListener('keydown', function (event) {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            var first = filterOptions(line);
-            if (first) {
-                select.value = first.value;
-                select.dispatchEvent(new Event('change'));
-                select.focus();
-            }
-        });
-        var remove = line.querySelector('.job-remove-ink');
-        if (remove) {
-            remove.addEventListener('click', function () {
-                if (inkRows.querySelectorAll('.job-ink-row').length <= 1) {
-                    line.querySelectorAll('input').forEach(function (input) { input.value = ''; });
-                    select.value = '';
-                    filterOptions(line);
-                } else {
-                    line.remove();
+        if (kgInput) kgInput.addEventListener('input', function () { renderPanel(line); updateSummary(); });
+        if (search) {
+            search.addEventListener('input', function () { filterOptions(line); });
+            search.addEventListener('keydown', function (event) {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                var first = filterOptions(line);
+                if (first) {
+                    select.value = first.value;
+                    select.dispatchEvent(new Event('change'));
+                    select.focus();
                 }
-                renumberInks();
-                renderAll();
             });
         }
         renderPanel(line);
     }
 
-    function renumberInks() {
-        var rows = inkRows.querySelectorAll('.job-ink-row');
-        rows.forEach(function (row, index) {
-            row.querySelector('.job-ink-number').textContent = index + 1;
-        });
-    }
-
-    function renderAll() {
-        form.querySelectorAll('.job-line').forEach(renderPanel);
-        updateSummary();
-    }
-
-    document.getElementById('job-add-ink').addEventListener('click', function () {
-        inkCounter += 1;
-        var holder = document.createElement('div');
-        holder.innerHTML = inkTemplate.innerHTML.replace(/__IDX__/g, 'n' + inkCounter);
-        var row = holder.firstElementChild;
-        inkRows.appendChild(row);
-        wireLine(row);
-        renumberInks();
-        updateSummary();
-        row.querySelector('.job-search').focus();
-    });
-
     form.querySelectorAll('.job-line').forEach(wireLine);
-    renumberInks();
     updateSummary();
 
     form.addEventListener('submit', function (event) {
         // Re-enable options hidden by search so the chosen value always posts.
         form.querySelectorAll('option[disabled]').forEach(function (opt) { opt.disabled = false; });
-        var chosenInks = Array.prototype.filter.call(form.querySelectorAll('select[name="ink_choice"]'), function (s) { return s.value; });
         if (!form.checkValidity()) {
             event.preventDefault();
             form.reportValidity();
-            return;
-        }
-        if (!chosenInks.length) {
-            event.preventDefault();
-            alert('Add at least one ink for this job.');
-            var firstInk = form.querySelector('select[name="ink_choice"]');
-            if (firstInk) firstInk.focus();
         }
     });
 })();

@@ -1380,6 +1380,8 @@ class PrintJob(db.Model):
     job_date = db.Column(db.Date, nullable=False)
     job_name = db.Column(db.String(200), nullable=False)
     customer_name = db.Column(db.String(150))
+    production_qty = db.Column(db.Float, nullable=True)
+    production_unit = db.Column(db.String(20), nullable=True, default="KG")
     status = db.Column(db.String(20), nullable=False, default=STATUS_PENDING)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -1410,6 +1412,15 @@ class PrintJob(db.Model):
     @property
     def is_open(self) -> bool:
         return self.status in self.OPEN_STATUSES
+
+    @property
+    def production_label(self) -> str:
+        """Total to produce, e.g. '5,000 KG'; empty string when not set."""
+        if self.production_qty is None:
+            return ""
+        qty = float(self.production_qty)
+        text = f"{qty:,.0f}" if qty == int(qty) else f"{qty:,.2f}".rstrip("0").rstrip(".")
+        return f"{text} {self.production_unit or 'KG'}"
 
 
 class PrintJobMaterial(db.Model):

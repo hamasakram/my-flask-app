@@ -6,7 +6,7 @@
 <div class="page-header">
     <div>
         <h1>Job Planning</h1>
-        <p class="page-subtitle">Overview — {{ stats.today.strftime('%d %B %Y') }}. Every open job is checked live against In Hall, Machine Hall and Ink stock.</p>
+        <p class="page-subtitle">Overview — {{ stats.today.strftime('%d %B %Y') }}. Every open job's materials are checked live against In Hall + Machine Hall stock.</p>
     </div>
     {% if full_access %}
     <div class="header-actions">
@@ -27,7 +27,7 @@
     <div class="stat-card accent-green">
         <span class="stat-label">Ready to Run</span>
         <span class="stat-value">{{ stats.ready_count }}</span>
-        <span class="job-stat-note">All materials &amp; inks in stock</span>
+        <span class="job-stat-note">All materials in stock</span>
     </div>
     <div class="stat-card accent-red">
         <span class="stat-label">Stock Short</span>
@@ -56,6 +56,7 @@
                     <th>Date</th>
                     <th>Job Name</th>
                     <th>Customer / Party</th>
+                    <th>To Produce</th>
                     <th>Status</th>
                     <th>Stock Check</th>
                     {% if full_access %}<th></th>{% endif %}
@@ -69,14 +70,15 @@
                     <td>{{ job.job_date.strftime('%d-%m-%Y') }}</td>
                     <td>{{ job.job_name }}</td>
                     <td>{{ job.customer_name or '—' }}</td>
+                    <td class="job-produce-cell">{{ jm.produce(job) }}</td>
                     <td>{{ jm.status_badge(job) }}</td>
-                    <td>{{ jm.verdict_badge(row) }}</td>
+                    <td class="job-nowrap">{{ jm.verdict_badge(row) }}</td>
                     {% if full_access %}
                     <td><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a></td>
                     {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="{{ 7 if full_access else 6 }}" class="empty">No open jobs. {% if full_access and current_user.can_edit() %}<a href="{{ url_for('jobs.new_job') }}">Add a new job</a>.{% endif %}</td></tr>
+                <tr><td colspan="{{ 8 if full_access else 7 }}" class="empty">No open jobs. {% if full_access and current_user.can_edit() %}<a href="{{ url_for('jobs.new_job') }}">Add a new job</a>.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -98,8 +100,8 @@
                     <th>Date</th>
                     <th>Job Name</th>
                     <th>Customer / Party</th>
+                    <th>To Produce</th>
                     <th>Materials</th>
-                    <th>Inks</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -116,8 +118,8 @@
                     <td>{{ job.job_date.strftime('%d-%m-%Y') }}</td>
                     <td>{{ job.job_name }}</td>
                     <td>{{ job.customer_name or '—' }}</td>
+                    <td class="job-produce-cell">{{ jm.produce(job) }}</td>
                     <td>{{ job.materials|length }}</td>
-                    <td>{{ job.inks|length }}</td>
                     <td>{{ jm.status_badge(job) }}</td>
                 </tr>
                 {% else %}

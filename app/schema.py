@@ -102,6 +102,10 @@ COLUMN_MIGRATIONS = {
     "used_ink_stock": {
         "entry_type": "VARCHAR(10) DEFAULT 'add'",
     },
+    "print_jobs": {
+        "production_qty": "FLOAT",
+        "production_unit": "VARCHAR(20) DEFAULT 'KG'",
+    },
 }
 
 

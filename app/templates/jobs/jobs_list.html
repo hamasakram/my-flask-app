@@ -5,7 +5,7 @@
 <div class="page-header">
     <div>
         <h1>New Jobs Added</h1>
-        <p class="page-subtitle">Every job entered for printing, newest first, with a live stock check for open jobs.</p>
+        <p class="page-subtitle">Every job entered for printing, newest first, with how much to produce and a live material stock check for open jobs.</p>
     </div>
     <div class="header-actions">
         {% if current_user.can_edit() %}
@@ -56,8 +56,8 @@
                     <th>Date</th>
                     <th>Job Name</th>
                     <th>Customer / Party</th>
+                    <th>To Produce</th>
                     <th>Materials</th>
-                    <th>Inks</th>
                     <th>Status</th>
                     <th>Stock</th>
                     <th>Actions</th>
@@ -71,14 +71,10 @@
                     <td class="job-nowrap">{{ job.job_date.strftime('%d-%m-%Y') }}</td>
                     <td><strong>{{ job.job_name }}</strong></td>
                     <td>{{ job.customer_name or '—' }}</td>
+                    <td class="job-produce-cell">{{ jm.produce(job) }}</td>
                     <td class="job-cell-lines">
                         {% for m in row.materials %}
-                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(m) }}{% endif %}{{ m.label }}</div>
-                        {% else %}—{% endfor %}
-                    </td>
-                    <td class="job-cell-lines">
-                        {% for i in row.inks %}
-                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(i) }}{% endif %}{{ i.label }}</div>
+                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(m) }}{% endif %}<span>{{ m.label }}{% if job.is_open and m.status in ('out', 'unlisted') %} <strong class="job-mini-out">Not in Stock</strong>{% elif job.is_open and m.status == 'short' %} <strong class="job-mini-short">Short</strong>{% endif %}</span></div>
                         {% else %}—{% endfor %}
                     </td>
                     <td>{{ jm.status_badge(job) }}</td>
@@ -106,8 +102,7 @@
     <p class="field-note job-legend">
         <span class="job-dot job-dot-ok"></span> In stock
         <span class="job-dot job-dot-short"></span> Short
-        <span class="job-dot job-dot-out"></span> Out of stock
-        <span class="job-dot job-dot-unlisted"></span> Not in stock list
+        <span class="job-dot job-dot-out"></span> Not in stock
         · Stock is checked for open jobs only.
     </p>
 </div>

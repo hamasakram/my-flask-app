@@ -10,15 +10,15 @@
     'ok': 'green',
     'short': 'orange',
     'out': 'red',
-    'unlisted': 'gray',
+    'unlisted': 'red',
 } %}
 
 {% macro kg(value) -%}
 {%- if value is none or value == '' -%}—{%- else -%}{{ "{:,.2f}".format(value) }}{%- endif -%}
 {%- endmacro %}
 
-{% macro cans(value) -%}
-{%- if value is none or value == '' -%}—{%- else -%}{{ "{:,.1f}".format(value) }}{%- endif -%}
+{% macro produce(job) -%}
+{%- if job.production_label -%}{{ job.production_label }}{%- else -%}<span class="job-muted">—</span>{%- endif -%}
 {%- endmacro %}
 
 {% macro status_badge(job, large=False) -%}
@@ -47,7 +47,37 @@
 {%- elif check.ready -%}
 <span class="badge badge-green{% if large %} job-badge-lg{% endif %}">Ready</span>
 {%- else -%}
-<span class="badge badge-red{% if large %} job-badge-lg{% endif %}">{{ check.problem_count }} short</span>
+{%- if check.not_in_stock -%}<span class="badge badge-red{% if large %} job-badge-lg{% endif %}">{{ check.not_in_stock|length }} not in stock</span>{%- endif -%}
+{%- if check.not_in_stock and check.short %} {% endif -%}
+{%- if check.short -%}<span class="badge badge-orange{% if large %} job-badge-lg{% endif %}">{{ check.short|length }} short</span>{%- endif -%}
+{%- endif -%}
+{%- endmacro %}
+
+{# Red / orange alert listing the materials that are not in stock or short. Open jobs only. #}
+{% macro stock_alert(check) -%}
+{%- if check.job.is_open and (check.not_in_stock or check.short) -%}
+<div class="job-alerts">
+    {% if check.not_in_stock %}
+    <div class="job-alert job-alert-out" role="alert">
+        <div class="job-alert-title">Materials NOT in stock</div>
+        <ul class="job-alert-list">
+            {% for m in check.not_in_stock %}
+            <li><strong>{{ m.label }}</strong> — {% if m.required_kg %}required {{ kg(m.required_kg) }} kg{% else %}required KG not set{% endif %}, 0.00 kg in In Hall + Machine Hall</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% if check.short %}
+    <div class="job-alert job-alert-short" role="alert">
+        <div class="job-alert-title">Materials short</div>
+        <ul class="job-alert-list">
+            {% for m in check.short %}
+            <li>Short: <strong>{{ m.label }}</strong> — need {{ kg(m.required_kg) }} kg, have {{ kg(m.total_kg) }} kg <span class="job-shortfall">(short by {{ kg(m.shortfall_kg) }} kg)</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
 {%- endif -%}
 {%- endmacro %}
 
