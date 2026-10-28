@@ -149,6 +149,13 @@ def build_material_catalog() -> dict[str, dict]:
             entry["in_hall_rolls"] += rolls
         entry["listed"] = True
 
+    # Materials typed on earlier jobs (not in either hall) stay selectable as "to purchase".
+    for line in PrintJobMaterial.query.all():
+        if line.material_key not in entries:
+            entries[line.material_key] = _blank_material_entry(
+                line.material_key, line.category, line.material_name, line.size, line.micron
+            )
+
     for entry in entries.values():
         entry["total_kg"] = entry["in_hall_kg"] + entry["machine_kg"]
         entry["in_stock"] = entry["total_kg"] > EPSILON
@@ -159,21 +166,27 @@ def build_material_catalog() -> dict[str, dict]:
 
 
 def material_options(catalog: dict[str, dict]) -> list[dict]:
-    """Dropdown groups: in-stock materials grouped by category, then everything else."""
+    """Dropdown groups: in-stock hall materials by category, zero-balance hall items,
+    then materials typed on earlier jobs that are not in either hall (to purchase)."""
     in_stock: dict[str, list] = {}
-    others: list = []
+    zero: list = []
+    to_purchase: list = []
     for entry in sorted(catalog.values(), key=lambda e: e["label"].casefold()):
         if entry["in_stock"]:
             group = entry["category"] or "Other"
             in_stock.setdefault(group, []).append(entry)
+        elif entry["listed"]:
+            zero.append(entry)
         else:
-            others.append(entry)
+            to_purchase.append(entry)
     groups = [
         {"label": f"In Stock — {name}", "options": in_stock[name]}
         for name in sorted(in_stock, key=str.casefold)
     ]
-    if others:
-        groups.append({"label": "Zero balance in In Hall / Machine Hall", "options": others})
+    if zero:
+        groups.append({"label": "Not in Stock — 0 kg in In Hall / Machine Hall", "options": zero})
+    if to_purchase:
+        groups.append({"label": "Not in Stock — required to purchase (added on earlier jobs)", "options": to_purchase})
     return groups
 
 
@@ -329,6 +342,74 @@ def evaluate_jobs(jobs: list[PrintJob]) -> list[dict]:
     return [evaluate_job(job, material_catalog) for job in jobs]
 
 
+# --------------------------------------------------------------------------- purchase list
+
+
+def build_purchase_list(evaluations: list[dict]) -> dict:
+    """Materials to buy for open jobs, combined across jobs.
+
+    A material is listed when it has 0 kg in In Hall + Machine Hall (not in stock), or when the
+    combined Required KG of all open jobs is more than what both halls hold (short).
+    """
+    items: dict[str, dict] = {}
+    for evaluation in evaluations:
+        job = evaluation["job"]
+        for row in evaluation["materials"]:
+            key = row["line"].material_key
+            item = items.get(key)
+            if item is None:
+                item = items[key] = {
+                    "key": key,
+                    "label": row["label"],
+                    "category": row["category"],
+                    "name": row["name"],
+                    "size": row["size"],
+                    "micron": row["micron"],
+                    "in_hall_kg": row["in_hall_kg"],
+                    "machine_kg": row["machine_kg"],
+                    "available_kg": row["total_kg"],
+                    "in_hall_list": row["status"] != STATUS_UNLISTED,
+                    "required_kg": 0.0,
+                    "qty_missing": False,
+                    "jobs": [],
+                }
+            if row["required_kg"]:
+                item["required_kg"] += float(row["required_kg"])
+            else:
+                item["qty_missing"] = True
+            item["jobs"].append(
+                {"job": job, "required_kg": row["required_kg"], "status": row["status"]}
+            )
+
+    result = []
+    for item in items.values():
+        to_buy = max(0.0, item["required_kg"] - item["available_kg"])
+        not_in_stock = item["available_kg"] <= EPSILON
+        if not (not_in_stock or to_buy > EPSILON):
+            continue
+        item["to_buy_kg"] = to_buy
+        item["reason"] = STATUS_OUT if not_in_stock else STATUS_SHORT
+        item["reason_label"] = (
+            "Not in Stock — required to purchase" if not_in_stock else "Short — buy the difference"
+        )
+        item["jobs"].sort(key=lambda j: (j["job"].job_date, j["job"].id))
+        result.append(item)
+
+    result.sort(key=lambda i: (0 if i["reason"] == STATUS_OUT else 1, i["label"].casefold()))
+    return {
+        "items": result,
+        "not_in_stock_count": sum(1 for i in result if i["reason"] == STATUS_OUT),
+        "short_count": sum(1 for i in result if i["reason"] == STATUS_SHORT),
+        "total_to_buy_kg": sum(i["to_buy_kg"] for i in result),
+        "qty_missing_count": sum(1 for i in result if i["qty_missing"]),
+        "open_job_count": len(evaluations),
+    }
+
+
+def purchase_list_for_open_jobs() -> dict:
+    return build_purchase_list(evaluate_jobs(list_open_jobs()))
+
+
 # --------------------------------------------------------------------------- queries
 
 
@@ -451,14 +532,21 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict | None = None
                 raise ValueError(f"{label} is required.")
             continue
 
-        entry = material_catalog.get(choice)
-        if not entry:
-            raise ValueError(
-                f"{label}: pick a material from In Hall or Machine Hall stock."
+        if choice == NEW_CHOICE:
+            # Not in the hall lists: saved on the job and flagged Not in Stock / to purchase.
+            name = _clean(form.get(f"material_{slot}_name"))
+            if not name:
+                raise ValueError(f"{label}: type the name of the material to purchase.")
+            category = _clean(form.get(f"material_{slot}_category"))
+            size = _clean(form.get(f"material_{slot}_size"))
+            micron = _clean(form.get(f"material_{slot}_micron"))
+        else:
+            entry = material_catalog.get(choice)
+            if not entry:
+                raise ValueError(f"{label}: that material is no longer in the list. Pick it again.")
+            category, name, size, micron = (
+                entry["category"], entry["name"], entry["size"], entry["micron"]
             )
-        category, name, size, micron = (
-            entry["category"], entry["name"], entry["size"], entry["micron"]
-        )
 
         data["materials"].append(
             {

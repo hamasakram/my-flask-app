@@ -767,6 +767,19 @@ textarea { resize: vertical; min-height: 4rem; }
     border-radius: 10px;
     background: #f8fbff;
 }
+.job-area-new.job-new-fields { border-color: #fca5a5; background: #fff7f7; }
+.job-new-intro { grid-column: 1 / -1; margin: 0; font-size: 0.84rem; color: #7f1d1d; }
+.job-search-note { margin-top: 0.3rem; }
+.job-search-nomatch { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.5rem; color: #991b1b; font-weight: 600; }
+.job-add-purchase { background: #fef2f2; color: #b91c1c; border: 1px solid #f87171; font-weight: 700; }
+.job-add-purchase:hover, .job-add-purchase:focus { background: #fee2e2; color: #991b1b; }
+.job-search-hint { color: var(--muted); font-weight: 400; }
+.job-stock-buy .job-stock-value { color: #b91c1c; }
+.job-alert-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.job-alert-head .job-alert-title { margin-bottom: 0; }
+.job-alert-link { font-size: 0.85rem; font-weight: 700; color: #b91c1c; white-space: nowrap; }
+.job-alert-link:hover { color: #7f1d1d; }
+.job-buy { font-weight: 700; color: #b91c1c; }
 .job-search { font-size: 0.85rem; padding: 0.45rem 0.65rem; background: #f8fafc; }
 .job-select { width: 100%; }
 .job-span-2 { grid-column: span 2; }

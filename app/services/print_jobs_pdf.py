@@ -1,6 +1,7 @@
-"""Printable Job Planning documents: the Job Card and the Pending Jobs report.
+"""Printable Job Planning documents: the Job Card, the Pending Jobs report and the
+Materials to Purchase list.
 
-Both are built with reportlab platypus in the house style used by the other RN COLOUR
+All are built with reportlab platypus in the house style used by the other RN COLOUR
 PDFs (brand red header rows, near-black text, light grey borders) and only use the
 built-in Helvetica fonts. All user-entered text is XML-escaped before it reaches a
 Paragraph, because job names and notes can contain characters like <, > and &.
@@ -314,7 +315,7 @@ def _logo(height: float):
 # --------------------------------------------------------------------------- shared blocks
 
 
-def _letterhead(title: str, meta_lines: list[str], width: float) -> list:
+def _letterhead(title: str, meta_lines: list[str], width: float, right_w: float = 2.6 * inch) -> list:
     """Logo + company block on the left, document title and meta on the right."""
     logo_height = 0.72 * inch
     logo = _logo(logo_height)
@@ -327,7 +328,6 @@ def _letterhead(title: str, meta_lines: list[str], width: float) -> list:
     right = [Paragraph(_t(title), S["doc_title"]), Spacer(1, 3)]
     right += [Paragraph(line, S["doc_meta"]) for line in meta_lines]
 
-    right_w = 2.6 * inch
     if logo is not None:
         logo_w = logo.drawWidth + 12
         cells = [[logo, company, right]]
@@ -616,8 +616,12 @@ def _stock_alert_box(check: dict, width: float) -> Table | None:
     red = _hex(SHORT_COLOURS[0])
     orange = _hex(STATUS_COLOURS[STATUS_SHORT][0])
 
+    buying = check["job"].is_open  # closed jobs no longer need anything bought
     if missing:
-        title = f"MATERIALS NOT IN STOCK ({len(missing)})"
+        title = (
+            f"NOT IN STOCK — REQUIRED TO PURCHASE ({len(missing)})"
+            if buying else f"MATERIALS NOT IN STOCK ({len(missing)})"
+        )
         if short:
             title += f" · SHORT ({len(short)})"
     else:
@@ -626,10 +630,15 @@ def _stock_alert_box(check: dict, width: float) -> Table | None:
     rows = [[Paragraph(_t(title), S["alert_title"])]]
     for row in missing:
         parts = [f'<font color="{red}"><b>NOT IN STOCK:</b></font> <b>{_t(row["label"])}</b>']
-        if row["required_kg"] is not None:
+        if row["required_kg"]:
             parts.append(f"required {_kg(row['required_kg'])} kg")
+        else:
+            parts.append("Required KG not set")
         parts.append("0 kg in In Hall / Machine Hall")
-        rows.append([Paragraph("• " + " — ".join(parts), S["alert_line"])])
+        text = "• " + " — ".join(parts)
+        if buying and row["required_kg"]:
+            text += f' — <font color="{red}"><b>Buy&nbsp;{_kg(row["required_kg"])}&nbsp;kg</b></font>'
+        rows.append([Paragraph(text, S["alert_line"])])
     for row in short:
         need = _kg(row["required_kg"]) if row["required_kg"] is not None else DASH
         rows.append(
@@ -751,8 +760,12 @@ def _notes_box(notes: str, width: float) -> Table:
     return table
 
 
-def _signature_row(width: float) -> Table:
-    roles = ["Prepared By", "Checked By", "Production Manager", "Approved By"]
+JOB_CARD_SIGNATURES = ("Prepared By", "Checked By", "Production Manager", "Approved By")
+PURCHASE_SIGNATURES = ("Prepared By", "Purchase Approved By", "Store Received By")
+
+
+def _signature_row(width: float, roles=JOB_CARD_SIGNATURES) -> Table:
+    roles = list(roles)
     gap = 0.3 * inch
     col = (width - gap * (len(roles) - 1)) / len(roles)
     widths = []
@@ -1018,6 +1031,292 @@ def generate_pending_jobs_pdf(rows: list[dict]) -> BytesIO:
         canvasmaker=_footer_canvas(
             f"{COMPANY_NAME} · Pending Jobs · {generated}",
             "Pending Jobs (continued)",
+        ),
+    )
+    buffer.seek(0)
+    return buffer
+
+
+# --------------------------------------------------------------------------- purchase list
+
+
+def _tile_strip(tiles: list[tuple], widths: list[float]) -> Table:
+    """Light grey strip of number tiles: (value, label, colour, is_text)."""
+    cells = []
+    for value, label, colour, is_text in tiles:
+        style = S["tile_text"] if is_text else S["tile_num"]
+        cells.append(
+            [
+                Paragraph(f'<font color="{_hex(colour)}">{value}</font>', style),
+                Paragraph(_t(label.upper()), S["tile_label"]),
+            ]
+        )
+    table = Table([cells], colWidths=widths, hAlign="LEFT")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.6, BORDER_GREY),
+                ("LINEAFTER", (0, 0), (-2, -1), 0.4, GRID_GREY),
+                ("BACKGROUND", (0, 0), (-1, -1), LABEL_BG),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    return table
+
+
+def _purchase_summary(purchase: dict, generated: str, width: float) -> Table:
+    out_n = purchase["not_in_stock_count"]
+    short_n = purchase["short_count"]
+    total = purchase["total_to_buy_kg"]
+    red, orange = STATUS_COLOURS[STATUS_OUT][0], STATUS_COLOURS[STATUS_SHORT][0]
+    tiles = [
+        (out_n, "Not in stock", red if out_n else BRAND_BLACK, False),
+        (short_n, "Short", orange if short_n else BRAND_BLACK, False),
+        (f'{_kg(total)}<font size="10"> kg</font>', "Total to buy", red if total > 0.0005 else BRAND_BLACK, False),
+        (purchase["open_job_count"], "Open jobs checked", BRAND_BLACK, False),
+        (_t(generated), "Generated", BRAND_BLACK, True),
+    ]
+    share = [0.15, 0.15, 0.2, 0.17, 0.33]
+    return _tile_strip(tiles, [width * s for s in share])
+
+
+def _purchase_material_cell(item: dict) -> Paragraph:
+    details = []
+    for part in (item["category"], item["size"], format_micron(item["micron"])):
+        part = (part or "").strip()
+        if part and part.casefold() != (item["name"] or "").casefold() and part not in details:
+            details.append(part)
+    text = f"<b>{_t(item['name'])}</b>"
+    if details:
+        text += f'<br/><font size="7.5" color="{_hex(TEXT_MUTED)}">{_t(" · ".join(details))}</font>'
+    if not item["in_hall_list"]:
+        text += (
+            f'<br/><font size="7" color="{_hex(TEXT_SOFT)}"><i>Typed on the job — not in the '
+            "hall stock list</i></font>"
+        )
+    return Paragraph(text, S["cell"])
+
+
+def _purchase_reason_cell(item: dict) -> Paragraph:
+    fg, _bg = STATUS_COLOURS[item["reason"]]
+    if item["reason"] == STATUS_OUT:
+        word, sub = "NOT IN STOCK", "Required to purchase"
+    else:
+        word, sub = "SHORT", "Buy the difference"
+    return Paragraph(
+        f'<font color="{_hex(fg)}">{word}</font><br/>'
+        f'<font size="6.5" color="{_hex(fg)}"><font name="Helvetica">{sub}</font></font>',
+        S["status"],
+    )
+
+
+def _purchase_required_cell(item: dict) -> Paragraph:
+    orange = _hex(STATUS_COLOURS[STATUS_SHORT][0])
+    if item["required_kg"] > 0.0005:
+        text = _kg(item["required_kg"])
+        if item["qty_missing"]:
+            text += f'<br/><font size="6.5" color="{orange}"><font name="Helvetica">+ qty not set</font></font>'
+    else:
+        text = f'<font color="{orange}">Not set</font>'
+    return Paragraph(text, S["num_bold"])
+
+
+def _purchase_available_cell(item: dict) -> Paragraph:
+    muted = _hex(TEXT_MUTED)
+    if not item["in_hall_list"]:
+        return Paragraph(
+            f'<font color="{_hex(TEXT_SOFT)}">0.00</font><br/>'
+            f'<font size="6.5" color="{muted}">not in stock list</font>',
+            S["num"],
+        )
+    total = item["available_kg"]
+    head = _kg(total) if total > 0.0005 else f'<font color="{_hex(TEXT_SOFT)}">0.00</font>'
+    return Paragraph(
+        f"<b>{head}</b><br/>"
+        f'<font size="6.5" color="{muted}">In Hall {_kg(item["in_hall_kg"])} · '
+        f'Machine {_kg(item["machine_kg"])}</font>',
+        S["num"],
+    )
+
+
+def _purchase_to_buy_cell(item: dict) -> Paragraph:
+    if item["to_buy_kg"] > 0.0005:
+        text = f'<font color="{_hex(SHORT_COLOURS[0])}" size="10">{_kg(item["to_buy_kg"])}</font>'
+        if item["qty_missing"]:
+            text += (
+                f'<br/><font size="6.5" color="{_hex(STATUS_COLOURS[STATUS_SHORT][0])}">'
+                '<font name="Helvetica">+ qty not set</font></font>'
+            )
+    else:
+        text = f'<font color="{_hex(STATUS_COLOURS[STATUS_SHORT][0])}">Qty not set</font>'
+    return Paragraph(text, ParagraphStyle("to_buy", parent=S["num_bold"], leading=12))
+
+
+def _purchase_jobs_cell(item: dict, width: float) -> Table:
+    """One line per job: job no + job name on the left, its Required KG on the right."""
+    kg_w = 0.72 * inch
+    muted = _hex(TEXT_MUTED)
+    orange = _hex(STATUS_COLOURS[STATUS_SHORT][0])
+    data = []
+    for entry in item["jobs"]:
+        job = entry["job"]
+        if entry["required_kg"]:
+            need = f"{_kg(entry['required_kg'])} kg"
+        else:
+            need = f'<font color="{orange}">not set</font>'
+        data.append(
+            [
+                Paragraph(
+                    f"<b>{_t(job.job_number)}</b> "
+                    f'<font color="{muted}">{_t(job.job_name)}</font>',
+                    S["small"],
+                ),
+                Paragraph(need, S["small_rr"]),
+            ]
+        )
+    table = Table(data, colWidths=[width - kg_w, kg_w], hAlign="LEFT")
+    table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (0, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.5),
+                ("LINEBELOW", (0, 0), (-1, -2), 0.3, GRID_GREY),
+            ]
+        )
+    )
+    return table
+
+
+def _purchase_table(purchase: dict, width: float) -> Table:
+    items = purchase["items"]
+    fixed = {"no": 0.3, "reason": 1.08, "req": 0.95, "avail": 1.45, "buy": 0.95, "jobs": 3.0}
+    widths = [
+        fixed["no"] * inch, 0, fixed["reason"] * inch, fixed["req"] * inch,
+        fixed["avail"] * inch, fixed["buy"] * inch, fixed["jobs"] * inch,
+    ]
+    widths[1] = width - sum(widths)
+    pad = 10
+    data = [
+        [
+            Paragraph("#", S["head_c"]),
+            Paragraph("Material", S["head"]),
+            Paragraph("Reason", S["head_c"]),
+            Paragraph("Required KG", S["head_r"]),
+            Paragraph("Available KG<br/>(In Hall + Machine Hall)", S["head_r"]),
+            Paragraph("To Buy KG", S["head_r"]),
+            Paragraph("For Jobs (Required KG)", S["head"]),
+        ]
+    ]
+    for index, item in enumerate(items, start=1):
+        data.append(
+            [
+                Paragraph(str(index), S["cell_c"]),
+                _purchase_material_cell(item),
+                _purchase_reason_cell(item),
+                _purchase_required_cell(item),
+                _purchase_available_cell(item),
+                _purchase_to_buy_cell(item),
+                _purchase_jobs_cell(item, widths[6] - pad),
+            ]
+        )
+
+    missing_note = ""
+    if purchase["qty_missing_count"]:
+        missing_note = (
+            f'<font color="{_hex(STATUS_COLOURS[STATUS_SHORT][0])}">'
+            f'{purchase["qty_missing_count"]} material(s) have a job without Required KG — '
+            "not included in the total</font>"
+        )
+    total_row = len(data)
+    data.append(
+        [
+            "",
+            Paragraph(f"<b>TOTAL TO BUY</b> — {len(items)} material(s)", S["cell"]),
+            "", "", "",
+            Paragraph(
+                f'<font color="{_hex(SHORT_COLOURS[0])}" size="10.5">{_kg(purchase["total_to_buy_kg"])}</font>'
+                '<font size="7.5"> kg</font>',
+                ParagraphStyle("total_buy", parent=S["num_bold"], leading=13),
+            ),
+            Paragraph(missing_note, S["small"]),
+        ]
+    )
+    extra = [
+        ("VALIGN", (0, 1), (-1, -1), "TOP"),
+        ("VALIGN", (2, 1), (2, total_row - 1), "MIDDLE"),
+        ("SPAN", (1, total_row), (4, total_row)),
+        ("BACKGROUND", (0, total_row), (-1, total_row), LABEL_BG),
+        ("LINEABOVE", (0, total_row), (-1, total_row), 1.2, BRAND_BLACK),
+        ("VALIGN", (0, total_row), (-1, total_row), "MIDDLE"),
+        ("TOPPADDING", (0, total_row), (-1, total_row), 7),
+        ("BOTTOMPADDING", (0, total_row), (-1, total_row), 7),
+    ]
+    return _data_table(
+        data, widths, index_col=True, status_col=2,
+        statuses=[item["reason"] for item in items], extra=extra,
+    )
+
+
+def generate_purchase_list_pdf(purchase: dict) -> BytesIO:
+    """A4 landscape list of materials to buy for all open (pending / in printing) jobs."""
+    now = pkt_now()
+    generated = _fmt_stamp(now)
+    items = purchase["items"]
+
+    buffer = BytesIO()
+    doc = _doc(buffer, landscape(A4), "Materials to Purchase")
+    width = doc.width
+
+    story = _letterhead(
+        "MATERIALS TO PURCHASE",
+        [
+            f"As of <b>{now.strftime('%d-%m-%Y')}</b>",
+            "All pending / in-printing jobs combined",
+        ],
+        width,
+        right_w=3.9 * inch,
+    )
+    story += [_purchase_summary(purchase, generated, width), Spacer(1, 16)]
+
+    if not items:
+        story.append(Spacer(1, 30))
+        story.append(
+            Paragraph(f'<font color="{_hex(READY_COLOURS[0])}"><b>Nothing to purchase.</b></font>', S["empty"])
+        )
+        if purchase["open_job_count"]:
+            sub = "Every open job's materials are in stock in In Hall + Machine Hall."
+        else:
+            sub = "There are no pending or in-printing jobs right now."
+        story.append(
+            Paragraph(_t(sub), ParagraphStyle("empty_sub", parent=S["contact"], alignment=TA_CENTER))
+        )
+    else:
+        story += _section_heading(
+            f"Purchase List ({len(items)})",
+            "NOT IN STOCK = 0 kg in In Hall + Machine Hall · SHORT = open jobs need more "
+            "than both halls hold · To Buy = Required − Available",
+            width,
+            note_share=0.7,
+        )
+        story.append(_purchase_table(purchase, width))
+
+        signatures = _signature_row(width, PURCHASE_SIGNATURES)
+        _w, sig_height = signatures.wrap(width, doc.height)
+        story += [Spacer(1, 24), _PushToBottom(sig_height), KeepTogether([signatures])]
+
+    doc.build(
+        story,
+        canvasmaker=_footer_canvas(
+            f"{COMPANY_NAME} · Materials to Purchase · {generated}",
+            "Materials to Purchase (continued)",
         ),
     )
     buffer.seek(0)

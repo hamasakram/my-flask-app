@@ -11,6 +11,7 @@
         {% if current_user.can_edit() %}
         <a href="{{ url_for('jobs.new_job') }}" class="btn btn-secondary">+ Add New Job</a>
         {% endif %}
+        <a href="{{ url_for('jobs.purchase_list') }}" class="btn btn-secondary">View purchase list</a>
         <a href="{{ url_for('jobs.pending_jobs_pdf') }}" class="btn btn-primary" target="_blank">Download Pending Jobs PDF</a>
     </div>
 </div>

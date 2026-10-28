@@ -36,8 +36,8 @@
 {% macro shortfall_note(row) -%}
 {%- if row.status == 'short' and row.shortfall_kg -%}
 <span class="job-shortfall">Short by {{ kg(row.shortfall_kg) }} kg</span>
-{%- elif row.status in ('out', 'unlisted') and row.required_kg -%}
-<span class="job-shortfall">Need {{ kg(row.required_kg) }} kg</span>
+{%- elif row.status in ('out', 'unlisted') -%}
+<span class="job-shortfall">{% if row.required_kg %}To purchase: buy {{ kg(row.required_kg) }} kg{% else %}To purchase: quantity not set{% endif %}</span>
 {%- endif -%}
 {%- endmacro %}
 
@@ -59,10 +59,13 @@
 <div class="job-alerts">
     {% if check.not_in_stock %}
     <div class="job-alert job-alert-out" role="alert">
-        <div class="job-alert-title">Materials NOT in stock</div>
+        <div class="job-alert-head">
+            <div class="job-alert-title">Materials NOT in stock — required to purchase</div>
+            <a href="{{ url_for('jobs.purchase_list') }}" class="job-alert-link">View purchase list →</a>
+        </div>
         <ul class="job-alert-list">
             {% for m in check.not_in_stock %}
-            <li><strong>{{ m.label }}</strong> — {% if m.required_kg %}required {{ kg(m.required_kg) }} kg{% else %}required KG not set{% endif %}, 0.00 kg in In Hall + Machine Hall</li>
+            <li><strong>{{ m.label }}</strong> — {% if m.required_kg %}<span class="job-buy">Buy {{ kg(m.required_kg) }} kg</span>{% else %}<span class="job-buy">quantity not set</span>{% endif %} · 0.00 kg in In Hall + Machine Hall</li>
             {% endfor %}
         </ul>
     </div>

@@ -12,7 +12,7 @@
     data-machine_rolls="{{ opt.machine_rolls }}"
     data-listed="{{ '1' if opt.listed else '0' }}"
     data-search="{{ opt.label|lower }}"
-    {% if opt.key == selected_key %}selected{% endif %}>{{ opt.label }} — {% if opt.listed and opt.in_stock %}{{ "{:,.2f}".format(opt.total_kg) }} kg{% else %}Not in Stock (0 kg){% endif %}</option>
+    {% if opt.key == selected_key %}selected{% endif %}>{{ opt.label }} — {% if opt.listed and opt.in_stock %}{{ "{:,.2f}".format(opt.total_kg) }} kg{% else %}Not in Stock (0 kg) — to purchase{% endif %}</option>
 {%- endmacro %}
 
 {% block content %}
@@ -92,13 +92,33 @@
                     <input type="search" class="job-search" placeholder="Search In Hall / Machine Hall materials…" aria-label="Search materials" autocomplete="off">
                     <select id="material_{{ slot }}" name="material_{{ slot }}" class="job-select"{% if is_required %} required{% endif %}>
                         <option value="">{% if is_required %}— Select material —{% else %}— None —{% endif %}</option>
+                        <option value="{{ new_choice }}" data-new="1">＋ Material not in list — add as Not in Stock (to purchase)…</option>
                         {% for group in material_groups %}
                         <optgroup label="{{ group.label }}">
                             {% for opt in group.options %}{{ material_option(opt, slot_values.choice) }}{% endfor %}
                         </optgroup>
                         {% endfor %}
                     </select>
-                    <small class="field-note job-search-note"></small>
+                    <div class="field-note job-search-note" aria-live="polite"></div>
+                </div>
+                <div class="job-new-fields job-area-new job-hidden">
+                    <p class="job-new-intro"><strong>Material not in In Hall / Machine Hall.</strong> It will be saved on this job as <strong>Not in Stock — required to purchase</strong> and listed on the purchase list.</p>
+                    <div class="form-group">
+                        <label for="material_{{ slot }}_name">Material Name <span class="job-required">*</span></label>
+                        <input type="text" id="material_{{ slot }}_name" name="material_{{ slot }}_name" class="job-new-name" data-new-required="1" maxlength="150" placeholder="e.g. MPet 765">
+                    </div>
+                    <div class="form-group">
+                        <label for="material_{{ slot }}_category">Type / Category <span class="field-note">(optional)</span></label>
+                        <input type="text" id="material_{{ slot }}_category" name="material_{{ slot }}_category" maxlength="100" placeholder="e.g. PET, METALIZE, LD, BOPP">
+                    </div>
+                    <div class="form-group">
+                        <label for="material_{{ slot }}_size">Size <span class="field-note">(optional)</span></label>
+                        <input type="text" id="material_{{ slot }}_size" name="material_{{ slot }}_size" maxlength="100" placeholder="e.g. 600mm">
+                    </div>
+                    <div class="form-group">
+                        <label for="material_{{ slot }}_micron">Micron <span class="field-note">(optional)</span></label>
+                        <input type="text" id="material_{{ slot }}_micron" name="material_{{ slot }}_micron" maxlength="50" placeholder="e.g. 12">
+                    </div>
                 </div>
                 <div class="form-group job-area-kg">
                     <label for="material_{{ slot }}_kg">Required KG <span class="field-note">(optional)</span></label>
@@ -173,7 +193,16 @@
     function statusText(result) {
         if (result.status === 'ok') return 'In Stock';
         if (result.status === 'short') return 'Short by ' + fmt(result.short, 2) + ' kg';
-        return 'Not in Stock';
+        return 'Not in Stock — required to purchase';
+    }
+
+    function toggleNewFields(line, isNew) {
+        var box = line.querySelector('.job-new-fields');
+        if (!box) return;
+        box.classList.toggle('job-hidden', !isNew);
+        box.querySelectorAll('[data-new-required]').forEach(function (input) {
+            input.required = isNew;
+        });
     }
 
     function renderPanel(line) {
@@ -183,7 +212,9 @@
         line.dataset.status = '';
         if (!select || !panel) return;
         var opt = select.options[select.selectedIndex];
+        var isNew = !!(opt && opt.dataset.new);
         var required = kgInput ? num(kgInput.value) : 0;
+        toggleNewFields(line, isNew);
         panel.innerHTML = '';
 
         if (!opt || !opt.value) {
@@ -193,22 +224,61 @@
         }
         panel.className = 'job-stock-panel job-area-panel';
         var cells = el('div', 'job-stock-cells');
-        var total = num(opt.dataset.total_kg);
-        cells.appendChild(cell('In Hall', fmt(opt.dataset.in_hall_kg, 2) + ' kg', fmt(opt.dataset.in_hall_rolls, 0) + ' rolls'));
-        cells.appendChild(cell('Machine Hall', fmt(opt.dataset.machine_kg, 2) + ' kg', fmt(opt.dataset.machine_rolls, 0) + ' rolls'));
+        var total = isNew ? 0 : num(opt.dataset.total_kg);
+        var listed = !isNew && opt.dataset.listed === '1';
+        var result = lineStatus(total, required, listed);
+        var missing = result.status === 'out' || result.status === 'unlisted';
+
+        if (isNew || !listed) {
+            cells.appendChild(cell('In Hall / Machine Hall', '0.00 kg', 'not in either hall'));
+        } else {
+            cells.appendChild(cell('In Hall', fmt(opt.dataset.in_hall_kg, 2) + ' kg', fmt(opt.dataset.in_hall_rolls, 0) + ' rolls'));
+            cells.appendChild(cell('Machine Hall', fmt(opt.dataset.machine_kg, 2) + ' kg', fmt(opt.dataset.machine_rolls, 0) + ' rolls'));
+        }
         var totalCell = cell('Total Available', fmt(total, 2) + ' kg', required ? 'need ' + fmt(required, 2) + ' kg' : '');
         totalCell.classList.add('job-stock-total');
         cells.appendChild(totalCell);
-        var result = lineStatus(total, required, opt.dataset.listed === '1');
+        if (missing) {
+            var buyCell = cell('To Purchase', required ? 'Buy ' + fmt(required, 2) + ' kg' : 'Quantity not set', required ? '' : 'enter Required KG');
+            buyCell.classList.add('job-stock-buy');
+            cells.appendChild(buyCell);
+        }
         panel.appendChild(cells);
-        if (result.status === 'out' || result.status === 'unlisted') {
-            cells.appendChild(el('span', 'job-stock-note job-stock-note-out', 'This material is NOT in stock (0 kg in In Hall + Machine Hall).'));
+        if (missing) {
+            panel.appendChild(el('span', 'job-stock-note job-stock-note-out',
+                'Not in Stock — required to purchase. 0 kg in In Hall / Machine Hall' +
+                (required ? '. Buy ' + fmt(required, 2) + ' kg.' : '. Enter Required KG to show how much to buy.')));
         }
         var badgeWrap = el('div', 'job-stock-verdict');
         badgeWrap.appendChild(badge(result.status, statusText(result)));
         panel.appendChild(badgeWrap);
-        panel.classList.add('job-stock-' + (result.status === 'unlisted' ? 'out' : result.status));
+        panel.classList.add('job-stock-' + (missing ? 'out' : result.status));
         line.dataset.status = result.status;
+    }
+
+    function searchTerms(search) {
+        return search.value.toLowerCase().split(/\s+/).filter(Boolean);
+    }
+
+    function addAsPurchase(line, text) {
+        var select = line.querySelector('.job-select');
+        var search = line.querySelector('.job-search');
+        var nameInput = line.querySelector('.job-new-name');
+        var kgInput = line.querySelector('.job-kg');
+        var newOpt = select.querySelector('option[data-new]');
+        if (!newOpt) return;
+        select.value = newOpt.value;
+        if (nameInput && text) nameInput.value = text;
+        if (search) search.value = '';
+        filterOptions(line);
+        renderPanel(line);
+        updateSummary();
+        var note = line.querySelector('.job-search-note');
+        if (note && text) {
+            note.textContent = '“' + text + '” added as Not in Stock — required to purchase. Enter the Required KG.';
+        }
+        if (kgInput) kgInput.focus();
+        else if (nameInput) nameInput.focus();
     }
 
     function filterOptions(line) {
@@ -216,7 +286,7 @@
         var select = line.querySelector('.job-select');
         var note = line.querySelector('.job-search-note');
         if (!search || !select) return null;
-        var terms = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+        var terms = searchTerms(search);
         var shown = 0;
         var firstMatch = null;
         select.querySelectorAll('optgroup').forEach(function (group) {
@@ -236,10 +306,19 @@
             group.hidden = visible === 0 && !group.querySelector('option:checked');
         });
         if (note) {
+            note.innerHTML = '';
+            note.classList.remove('job-search-nomatch');
             if (!terms.length) {
-                note.textContent = '';
+                // nothing typed
             } else if (!shown) {
-                note.textContent = 'No match in In Hall / Machine Hall stock.';
+                var typed = search.value.trim();
+                note.classList.add('job-search-nomatch');
+                note.appendChild(el('span', '', 'No match in In Hall / Machine Hall stock. '));
+                var add = el('button', 'btn btn-sm job-add-purchase', '＋ Add “' + typed + '” as a material to purchase');
+                add.type = 'button';
+                add.addEventListener('click', function () { addAsPurchase(line, typed); });
+                note.appendChild(add);
+                note.appendChild(el('span', 'job-search-hint', ' (or press Enter)'));
             } else {
                 note.textContent = shown + ' match' + (shown === 1 ? '' : 'es') + ' — press Enter to pick the first.';
             }
@@ -265,7 +344,7 @@
             return;
         }
         if (missing || short) {
-            if (missing) summary.appendChild(badge('out', missing + ' Not in Stock'));
+            if (missing) summary.appendChild(badge('out', missing + ' Not in Stock — to purchase'));
             if (short) summary.appendChild(badge('short', short + ' Short'));
             summary.appendChild(el('span', '', ' ' + (picked - missing - short) + ' of ' + picked + ' selected material(s) are in stock. You can still save — the job will show as stock short.'));
         } else {
@@ -278,8 +357,17 @@
         var select = line.querySelector('.job-select');
         var search = line.querySelector('.job-search');
         var kgInput = line.querySelector('.job-kg');
+        var nameInput = line.querySelector('.job-new-name');
         if (!select) return;
-        select.addEventListener('change', function () { renderPanel(line); updateSummary(); });
+        select.addEventListener('change', function () {
+            var opt = select.options[select.selectedIndex];
+            if (opt && opt.dataset.new && nameInput && !nameInput.value.trim() && search && search.value.trim()) {
+                nameInput.value = search.value.trim();
+            }
+            renderPanel(line);
+            updateSummary();
+            if (opt && opt.dataset.new && nameInput && !nameInput.value.trim()) nameInput.focus();
+        });
         if (kgInput) kgInput.addEventListener('input', function () { renderPanel(line); updateSummary(); });
         if (search) {
             search.addEventListener('input', function () { filterOptions(line); });
@@ -291,6 +379,8 @@
                     select.value = first.value;
                     select.dispatchEvent(new Event('change'));
                     select.focus();
+                } else if (searchTerms(search).length) {
+                    addAsPurchase(line, search.value.trim());
                 }
             });
         }

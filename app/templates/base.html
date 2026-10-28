@@ -119,8 +119,10 @@
             <li><a href="{{ url_for('jobs.new_job') }}" class="{% if request.endpoint == 'jobs.new_job' %}active{% endif %}">Add New Job</a></li>
             <li><a href="{{ url_for('jobs.jobs_list') }}" class="{% if request.endpoint in ('jobs.jobs_list', 'jobs.job_detail', 'jobs.edit_job') %}active{% endif %}">New Jobs Added</a></li>
             <li><a href="{{ url_for('jobs.pending_jobs') }}" class="{% if request.endpoint == 'jobs.pending_jobs' %}active{% endif %}">Pending Jobs</a></li>
+            <li><a href="{{ url_for('jobs.purchase_list') }}" class="{% if request.endpoint == 'jobs.purchase_list' %}active{% endif %}">Materials to Purchase</a></li>
             <li class="nav-section">Reports</li>
             <li><a href="{{ url_for('jobs.pending_jobs_pdf') }}" target="_blank">Pending Jobs PDF</a></li>
+            <li><a href="{{ url_for('jobs.purchase_list_pdf') }}" target="_blank">Purchase List PDF</a></li>
             {% endif %}
             {% endif %}
             {% if current_user.is_admin() %}

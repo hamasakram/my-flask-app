@@ -32,6 +32,7 @@ def _form_context(job=None, values=None):
         "material_slots": jobs_service.MATERIAL_SLOTS,
         "required_slots": jobs_service.REQUIRED_MATERIAL_SLOTS,
         "production_units": jobs_service.PRODUCTION_UNITS,
+        "new_choice": jobs_service.NEW_CHOICE,
     }, material_catalog, None
 
 
@@ -210,4 +211,25 @@ def pending_jobs_pdf():
         mimetype="application/pdf",
         as_attachment=False,
         download_name=f"pending_jobs_{stamp}.pdf",
+    )
+
+
+@jobs_bp.route("/purchase")
+@login_required
+def purchase_list():
+    return render_template("jobs/purchase_list.html", purchase=jobs_service.purchase_list_for_open_jobs())
+
+
+@jobs_bp.route("/purchase/pdf")
+@login_required
+def purchase_list_pdf():
+    from app.services.print_jobs_pdf import generate_purchase_list_pdf
+
+    buffer = generate_purchase_list_pdf(jobs_service.purchase_list_for_open_jobs())
+    stamp = jobs_service.pkt_today().strftime("%Y%m%d")
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=f"materials_to_purchase_{stamp}.pdf",
     )

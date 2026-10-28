@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% import "jobs/_macros.html" as jm with context %}
+{% block title %}Materials to Purchase - RN COLOUR{% endblock %}
+{% block content %}
+<style>
+    .purchase-stat-out .stat-value { color: #b91c1c; }
+    .purchase-stat-short .stat-value { color: #b45309; }
+    .purchase-stat-buy { border-left: 4px solid var(--primary); }
+    .purchase-stat-buy .stat-value { color: var(--primary); }
+    .purchase-unit { font-size: 0.95rem; font-weight: 600; color: var(--muted); margin-left: 0.15rem; }
+    .purchase-zero .stat-value { color: var(--text); }
+
+    .purchase-table th.purchase-num,
+    .purchase-table td.purchase-num { text-align: right; white-space: nowrap; }
+    .purchase-table td { vertical-align: top; }
+    .purchase-table td:first-child { min-width: 170px; }
+    .purchase-row-out td:first-child { box-shadow: inset 4px 0 0 var(--red); }
+    .purchase-row-short td:first-child { box-shadow: inset 4px 0 0 var(--orange); }
+    .purchase-material { font-weight: 700; }
+    .purchase-material-sub { display: block; margin-top: 0.15rem; font-size: 0.78rem; color: var(--muted); font-weight: 400; }
+    .purchase-unlisted { display: block; margin-top: 0.15rem; font-size: 0.75rem; color: #9ca3af; font-style: italic; }
+    .purchase-reason .badge { white-space: nowrap; }
+    .purchase-reason-sub { display: block; margin-top: 0.3rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .purchase-qty-note { display: block; margin-top: 0.15rem; font-size: 0.75rem; font-weight: 600; color: #b45309; white-space: nowrap; }
+    .purchase-breakdown { display: block; margin-top: 0.15rem; font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+    .purchase-to-buy { font-size: 1.05rem; font-weight: 800; color: #b91c1c; }
+    .purchase-jobs { list-style: none; margin: 0; padding: 0; min-width: 240px; }
+    .purchase-jobs li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.15rem 0; font-size: 0.85rem; }
+    .purchase-jobs li + li { border-top: 1px dashed var(--border); }
+    .purchase-job-name { color: var(--muted); }
+    .purchase-job-kg { white-space: nowrap; font-weight: 600; }
+    .purchase-job-kg.purchase-missing { color: #b45309; font-weight: 600; }
+    .purchase-total-row td { background: #f8fafc; border-top: 2px solid var(--text); border-bottom: none; font-weight: 700; }
+    .purchase-total-row .purchase-to-buy { font-size: 1.15rem; }
+    .purchase-legend { margin: 0.85rem 0 0; font-size: 0.8rem; color: var(--muted); }
+    .purchase-empty {
+        display: flex; align-items: center; gap: 0.85rem;
+        padding: 1rem 1.25rem; border: 1px solid #86efac; border-left: 4px solid var(--green);
+        border-radius: 12px; background: #f0fdf4; color: #14532d;
+    }
+    .purchase-empty-icon {
+        flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: var(--green); color: #fff; font-weight: 800;
+    }
+    .purchase-empty strong { display: block; font-size: 1.05rem; }
+    .purchase-empty span { font-size: 0.88rem; }
+</style>
+
+<div class="page-header">
+    <div>
+        <h1>Materials to Purchase</h1>
+        <p class="page-subtitle">Combines every pending and in-printing job and checks each material against In Hall + Machine Hall stock. Materials with 0 kg (or typed on a job and never stocked) are not in stock and must be purchased; short materials need the difference bought.</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('jobs.purchase_list_pdf') }}" class="btn btn-primary" target="_blank">Download Purchase List PDF</a>
+        <a href="{{ url_for('jobs.pending_jobs') }}" class="btn btn-secondary">Pending Jobs</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card accent-red{% if purchase.not_in_stock_count %} purchase-stat-out{% endif %}">
+        <span class="stat-label">Not in Stock</span>
+        <span class="stat-value">{{ purchase.not_in_stock_count }}</span>
+        <span class="job-stat-note">0 kg in both halls — required to purchase</span>
+    </div>
+    <div class="stat-card accent-orange{% if purchase.short_count %} purchase-stat-short{% endif %}">
+        <span class="stat-label">Short</span>
+        <span class="stat-value">{{ purchase.short_count }}</span>
+        <span class="job-stat-note">Some stock, not enough — buy the difference</span>
+    </div>
+    <div class="stat-card purchase-stat-buy{% if not purchase.total_to_buy_kg %} purchase-zero{% endif %}">
+        <span class="stat-label">Total to Buy</span>
+        <span class="stat-value">{{ jm.kg(purchase.total_to_buy_kg) }}<span class="purchase-unit">kg</span></span>
+        <span class="job-stat-note">{% if purchase.qty_missing_count %}Plus {{ purchase.qty_missing_count }} material(s) with Required KG not set{% else %}Across {{ purchase['items']|length }} material(s){% endif %}</span>
+    </div>
+    <div class="stat-card">
+        <span class="stat-label">Open Jobs</span>
+        <span class="stat-value">{{ purchase.open_job_count }}</span>
+        <span class="job-stat-note">Pending + in printing, combined</span>
+    </div>
+</div>
+
+<div class="card">
+    {% if purchase['items'] %}
+    <div class="card-header-row">
+        <h2>Purchase List ({{ purchase['items']|length }})</h2>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table purchase-table">
+            <thead>
+                <tr>
+                    <th>Material</th>
+                    <th>Reason</th>
+                    <th class="purchase-num">Required</th>
+                    <th class="purchase-num">Available</th>
+                    <th class="purchase-num">To Buy KG</th>
+                    <th>For Jobs</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in purchase['items'] %}
+                <tr class="purchase-row-{{ item.reason }}">
+                    <td>
+                        <span class="purchase-material">{{ item.name }}</span>
+                        {% set details = item.label.split(' · ') | reject('equalto', item.name) | list %}
+                        {% if details %}<span class="purchase-material-sub">{{ details | join(' · ') }}</span>{% endif %}
+                        {% if not item.in_hall_list %}<span class="purchase-unlisted">not in hall stock list</span>{% endif %}
+                    </td>
+                    <td class="purchase-reason">
+                        {% if item.reason == 'out' %}
+                        <span class="badge badge-red">Not in Stock</span>
+                        <span class="purchase-reason-sub">Required to purchase</span>
+                        {% else %}
+                        <span class="badge badge-orange">Short</span>
+                        <span class="purchase-reason-sub">Buy the difference</span>
+                        {% endif %}
+                    </td>
+                    <td class="purchase-num">
+                        {% if item.required_kg %}<strong>{{ jm.kg(item.required_kg) }} kg</strong>{% else %}<span class="job-muted">—</span>{% endif %}
+                        {% if item.qty_missing %}<span class="purchase-qty-note">+ qty not set</span>{% endif %}
+                    </td>
+                    <td class="purchase-num">
+                        <strong>{{ jm.kg(item.available_kg) }} kg</strong>
+                        {% if item.in_hall_list %}
+                        <span class="purchase-breakdown">In Hall {{ jm.kg(item.in_hall_kg) }} · Machine {{ jm.kg(item.machine_kg) }}</span>
+                        {% else %}
+                        <span class="purchase-breakdown">Not stocked</span>
+                        {% endif %}
+                    </td>
+                    <td class="purchase-num">
+                        {% if item.to_buy_kg %}
+                        <span class="purchase-to-buy">{{ jm.kg(item.to_buy_kg) }} kg</span>
+                        {% if item.qty_missing %}<span class="purchase-qty-note">+ qty not set</span>{% endif %}
+                        {% elif item.qty_missing %}
+                        <span class="purchase-qty-note">Qty not set</span>
+                        {% else %}
+                        <span class="job-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <ul class="purchase-jobs">
+                            {% for entry in item.jobs %}
+                            <li>
+                                <span><a href="{{ url_for('jobs.job_detail', job_id=entry.job.id) }}" class="job-link"><strong>{{ entry.job.job_number }}</strong></a> <span class="purchase-job-name">{{ entry.job.job_name }}</span></span>
+                                {% if entry.required_kg %}
+                                <span class="purchase-job-kg">{{ jm.kg(entry.required_kg) }} kg</span>
+                                {% else %}
+                                <span class="purchase-job-kg purchase-missing">qty not set</span>
+                                {% endif %}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr class="purchase-total-row">
+                    <td colspan="4">Total to buy — {{ purchase['items']|length }} material(s)</td>
+                    <td class="purchase-num"><span class="purchase-to-buy">{{ jm.kg(purchase.total_to_buy_kg) }} kg</span></td>
+                    <td>{% if purchase.qty_missing_count %}<span class="purchase-qty-note">{{ purchase.qty_missing_count }} material(s) have a job without Required KG — not in the total</span>{% endif %}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="purchase-legend">To Buy = combined Required KG of all open jobs − Available (In Hall + Machine Hall). Add the Required KG on a job to include it in the total.</p>
+    {% else %}
+    <div class="purchase-empty" role="status">
+        <span class="purchase-empty-icon">&#10003;</span>
+        <div>
+            <strong>Nothing to purchase — every open job's materials are in stock.</strong>
+            <span>{% if purchase.open_job_count %}All {{ purchase.open_job_count }} pending / in-printing job(s) are covered by In Hall + Machine Hall stock.{% else %}There are no pending or in-printing jobs right now.{% endif %}</span>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
