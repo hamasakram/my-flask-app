@@ -5,7 +5,6 @@
 
 {% macro material_option(opt, selected_key) -%}
 <option value="{{ opt.key }}"
-    data-store_kg="{{ opt.store_kg }}"
     data-in_hall_kg="{{ opt.in_hall_kg }}"
     data-machine_kg="{{ opt.machine_kg }}"
     data-total_kg="{{ opt.total_kg }}"
@@ -124,7 +123,7 @@
     <div class="card">
         <div class="card-header-row">
             <h2>Materials</h2>
-            <span class="field-note">Material 1 and 2 are required, Material 3 is optional. Stock = Printing Materials + In Hall + Machine Hall.</span>
+            <span class="field-note">Material 1 and 2 are required, Material 3 is optional. Materials and stock come from In Hall + Machine Hall.</span>
         </div>
         {% for slot in material_slots %}
         {% set slot_values = values.materials[slot] %}
@@ -137,10 +136,9 @@
             <div class="job-line-grid">
                 <div class="form-group job-area-choice">
                     <label for="material_{{ slot }}">Material {% if is_required %}<span class="job-required">*</span>{% endif %}</label>
-                    <input type="search" class="job-search" placeholder="Search by type, name, size or micron…" aria-label="Search materials" autocomplete="off">
+                    <input type="search" class="job-search" placeholder="Search In Hall / Machine Hall materials…" aria-label="Search materials" autocomplete="off">
                     <select id="material_{{ slot }}" name="material_{{ slot }}" class="job-select"{% if is_required %} required{% endif %}>
                         <option value="">{% if is_required %}— Select material —{% else %}— None —{% endif %}</option>
-                        <option value="{{ new_choice }}" data-new="1">＋ Type a new material…</option>
                         {% for group in material_groups %}
                         <optgroup label="{{ group.label }}">
                             {% for opt in group.options %}{{ material_option(opt, slot_values.choice) }}{% endfor %}
@@ -148,24 +146,6 @@
                         {% endfor %}
                     </select>
                     <small class="field-note job-search-note"></small>
-                </div>
-                <div class="job-new-fields job-area-new job-hidden">
-                    <div class="form-group">
-                        <label for="material_{{ slot }}_name">Material Name <span class="job-required">*</span></label>
-                        <input type="text" id="material_{{ slot }}_name" name="material_{{ slot }}_name" data-new-required="1" placeholder="e.g. BOPP Pearlised">
-                    </div>
-                    <div class="form-group">
-                        <label for="material_{{ slot }}_category">Type / Category</label>
-                        <input type="text" id="material_{{ slot }}_category" name="material_{{ slot }}_category" placeholder="e.g. PET, METALIZE, LD, BOPP">
-                    </div>
-                    <div class="form-group">
-                        <label for="material_{{ slot }}_size">Size</label>
-                        <input type="text" id="material_{{ slot }}_size" name="material_{{ slot }}_size" placeholder="e.g. 600mm">
-                    </div>
-                    <div class="form-group">
-                        <label for="material_{{ slot }}_micron">Micron</label>
-                        <input type="text" id="material_{{ slot }}_micron" name="material_{{ slot }}_micron" placeholder="e.g. 12">
-                    </div>
                 </div>
                 <div class="form-group job-area-kg">
                     <label for="material_{{ slot }}_kg">Required KG <span class="field-note">(optional)</span></label>
@@ -263,6 +243,7 @@
 
     function toggleNewFields(line, isNew) {
         var box = line.querySelector('.job-new-fields');
+        if (!box) return;
         box.classList.toggle('job-hidden', !isNew);
         box.querySelectorAll('[data-new-required]').forEach(function (input) {
             input.required = isNew;
@@ -295,7 +276,6 @@
             cells.appendChild(el('span', 'job-stock-note', 'New item — it is not in any stock book yet, so it will show as not in stock.'));
         } else if (line.dataset.kind === 'material') {
             var total = num(opt.dataset.total_kg);
-            cells.appendChild(cell('Materials Stock', fmt(opt.dataset.store_kg, 2) + ' kg'));
             cells.appendChild(cell('In Hall', fmt(opt.dataset.in_hall_kg, 2) + ' kg', fmt(opt.dataset.in_hall_rolls, 0) + ' rolls'));
             cells.appendChild(cell('Machine Hall', fmt(opt.dataset.machine_kg, 2) + ' kg', fmt(opt.dataset.machine_rolls, 0) + ' rolls'));
             var totalCell = cell('Total Available', fmt(total, 2) + ' kg', required ? 'need ' + fmt(required, 2) + ' kg' : '');

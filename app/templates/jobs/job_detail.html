@@ -70,7 +70,6 @@
                     <th>#</th>
                     <th>Material</th>
                     <th>Required KG</th>
-                    <th>Materials Stock</th>
                     <th>In Hall</th>
                     <th>Machine Hall</th>
                     <th>Total Available</th>
@@ -83,14 +82,13 @@
                     <td>{{ m.position }}</td>
                     <td><strong>{{ m.label }}</strong></td>
                     <td class="job-nowrap">{{ jm.kg(m.required_kg) }}</td>
-                    <td class="job-nowrap">{{ jm.kg(m.store_kg) }} kg</td>
                     <td class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg{% if m.in_hall_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.in_hall_rolls) }} rolls</span>{% endif %}</td>
                     <td class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg{% if m.machine_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.machine_rolls) }} rolls</span>{% endif %}</td>
                     <td class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
                     <td>{{ jm.line_badge(m) }}<div>{{ jm.shortfall_note(m) }}</div></td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="empty">No materials on this job</td></tr>
+                <tr><td colspan="7" class="empty">No materials on this job</td></tr>
                 {% endfor %}
             </tbody>
         </table>

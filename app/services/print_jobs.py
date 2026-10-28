@@ -1,11 +1,11 @@
 """Job Planning: print jobs, their materials and inks, and live stock checks.
 
-Materials are checked against three separate stock books and the totals are added:
-  * Printing Materials stock (Material catalog, live KG)
+Materials come only from the two hall stock books, and their KG is added up:
   * In Hall stock (HallStockItem, location in_hall)
   * Machine Hall stock (HallStockItem, location machine_hall)
-They are matched by a normalised (name, size, micron) key, so the same film entered
-in different books lines up. Inks are checked against the Ink stock (live cans / KG).
+Items are matched by a normalised (name, size, micron) key, so the same film entered
+in both halls lines up. Printing Materials stock is not used. Inks are checked
+against the Ink stock (live cans / KG).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from app import db
 from app.models import HallStockItem, InkType, PrintJob, PrintJobInk, PrintJobMaterial
-from app.services import ink_inventory, materials_inventory
+from app.services import ink_inventory
 
 PKT = timezone(timedelta(hours=5), name="PKT")
 NEW_CHOICE = "__new__"
@@ -107,7 +107,6 @@ def _blank_material_entry(key, category, name, size, micron) -> dict:
         "name": _clean(name),
         "size": _clean(size),
         "micron": _clean(micron),
-        "store_kg": 0.0,
         "in_hall_kg": 0.0,
         "in_hall_rolls": 0.0,
         "machine_kg": 0.0,
@@ -117,7 +116,7 @@ def _blank_material_entry(key, category, name, size, micron) -> dict:
 
 
 def build_material_catalog() -> dict[str, dict]:
-    """All known materials keyed by material_key, with live KG from each stock book."""
+    """In Hall and Machine Hall materials keyed by material_key, with live KG and rolls."""
     entries: dict[str, dict] = {}
 
     def entry_for(category, name, size, micron) -> dict:
@@ -127,12 +126,6 @@ def build_material_catalog() -> dict[str, dict]:
         elif not entries[key]["category"] and _clean(category):
             entries[key]["category"] = _clean(category)
         return entries[key]
-
-    for row in materials_inventory.calculate_live_stock():
-        material = row["material"]
-        entry = entry_for(material.category, material.name, material.size, material.micron)
-        entry["store_kg"] += max(0.0, float(row["current"] or 0))
-        entry["listed"] = True
 
     for item in HallStockItem.query.all():
         entry = entry_for(item.material_type, item.material_name, item.size, item.micron)
@@ -146,15 +139,8 @@ def build_material_catalog() -> dict[str, dict]:
             entry["in_hall_rolls"] += rolls
         entry["listed"] = True
 
-    # Materials typed on earlier jobs stay selectable even if they were never stocked.
-    for line in PrintJobMaterial.query.all():
-        if line.material_key not in entries:
-            entries[line.material_key] = _blank_material_entry(
-                line.material_key, line.category, line.material_name, line.size, line.micron
-            )
-
     for entry in entries.values():
-        entry["total_kg"] = entry["store_kg"] + entry["in_hall_kg"] + entry["machine_kg"]
+        entry["total_kg"] = entry["in_hall_kg"] + entry["machine_kg"]
         entry["in_stock"] = entry["total_kg"] > EPSILON
         entry["label"] = material_label(
             entry["category"], entry["name"], entry["size"], entry["micron"]
@@ -177,7 +163,7 @@ def material_options(catalog: dict[str, dict]) -> list[dict]:
         for name in sorted(in_stock, key=str.casefold)
     ]
     if others:
-        groups.append({"label": "Not in Stock (used on earlier jobs or zero balance)", "options": others})
+        groups.append({"label": "Zero balance in In Hall / Machine Hall", "options": others})
     return groups
 
 
@@ -253,10 +239,9 @@ def _line_status(available: float, required, *, listed: bool) -> tuple[str, floa
 
 def check_material_line(line: PrintJobMaterial, catalog: dict[str, dict]) -> dict:
     entry = catalog.get(line.material_key)
-    store = entry["store_kg"] if entry else 0.0
     in_hall = entry["in_hall_kg"] if entry else 0.0
     machine = entry["machine_kg"] if entry else 0.0
-    total = store + in_hall + machine
+    total = in_hall + machine
     listed = bool(entry and entry["listed"])
     status, shortfall = _line_status(total, line.required_kg, listed=listed)
     return {
@@ -268,7 +253,6 @@ def check_material_line(line: PrintJobMaterial, catalog: dict[str, dict]) -> dic
         "size": line.size or "",
         "micron": line.micron or "",
         "required_kg": line.required_kg,
-        "store_kg": store,
         "in_hall_kg": in_hall,
         "in_hall_rolls": entry["in_hall_rolls"] if entry else 0.0,
         "machine_kg": machine,
@@ -432,20 +416,14 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict) -> dict:
                 raise ValueError(f"{label} is required.")
             continue
 
-        if choice == NEW_CHOICE:
-            name = _clean(form.get(f"material_{slot}_name"))
-            if not name:
-                raise ValueError(f"{label}: type the new material name.")
-            category = _clean(form.get(f"material_{slot}_category"))
-            size = _clean(form.get(f"material_{slot}_size"))
-            micron = _clean(form.get(f"material_{slot}_micron"))
-        else:
-            entry = material_catalog.get(choice)
-            if not entry:
-                raise ValueError(f"{label}: that material is no longer in the list. Pick it again.")
-            category, name, size, micron = (
-                entry["category"], entry["name"], entry["size"], entry["micron"]
+        entry = material_catalog.get(choice)
+        if not entry:
+            raise ValueError(
+                f"{label}: pick a material from In Hall or Machine Hall stock."
             )
+        category, name, size, micron = (
+            entry["category"], entry["name"], entry["size"], entry["micron"]
+        )
 
         data["materials"].append(
             {

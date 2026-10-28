@@ -526,7 +526,7 @@ def _verdict_banner(check: dict, printed_on: str, width: float) -> Table:
         else:
             head = f'<font color="{colour}"><b>STOCK SHORT</b></font> — {count} item(s) need attention'
         sub = (
-            "Checked against Materials Stock, In Hall and Machine Hall (materials) and "
+            "Checked against In Hall and Machine Hall (materials) and "
             f"Ink Stock (inks) on {_t(printed_on)}."
         )
     else:
@@ -595,14 +595,13 @@ def _material_name_cell(row: dict) -> Paragraph:
 
 
 def _materials_table(rows: list[dict], width: float) -> Table:
-    fixed = [0.3, 0.84, 0.74, 0.66, 0.72, 0.8, 1.0]  # inches, all but the Material column
+    fixed = [0.3, 0.9, 0.85, 0.85, 0.95, 1.05]  # inches, all but the Material column
     widths = [fixed[0] * inch, 0, *(w * inch for w in fixed[1:])]
     widths[1] = width - sum(widths)
     head = [
         Paragraph("#", S["head_c"]),
         Paragraph("Material", S["head"]),
         Paragraph("Required KG", S["head_r"]),
-        Paragraph("Materials Stock", S["head_r"]),
         Paragraph("In Hall", S["head_r"]),
         Paragraph("Machine Hall", S["head_r"]),
         Paragraph("Total Available", S["head_r"]),
@@ -616,7 +615,6 @@ def _materials_table(rows: list[dict], width: float) -> Table:
                 Paragraph(str(row["position"]), S["cell_c"]),
                 _material_name_cell(row),
                 Paragraph(_kg(row["required_kg"]), S["num_bold"]),
-                _stock_cell(row["store_kg"], listed=listed),
                 _stock_cell(row["in_hall_kg"], row["in_hall_rolls"], listed=listed),
                 _stock_cell(row["machine_kg"], row["machine_rolls"], listed=listed),
                 _stock_cell(row["total_kg"], listed=listed, bold=True),
@@ -624,9 +622,9 @@ def _materials_table(rows: list[dict], width: float) -> Table:
             ]
         )
     if not rows:
-        data.append(["", Paragraph("No materials on this job.", S["cell_muted"])] + [""] * 6)
+        data.append(["", Paragraph("No materials on this job.", S["cell_muted"])] + [""] * 5)
     return _data_table(
-        data, widths, index_col=True, status_col=7, statuses=[r["status"] for r in rows],
+        data, widths, index_col=True, status_col=6, statuses=[r["status"] for r in rows],
         extra=[("SPAN", (1, 1), (-1, 1))] if not rows else [],
     )
 
