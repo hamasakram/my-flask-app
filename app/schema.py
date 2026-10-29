@@ -102,6 +102,9 @@ COLUMN_MIGRATIONS = {
     "used_ink_stock": {
         "entry_type": "VARCHAR(10) DEFAULT 'add'",
     },
+    "print_job_materials": {
+        "status_at_save": "VARCHAR(20)",
+    },
     "print_jobs": {
         "production_qty": "FLOAT",
         "production_unit": "VARCHAR(20) DEFAULT 'KG'",
@@ -764,6 +767,10 @@ def ensure_schema():
 
     backfill_unsynced_bank_payments()
     fix_mashaallah_packages_bill()
+
+    from app.services.print_jobs import backfill_status_snapshots
+
+    backfill_status_snapshots()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

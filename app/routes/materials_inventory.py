@@ -252,7 +252,31 @@ def _save_hall_entry(location: str, redirect_endpoint: str):
         flash(f"{item.material_name} added to {item.location_label}.", "success")
     else:
         flash(f"Added onto existing {item.material_name} in {item.location_label}.", "success")
+    _flash_job_notice(item.material_name, item.size, item.micron)
     return redirect(url_for(redirect_endpoint))
+
+
+def _flash_job_notice(name, size, micron):
+    """Tell the user which open Job Planning jobs this hall stock helps."""
+    try:
+        from app.services.print_jobs import hall_stock_job_notice
+
+        message = hall_stock_job_notice(name, size or "", micron or "")
+    except Exception:  # never block saving stock because of the jobs module
+        db.session.rollback()
+        return
+    if message:
+        flash(message, "info")
+
+
+def _job_suggestions():
+    try:
+        from app.services.print_jobs import hall_material_suggestions
+
+        return hall_material_suggestions()
+    except Exception:
+        db.session.rollback()
+        return []
 
 
 @materials_bp.route("/in-hall-stock", methods=["GET", "POST"])
@@ -287,6 +311,7 @@ def in_hall_stock():
         "materials/in_hall_stock.html",
         items=list_items(HallStockItem.LOCATION_IN_HALL),
         transfers=list_movements(HallStockMovement.TYPE_TRANSFER),
+        job_suggestions=_job_suggestions(),
     )
 
 
@@ -338,6 +363,7 @@ def machine_hall_stock():
         "materials/machine_hall_stock.html",
         items=list_items(HallStockItem.LOCATION_MACHINE),
         usages=list_movements(HallStockMovement.TYPE_USED),
+        job_suggestions=_job_suggestions(),
     )
 
 
@@ -382,6 +408,7 @@ def edit_hall_stock(item_id):
             )
             db.session.commit()
             flash("Stock row updated.", "success")
+            _flash_job_notice(item.material_name, item.size, item.micron)
             return redirect(url_for(back))
         except ValueError as exc:
             flash(str(exc), "danger")

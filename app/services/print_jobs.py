@@ -267,9 +267,13 @@ def check_material_line(line: PrintJobMaterial, catalog: dict[str, dict]) -> dic
     total = in_hall + machine
     listed = bool(entry and entry["listed"])
     status, shortfall = _line_status(total, line.required_kg, listed=listed)
+    was = getattr(line, "status_at_save", None)
+    became_available = status == STATUS_OK and was in (STATUS_OUT, STATUS_UNLISTED, STATUS_SHORT)
     return {
         "line": line,
         "position": line.position,
+        "status_at_save": was,
+        "became_available": became_available,
         "label": material_label(line.category, line.material_name, line.size, line.micron),
         "category": line.category or "",
         "name": line.material_name,
@@ -327,6 +331,7 @@ def evaluate_job(job: PrintJob, material_catalog=None, ink_catalog=None) -> dict
     return {
         "job": job,
         "materials": materials,
+        "now_available": [row for row in materials if row["became_available"]],
         "inks": [],
         "ready": not problems,
         "problem_count": len(problems),
@@ -408,6 +413,87 @@ def build_purchase_list(evaluations: list[dict]) -> dict:
 
 def purchase_list_for_open_jobs() -> dict:
     return build_purchase_list(evaluate_jobs(list_open_jobs()))
+
+
+# --------------------------------------------------------------------------- hall stock hooks
+
+
+def open_jobs_using(name: str, size: str = "", micron: str = "") -> list[dict]:
+    """Open jobs that need this material, with their live stock check (oldest first)."""
+    key = material_key(name, size, micron)
+    jobs = [
+        job for job in list_open_jobs()
+        if any(line.material_key == key for line in job.materials)
+    ]
+    return evaluate_jobs(jobs)
+
+
+def hall_stock_job_notice(name: str, size: str = "", micron: str = "") -> str | None:
+    """Message shown after hall stock is added: which open jobs need it and are they ready now."""
+    rows = open_jobs_using(name, size, micron)
+    if not rows:
+        return None
+    key = material_key(name, size, micron)
+    parts = []
+    for row in rows:
+        job = row["job"]
+        line = next(m for m in row["materials"] if m["line"].material_key == key)
+        if row["ready"]:
+            state = "now READY to run"
+        elif line["status"] == STATUS_OK:
+            state = f"this material is now in stock; {row['problem_count']} other material(s) still needed"
+        elif line["status"] == STATUS_SHORT:
+            state = f"still short {line['shortfall_kg']:,.2f} kg of this material"
+        else:
+            state = "still not in stock"
+        parts.append(f"{job.job_number} {job.job_name} ({state})")
+    total = rows[0]["materials"] and next(
+        m for m in rows[0]["materials"] if m["line"].material_key == key
+    )["total_kg"]
+    return (
+        f"Job Planning: {_clean(name)} is needed by {len(rows)} open job(s) — "
+        f"{total:,.2f} kg now in In Hall + Machine Hall. " + "; ".join(parts) + "."
+    )
+
+
+def backfill_status_snapshots() -> None:
+    """One-time: jobs saved before status_at_save existed get today's status as their baseline."""
+    from app.models import AppSetting
+
+    flag = "print_job_status_snapshot_v1"
+    if AppSetting.query.filter_by(key=flag).first():
+        return
+    lines = PrintJobMaterial.query.filter(PrintJobMaterial.status_at_save.is_(None)).all()
+    if lines:
+        catalog = build_material_catalog()
+        for line in lines:
+            line.status_at_save = check_material_line(line, catalog)["status"]
+    db.session.add(AppSetting(key=flag, value=f"done_{len(lines)}"))
+    db.session.commit()
+
+
+def hall_material_suggestions() -> list[dict]:
+    """Materials open jobs are waiting for (not in stock or short), for the hall stock forms."""
+    seen: dict[str, dict] = {}
+    for row in evaluate_jobs(list_open_jobs()):
+        for m in row["materials"]:
+            if m["status"] == STATUS_OK:
+                continue
+            key = m["line"].material_key
+            item = seen.setdefault(
+                key,
+                {
+                    "name": m["name"],
+                    "material_type": m["category"],
+                    "size": m["size"],
+                    "micron": m["micron"],
+                    "label": m["label"],
+                    "status": m["status"],
+                    "jobs": [],
+                },
+            )
+            item["jobs"].append(row["job"].job_number)
+    return sorted(seen.values(), key=lambda i: i["label"].casefold())
 
 
 # --------------------------------------------------------------------------- queries
@@ -611,11 +697,20 @@ def _next_job_number() -> str:
 
 
 def _apply_lines(job: PrintJob, data: dict) -> None:
+    # Keep the "status when saved" of materials that stay on the job, so editing a job
+    # doesn't hide that a material has since arrived. New materials get today's status.
+    previous = {line.material_key: line.status_at_save for line in job.materials}
+    catalog = build_material_catalog()
     job.materials.clear()
     job.inks.clear()
     db.session.flush()
     for row in data["materials"]:
-        job.materials.append(PrintJobMaterial(**row))
+        line = PrintJobMaterial(**row)
+        if row["material_key"] in previous and previous[row["material_key"]]:
+            line.status_at_save = previous[row["material_key"]]
+        else:
+            line.status_at_save = check_material_line(line, catalog)["status"]
+        job.materials.append(line)
     for row in data["inks"]:
         job.inks.append(PrintJobInk(**row))
 

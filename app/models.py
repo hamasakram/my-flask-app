@@ -1439,6 +1439,9 @@ class PrintJobMaterial(db.Model):
     size = db.Column(db.String(100), default="")
     micron = db.Column(db.String(50), default="")
     required_kg = db.Column(db.Float, nullable=True)
+    # Stock status when the job was saved (ok/short/out/unlisted) — lets the app show
+    # "Now available" once In Hall / Machine Hall stock arrives later.
+    status_at_save = db.Column(db.String(20), nullable=True)
 
     job = db.relationship("PrintJob", back_populates="materials")
 
