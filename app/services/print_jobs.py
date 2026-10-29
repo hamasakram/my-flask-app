@@ -715,8 +715,16 @@ def _apply_lines(job: PrintJob, data: dict) -> None:
         job.inks.append(PrintJobInk(**row))
 
 
-def create_job(data: dict, user_id: int | None) -> PrintJob:
+def find_job_by_token(token: str | None) -> PrintJob | None:
+    token = (token or "").strip()
+    if not token:
+        return None
+    return PrintJob.query.filter_by(form_token=token[:64]).first()
+
+
+def create_job(data: dict, user_id: int | None, form_token: str | None = None) -> PrintJob:
     job = PrintJob(
+        form_token=(form_token or "").strip()[:64] or None,
         job_number=_next_job_number(),
         job_date=data["job_date"],
         job_name=data["job_name"],

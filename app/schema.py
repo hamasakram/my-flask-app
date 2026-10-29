@@ -108,6 +108,7 @@ COLUMN_MIGRATIONS = {
     "print_jobs": {
         "production_qty": "FLOAT",
         "production_unit": "VARCHAR(20) DEFAULT 'KG'",
+        "form_token": "VARCHAR(64)",
     },
 }
 

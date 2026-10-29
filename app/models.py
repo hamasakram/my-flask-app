@@ -1382,6 +1382,8 @@ class PrintJob(db.Model):
     customer_name = db.Column(db.String(150))
     production_qty = db.Column(db.Float, nullable=True)
     production_unit = db.Column(db.String(20), nullable=True, default="KG")
+    # One-time token from the Add Job form, so a retried save never creates a duplicate job.
+    form_token = db.Column(db.String(64), nullable=True, index=True)
     status = db.Column(db.String(20), nullable=False, default=STATUS_PENDING)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))

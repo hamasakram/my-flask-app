@@ -1,6 +1,8 @@
 """Job Planning module: add jobs, check In Hall / Machine Hall material stock, track pending jobs."""
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, send_file, url_for
+import uuid
+
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app import db
@@ -36,6 +38,17 @@ def _form_context(job=None, values=None):
     }, material_catalog, None
 
 
+def _wants_json() -> bool:
+    """The job form saves with fetch() (so a dropped connection can be retried) and asks for JSON."""
+    return request.headers.get("X-Job-Form") == "fetch"
+
+
+def _done(url: str, ok: bool = True, error: str | None = None):
+    if _wants_json():
+        return jsonify({"ok": ok, "redirect": url, "error": error})
+    return redirect(url)
+
+
 def _job_summary(job: PrintJob) -> str:
     materials = ", ".join(line.material_name for line in job.materials)
     return f"{job.job_number} {job.job_name} | produce: {job.production_label or '-'} | materials: {materials}"
@@ -54,13 +67,20 @@ def new_job():
 
     if request.method == "POST":
         require_edit_access()
+        token = request.form.get("form_token", "")
+        existing = jobs_service.find_job_by_token(token)
+        if existing:
+            # Same form submitted again (e.g. the phone retried after a dropped connection).
+            return _done(url_for("jobs.job_detail", job_id=existing.id))
         try:
             data = jobs_service.parse_job_form(request.form, material_catalog, ink_catalog)
-            job = jobs_service.create_job(data, current_user.id)
+            job = jobs_service.create_job(data, current_user.id, form_token=token)
             log_audit(current_user.id, "CREATE", "PrintJob", job.id, _job_summary(job))
             db.session.commit()
         except ValueError as exc:
             db.session.rollback()
+            if _wants_json():
+                return _done(url_for("jobs.new_job"), ok=False, error=str(exc))
             flash(str(exc), "danger")
             return redirect(url_for("jobs.new_job"))
 
@@ -72,8 +92,9 @@ def new_job():
                 f"{job.job_number} saved, but {check['problem_count']} material(s) are short or not in stock.",
                 "warning",
             )
-        return redirect(url_for("jobs.job_detail", job_id=job.id))
+        return _done(url_for("jobs.job_detail", job_id=job.id))
 
+    context["form_token"] = uuid.uuid4().hex
     return render_template("jobs/job_form.html", **context)
 
 
@@ -132,10 +153,12 @@ def edit_job(job_id):
             db.session.commit()
         except ValueError as exc:
             db.session.rollback()
+            if _wants_json():
+                return _done(url_for("jobs.edit_job", job_id=job.id), ok=False, error=str(exc))
             flash(str(exc), "danger")
             return redirect(url_for("jobs.edit_job", job_id=job.id))
         flash(f"{job.job_number} updated.", "success")
-        return redirect(url_for("jobs.job_detail", job_id=job.id))
+        return _done(url_for("jobs.job_detail", job_id=job.id))
 
     return render_template("jobs/job_form.html", **context)
 
