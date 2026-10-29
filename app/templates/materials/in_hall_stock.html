@@ -2,6 +2,32 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}In Hall Stock - RN COLOUR{% endblock %}
 {% block content %}
+{% if current_user.can_edit() and job_suggestions %}
+<style>
+.hs-wait-card { border-left: 4px solid var(--orange); padding: 1rem 1.25rem; }
+.hs-wait-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.hs-wait-head h2 { margin: 0; }
+.hs-wait-count { color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+.hs-wait-note { margin: 0.35rem 0 0.75rem; }
+.hs-wait-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.hs-wait-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 0.75rem; background: var(--surface); }
+.hs-wait-row + .hs-wait-row { border-top: 1px solid var(--border); }
+.hs-wait-main { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 0; }
+.hs-wait-label { font-size: 0.9rem; overflow-wrap: anywhere; }
+.hs-wait-jobs { color: var(--muted); font-size: 0.8rem; }
+.hs-job { white-space: nowrap; }
+.hs-use-btn { flex-shrink: 0; }
+.hs-hint { font-size: 0.78rem; line-height: 1.35; padding: 0.35rem 0.5rem; border-radius: 6px; }
+.hs-hint[hidden] { display: none; }
+.hs-hint-ok { color: #166534; background: #dcfce7; }
+.hs-hint-warn { color: #9a3412; background: #ffedd5; }
+.hs-hint-link { background: none; border: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; cursor: pointer; }
+.hs-hint-link:hover { text-decoration: none; }
+.hs-flash-fill { animation: hs-fill 1.2s ease-out; }
+@keyframes hs-fill { from { background: #fef3c7; } to { background: white; } }
+@media (prefers-reduced-motion: reduce) { .hs-flash-fill { animation: none; } }
+</style>
+{% endif %}
 <div class="page-header">
     <div>
         <h1>In Hall Stock</h1>
@@ -13,13 +39,41 @@
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+{% if job_suggestions %}
+<div class="card hs-wait-card" id="hs-wait-card">
+    <div class="hs-wait-head">
+        <h2>Materials waiting for jobs</h2>
+        <span class="hs-wait-count">{{ job_suggestions|length }} material{{ '' if job_suggestions|length == 1 else 's' }}</span>
+    </div>
+    <p class="field-note hs-wait-note">Open jobs in Job Planning still need these. Enter these exactly as shown so Job Planning matches them automatically.</p>
+    <ul class="hs-wait-list">
+        {% for s in job_suggestions %}
+        <li class="hs-wait-row">
+            <div class="hs-wait-main">
+                <strong class="hs-wait-label">{{ s.label }}</strong>
+                {% if s.status == 'short' %}<span class="badge badge-orange">Short</span>{% else %}<span class="badge badge-red">Not in stock</span>{% endif %}
+                <span class="hs-wait-jobs">for {% for j in s.jobs %}<span class="hs-job">{{ j }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary hs-use-btn" data-hs-index="{{ loop.index0 }}" aria-label="Use {{ s.label }} in the add form">Use</button>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+<div class="card highlight-card" id="hs-add-card">
     <h2>Add In Hall Stock</h2>
-    <form method="POST" class="form-grid">
+    <form method="POST" class="form-grid" id="hs-add-form">
         <input type="hidden" name="action" value="add">
         <div class="form-group">
             <label for="material_name">Material Name</label>
-            <input type="text" id="material_name" name="material_name" required>
+            <input type="text" id="material_name" name="material_name" required{% if job_suggestions %} list="hs-material-names" autocomplete="off"{% endif %}>
+            {% if job_suggestions %}
+            <datalist id="hs-material-names">
+                {% for s in job_suggestions %}<option value="{{ s.name }}" label="{{ s.label }}"></option>{% endfor %}
+            </datalist>
+            <small class="hs-hint" id="hs-name-hint" aria-live="polite" hidden></small>
+            {% endif %}
         </div>
         <div class="form-group">
             <label for="material_type">Type of Material</label>
@@ -134,36 +188,38 @@
 
 <div class="card">
     <h2>Recent Transfers to Machine Hall</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Material</th>
-                <th>Type</th>
-                <th>Size</th>
-                <th>Micron</th>
-                <th>Gross KG</th>
-                <th>Rolls</th>
-                <th>Notes</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in transfers %}
-            <tr>
-                <td>{{ row.movement_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ row.material_name }}</td>
-                <td>{{ row.material_type or '—' }}</td>
-                <td>{{ row.size or '—' }}</td>
-                <td>{{ row.micron or '—' }}</td>
-                <td>{{ "{:,.3f}".format(row.gross_kg or 0) }}</td>
-                <td>{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
-                <td>{{ row.notes or '—' }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="8" class="empty">No transfers yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Material</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Micron</th>
+                    <th>Gross KG</th>
+                    <th>Rolls</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in transfers %}
+                <tr>
+                    <td>{{ row.movement_date.strftime('%d-%m-%Y') }}</td>
+                    <td>{{ row.material_name }}</td>
+                    <td>{{ row.material_type or '—' }}</td>
+                    <td>{{ row.size or '—' }}</td>
+                    <td>{{ row.micron or '—' }}</td>
+                    <td>{{ "{:,.3f}".format(row.gross_kg or 0) }}</td>
+                    <td>{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
+                    <td>{{ row.notes or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No transfers yet</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
 {% endblock %}
 
@@ -185,4 +241,154 @@
     });
 })();
 </script>
+{% if current_user.can_edit() and job_suggestions %}
+<script type="application/json" id="hs-job-suggestions">{{ job_suggestions|tojson }}</script>
+<script>
+(function () {
+    var dataEl = document.getElementById('hs-job-suggestions');
+    var form = document.getElementById('hs-add-form');
+    var hint = document.getElementById('hs-name-hint');
+    if (!dataEl || !form || !hint) return;
+    var suggestions;
+    try { suggestions = JSON.parse(dataEl.textContent) || []; } catch (e) { return; }
+    if (!suggestions.length) return;
+
+    var nameInput = form.querySelector('#material_name');
+    var typeInput = form.querySelector('#material_type');
+    var sizeInput = form.querySelector('#size');
+    var micronInput = form.querySelector('#micron');
+    var kgInput = form.querySelector('#kg');
+
+    // Same rules as Job Planning (print_jobs.material_key): case-insensitive,
+    // spaces collapsed; size ignores spaces; micron ignores a μ / mic / micron suffix.
+    function normText(v) { return String(v || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+    function normSize(v) { return normText(v).replace(/\s+/g, ''); }
+    function normMicron(v) {
+        return normText(v).replace(/(microns?|mic|μ|µ|u)$/, '').trim().replace(/\s+/g, '');
+    }
+    function loose(v) { return normText(v).replace(/[\s.\-_]+/g, ''); }
+    function micronLabel(v) { var t = String(v || '').trim(); return /\d$/.test(t) ? t + 'μ' : t; }
+    function spec(s) { return [s.size, micronLabel(s.micron)].filter(Boolean).join(' · ') || 'no size / micron'; }
+    function jobsText(list) {
+        var seen = [];
+        list.forEach(function (s) { s.jobs.forEach(function (j) { if (seen.indexOf(j) < 0) seen.push(j); }); });
+        // Non-breaking hyphen so "JOB-0002" never splits across lines in the hint.
+        return seen.join(', ').replace(/-/g, '\u2011');
+    }
+
+    // A field may be (re)filled when it is empty or still holds the value we put there.
+    function setAuto(input, value, force) {
+        if (!input) return;
+        var current = input.value;
+        if (force || current === '' || (input.dataset.hsAuto !== undefined && current === input.dataset.hsAuto)) {
+            input.value = value || '';
+            input.dataset.hsAuto = input.value;
+        }
+    }
+    function applySuggestion(s, force) {
+        if (force) setAuto(nameInput, s.name, true);
+        setAuto(typeInput, s.material_type, force);
+        setAuto(sizeInput, s.size, force);
+        setAuto(micronInput, s.micron, force);
+    }
+    function pulse(inputs) {
+        inputs.forEach(function (el) {
+            if (!el) return;
+            el.classList.remove('hs-flash-fill');
+            void el.offsetWidth;
+            el.classList.add('hs-flash-fill');
+        });
+    }
+
+    function showHint(kind, parts) {
+        var sig = kind + '|' + parts.map(function (p) { return typeof p === 'string' ? p : '[' + p.text + ']'; }).join('');
+        if (!hint.hidden && hint.dataset.hsSig === sig) return;
+        hint.dataset.hsSig = sig;
+        hint.className = 'hs-hint ' + (kind === 'ok' ? 'hs-hint-ok' : 'hs-hint-warn');
+        hint.textContent = '';
+        parts.forEach(function (p) {
+            if (typeof p === 'string') { hint.appendChild(document.createTextNode(p)); return; }
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'hs-hint-link';
+            b.textContent = p.text;
+            b.addEventListener('click', p.onClick);
+            hint.appendChild(b);
+        });
+        hint.hidden = false;
+    }
+    function clearHint() { hint.hidden = true; hint.textContent = ''; hint.className = 'hs-hint'; hint.dataset.hsSig = ''; }
+
+    function update(autofill) {
+        var typed = normText(nameInput.value);
+        if (!typed) { clearHint(); return; }
+        var exact = suggestions.filter(function (s) { return normText(s.name) === typed; });
+        if (exact.length) {
+            if (autofill && exact.length === 1) applySuggestion(exact[0], false);
+            var size = normSize(sizeInput.value), micron = normMicron(micronInput.value);
+            var hit = exact.filter(function (s) {
+                return normSize(s.size) === size && normMicron(s.micron) === micron;
+            });
+            if (hit.length) {
+                showHint('ok', ['Matches a material needed by ' + jobsText(hit) +
+                    ' — it will show as available in Job Planning.']);
+                return;
+            }
+            // Name matches but size / micron do not: Job Planning would not pick it up.
+            var parts = ['Job Planning needs ' + exact[0].name + ' as '];
+            exact.forEach(function (s, i) {
+                if (i) parts.push(' or ');
+                parts.push({ text: spec(s), onClick: function () { applySuggestion(s, true); pulse([sizeInput, micronInput]); update(false); } });
+            });
+            parts.push(' (for ' + jobsText(exact) + '). Size and micron must match too.');
+            showHint('warn', parts);
+            return;
+        }
+        var key = loose(nameInput.value);
+        var close = [];
+        suggestions.forEach(function (s) {
+            if (loose(s.name) === key && close.indexOf(s.name) < 0) close.push(s.name);
+        });
+        if (close.length) {
+            var warn = ['Did you mean '];
+            close.forEach(function (name, i) {
+                if (i) warn.push(' or ');
+                warn.push({ text: name, onClick: function () {
+                    nameInput.value = name;
+                    nameInput.dataset.hsAuto = name;
+                    update(true);
+                    pulse([nameInput, typeInput, sizeInput, micronInput]);
+                    nameInput.focus();
+                } });
+            });
+            warn.push('? Job Planning only matches the exact name.');
+            showHint('warn', warn);
+            return;
+        }
+        clearHint();
+    }
+
+    // 'input' also fires when a datalist option is picked. No 'change' handler:
+    // it fires on blur and would rebuild the hint under a click on its link.
+    nameInput.addEventListener('input', function () { update(true); });
+    [sizeInput, micronInput].forEach(function (el) {
+        if (el) el.addEventListener('input', function () { update(false); });
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.hs-use-btn'), function (btn) {
+        btn.addEventListener('click', function () {
+            var s = suggestions[Number(btn.dataset.hsIndex)];
+            if (!s) return;
+            applySuggestion(s, true);
+            update(false);
+            pulse([nameInput, typeInput, sizeInput, micronInput]);
+            form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (kgInput) kgInput.focus({ preventScroll: true });
+        });
+    });
+
+    update(false);
+})();
+</script>
+{% endif %}
 {% endblock %}
