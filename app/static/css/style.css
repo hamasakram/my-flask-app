@@ -962,6 +962,56 @@ textarea { resize: vertical; min-height: 4rem; }
 .job-alert-short .job-alert-title { color: #b45309; }
 .job-alert-short .job-shortfall { margin-top: 0; }
 
+/* "Now available": material was missing / short when the job was saved, in stock now */
+.job-alert-new { background: #f0fdf4; border-color: #86efac; border-left-color: var(--green); color: #14532d; }
+.job-alert-new .job-alert-title { color: #166534; }
+.job-now-split { color: #3f6f52; font-size: 0.84rem; white-space: nowrap; }
+.job-status-cell .badge + .badge { margin-left: 0.3rem; }
+.job-badge-new { background: var(--green); color: white; }
+.job-mini-new { white-space: nowrap; color: #15803d; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.job-now-note {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.45rem 0.75rem;
+    margin-bottom: 1rem;
+    border: 1px solid #86efac;
+    border-radius: 10px;
+    background: #f0fdf4;
+    color: #14532d;
+    font-size: 0.86rem;
+}
+.job-now-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    background: var(--green);
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.job-arrived-card { border-left: 4px solid var(--green); }
+.job-arrived-intro { margin: -0.25rem 0 0.75rem; }
+.job-arrived-list { list-style: none; margin: 0; padding: 0; }
+.job-arrived-list li { padding: 0.6rem 0; border-top: 1px solid var(--border); }
+.job-arrived-list li:first-child { border-top: none; padding-top: 0.2rem; }
+.job-arrived-job { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.job-arrived-materials { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem; }
+.job-arrived-chip {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid #86efac;
+    background: #f0fdf4;
+    color: #166534;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
 @media (max-width: 720px) {
     .job-line-grid { grid-template-columns: 1fr; grid-template-areas: "choice" "kg" "new" "panel"; }
     .job-span-2, .job-span-3 { grid-column: auto; }

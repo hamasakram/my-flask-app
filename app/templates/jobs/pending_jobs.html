@@ -54,9 +54,11 @@
     </div>
 
     {{ jm.stock_alert(row) }}
+    {{ jm.now_available_note(row) }}
 
     <div class="job-card-body">
         <h3 class="job-subhead">Materials</h3>
+        <div class="table-scroll">
         <table class="data-table compact">
             <thead><tr><th>#</th><th>Material</th><th>Required</th><th>In Hall</th><th>Machine Hall</th><th>Total Available</th><th>Status</th></tr></thead>
             <tbody>
@@ -68,13 +70,14 @@
                     <td class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg</td>
                     <td class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg</td>
                     <td class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
-                    <td>{{ jm.line_badge(m) }} {{ jm.shortfall_note(m) }}</td>
+                    <td class="job-status-cell">{{ jm.line_badge(m) }}{{ jm.now_badge(m, job) }} {{ jm.shortfall_note(m) }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No materials</td></tr>
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
 
     <div class="job-card-actions">

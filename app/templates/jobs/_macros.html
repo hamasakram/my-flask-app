@@ -29,6 +29,47 @@
 <span class="badge badge-{{ LINE_STATUS_BADGES.get(row.status, 'gray') }}">{{ row.status_label }}</span>
 {%- endmacro %}
 
+{# How a material stood when the job was saved (PrintJobMaterial.status_at_save). #}
+{% set SAVE_STATUS_WORDS = {
+    'out': 'Not in Stock',
+    'unlisted': 'Not in Stock',
+    'short': 'Short',
+} %}
+
+{# Green tag for a material that was missing / short when the job was saved and is in stock now. Open jobs only. #}
+{% macro now_badge(row, job) -%}
+{%- if job.is_open and row.became_available -%}
+<span class="badge job-badge-new" title="Was {{ SAVE_STATUS_WORDS.get(row.status_at_save, 'Not in Stock') }} when the job was saved">Now available</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# Green box on the job page listing materials that arrived after the job was saved. #}
+{% macro now_available_box(check) -%}
+{%- if check.job.is_open and check.now_available -%}
+<div class="job-alerts">
+    <div class="job-alert job-alert-new" role="status">
+        <div class="job-alert-title">Materials now available</div>
+        <ul class="job-alert-list">
+            {% for m in check.now_available %}
+            <li><strong>{{ m.label }}</strong> — was {{ SAVE_STATUS_WORDS.get(m.status_at_save, 'Not in Stock') }} when the job was saved, now <strong>{{ kg(m.total_kg) }} kg</strong> in In Hall + Machine Hall <span class="job-now-split">(In Hall {{ kg(m.in_hall_kg) }} · Machine Hall {{ kg(m.machine_kg) }})</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{%- endif -%}
+{%- endmacro %}
+
+{# Compact green line for job cards: "N material(s) arrived since this job was saved". #}
+{% macro now_available_note(check) -%}
+{%- if check.job.is_open and check.now_available -%}
+{%- set n = check.now_available|length -%}
+<div class="job-now-note" role="status">
+    <span class="job-now-icon" aria-hidden="true">✓</span>
+    <span><strong>{{ n }} material{{ '' if n == 1 else 's' }} arrived since this job was saved</strong> — {% for m in check.now_available %}{{ m.name }}{% if not loop.last %} · {% endif %}{% endfor %}</span>
+</div>
+{%- endif -%}
+{%- endmacro %}
+
 {% macro line_dot(row) -%}
 <span class="job-dot job-dot-{{ row.status }}" title="{{ row.status_label }}"></span>
 {%- endmacro %}

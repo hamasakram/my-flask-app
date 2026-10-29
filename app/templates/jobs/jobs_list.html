@@ -74,7 +74,7 @@
                     <td class="job-produce-cell">{{ jm.produce(job) }}</td>
                     <td class="job-cell-lines">
                         {% for m in row.materials %}
-                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(m) }}{% endif %}<span>{{ m.label }}{% if job.is_open and m.status in ('out', 'unlisted') %} <strong class="job-mini-out">Not in Stock</strong>{% elif job.is_open and m.status == 'short' %} <strong class="job-mini-short">Short</strong>{% endif %}</span></div>
+                        <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(m) }}{% endif %}<span>{{ m.label }}{% if job.is_open and m.status in ('out', 'unlisted') %} <strong class="job-mini-out">Not in Stock</strong>{% elif job.is_open and m.status == 'short' %} <strong class="job-mini-short">Short</strong>{% elif job.is_open and m.became_available %} <strong class="job-mini-new" title="Was {{ jm.SAVE_STATUS_WORDS.get(m.status_at_save, 'Not in Stock') }} when the job was saved">Now available</strong>{% endif %}</span></div>
                         {% else %}—{% endfor %}
                     </td>
                     <td>{{ jm.status_badge(job) }}</td>
@@ -103,6 +103,7 @@
         <span class="job-dot job-dot-ok"></span> In stock
         <span class="job-dot job-dot-short"></span> Short
         <span class="job-dot job-dot-out"></span> Not in stock
+        · <strong class="job-mini-new">Now available</strong> arrived in In Hall / Machine Hall after the job was saved
         · Stock is checked for open jobs only.
     </p>
 </div>

@@ -41,6 +41,35 @@
     </div>
 </div>
 
+{% set arrived = stats.open|selectattr('now_available')|list %}
+{% if arrived %}
+<div class="card job-arrived-card">
+    <div class="card-header-row">
+        <h2>Recently available materials</h2>
+        <span class="badge badge-green">{{ arrived|length }} job{{ '' if arrived|length == 1 else 's' }}</span>
+    </div>
+    <p class="field-note job-arrived-intro">Materials added to In Hall / Machine Hall after these open jobs were saved — they are now in stock.</p>
+    <ul class="job-arrived-list">
+        {% for row in arrived %}
+        {% set job = row.job %}
+        <li>
+            <div class="job-arrived-job">
+                {% if full_access %}
+                <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link"><strong>{{ job.job_number }}</strong> · {{ job.job_name }}</a>
+                {% else %}
+                <strong>{{ job.job_number }}</strong> · {{ job.job_name }}
+                {% endif %}
+                {% if row.ready %}<span class="badge badge-green">Ready</span>{% else %}{{ jm.verdict_badge(row) }}{% endif %}
+            </div>
+            <div class="job-arrived-materials">
+                {% for m in row.now_available %}<span class="job-arrived-chip">✓ {{ m.label }}</span>{% endfor %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-header-row">
         <h2>Open Jobs</h2>

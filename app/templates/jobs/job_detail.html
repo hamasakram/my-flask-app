@@ -48,6 +48,7 @@
 </div>
 {{ jm.stock_alert(check) }}
 {% endif %}
+{{ jm.now_available_box(check) }}
 
 <div class="card">
     <h2>Job Details</h2>
@@ -87,10 +88,10 @@
                     <td>{{ m.position }}</td>
                     <td><strong>{{ m.label }}</strong></td>
                     <td class="job-nowrap">{{ jm.kg(m.required_kg) }}</td>
-                    <td class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg{% if m.in_hall_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.in_hall_rolls) }} rolls</span>{% endif %}</td>
-                    <td class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg{% if m.machine_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.machine_rolls) }} rolls</span>{% endif %}</td>
+                    <td class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg{% if m.in_hall_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.in_hall_rolls) }} roll{{ '' if m.in_hall_rolls == 1 else 's' }}</span>{% endif %}</td>
+                    <td class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg{% if m.machine_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.machine_rolls) }} roll{{ '' if m.machine_rolls == 1 else 's' }}</span>{% endif %}</td>
                     <td class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
-                    <td>{{ jm.line_badge(m) }}<div>{{ jm.shortfall_note(m) }}</div></td>
+                    <td class="job-status-cell">{{ jm.line_badge(m) }}{{ jm.now_badge(m, job) }}<div>{{ jm.shortfall_note(m) }}</div></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No materials on this job</td></tr>

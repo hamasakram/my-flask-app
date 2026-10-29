@@ -78,6 +78,7 @@ JOB_STATUS_COLOURS = {
 }
 READY_COLOURS = (colors.HexColor("#166534"), colors.HexColor("#F0FDF4"), colors.HexColor("#16A34A"))
 SHORT_COLOURS = (colors.HexColor("#991B1B"), colors.HexColor("#FEF2F2"), colors.HexColor("#DC2626"))
+NEW_GREEN = colors.HexColor("#15803D")  # "now available" accents
 
 DASH = "—"
 PAGE_MARGIN = 0.55 * inch
@@ -243,6 +244,7 @@ S = {
     "produce": _style("produce", fontName="Helvetica-Bold", fontSize=13, leading=16),
     "banner_sub": _style("banner_sub", fontSize=8, leading=10.5, textColor=colors.HexColor("#374151")),
     "notes": _style("notes", fontSize=9, leading=12.5),
+    "new_note": _style("new_note", fontSize=8.5, leading=11, textColor=colors.HexColor("#14532D")),
     "sign": _style("sign", fontName="Helvetica-Bold", fontSize=8, leading=10, alignment=TA_CENTER),
     "sign_sub": _style("sign_sub", fontSize=7, leading=9, alignment=TA_CENTER, textColor=TEXT_SOFT),
     "empty": _style("empty", fontSize=10, leading=14, textColor=TEXT_MUTED, alignment=TA_CENTER),
@@ -410,9 +412,13 @@ def _data_table(data, widths, *, index_col=False, status_col=None, statuses=(), 
     return table
 
 
-def _status_cell(row: dict) -> Paragraph:
+def _status_cell(row: dict, *, show_new: bool = False) -> Paragraph:
     fg, _bg = _status_colours(row["status"])
-    return Paragraph(f'<font color="{_hex(fg)}">{_t(_status_text(row))}</font>', S["status"])
+    text = f'<font color="{_hex(fg)}">{_t(_status_text(row))}</font>'
+    if show_new and row.get("became_available"):
+        # Was not in stock / short when the job was saved; stock has arrived since.
+        text += f'<br/><font name="Helvetica" size="6.5" color="{_hex(NEW_GREEN)}">now available</font>'
+    return Paragraph(text, S["status"])
 
 
 class _PushToBottom(Flowable):
@@ -674,6 +680,35 @@ def _stock_alert_box(check: dict, width: float) -> Table | None:
     return table
 
 
+def _now_available_box(check: dict, width: float) -> Table | None:
+    """Slim green note naming materials that arrived after the job was saved (open jobs)."""
+    rows = check.get("now_available") or []
+    if not rows or not check["job"].is_open:
+        return None
+    names = ", ".join(f"<b>{_t(row['label'])}</b>" for row in rows)
+    text = (
+        f'<font color="{_hex(NEW_GREEN)}"><b>NOW AVAILABLE:</b></font> {names} — '
+        "added to In Hall / Machine Hall after this job was saved."
+    )
+    bar_w = 4
+    table = Table([["", Paragraph(text, S["new_note"])]], colWidths=[bar_w, width - bar_w], hAlign="LEFT")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), READY_COLOURS[1]),
+                ("BACKGROUND", (0, 0), (0, -1), READY_COLOURS[2]),
+                ("BOX", (1, 0), (1, -1), 0.6, colors.HexColor("#86EFAC")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (1, 0), (1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    return table
+
+
 def _stock_cell(kg: float, rolls: float = 0.0, *, listed: bool = True, bold: bool = False) -> Paragraph:
     if not listed:
         return Paragraph(f'<font color="{_hex(TEXT_SOFT)}">{DASH}</font>', S["num"])
@@ -702,7 +737,7 @@ def _material_name_cell(row: dict) -> Paragraph:
     return Paragraph(text, S["cell"])
 
 
-def _materials_table(rows: list[dict], width: float) -> Table:
+def _materials_table(rows: list[dict], width: float, *, show_new: bool = False) -> Table:
     fixed = [0.3, 0.9, 0.85, 0.85, 0.95, 1.05]  # inches, all but the Material column
     widths = [fixed[0] * inch, 0, *(w * inch for w in fixed[1:])]
     widths[1] = width - sum(widths)
@@ -726,7 +761,7 @@ def _materials_table(rows: list[dict], width: float) -> Table:
                 _stock_cell(row["in_hall_kg"], row["in_hall_rolls"], listed=listed),
                 _stock_cell(row["machine_kg"], row["machine_rolls"], listed=listed),
                 _stock_cell(row["total_kg"], listed=listed, bold=True),
-                _status_cell(row),
+                _status_cell(row, show_new=show_new),
             ]
         )
     if not rows:
@@ -818,6 +853,9 @@ def generate_job_card_pdf(check: dict) -> BytesIO:
         Spacer(1, 12),
         _verdict_banner(check, printed_on, width),
     ]
+    arrived = _now_available_box(check, width)
+    if arrived is not None:
+        story += [Spacer(1, 6), arrived]
     alert = _stock_alert_box(check, width)
     if alert is not None:
         story += [Spacer(1, 8), KeepTogether([alert])]
@@ -828,7 +866,7 @@ def generate_job_card_pdf(check: dict) -> BytesIO:
             "All quantities in KG · Available = In Hall + Machine Hall",
             width,
         ),
-        _materials_table(check["materials"], width),
+        _materials_table(check["materials"], width, show_new=job.is_open),
     ]
     if (job.notes or "").strip():
         story += [Spacer(1, 14), KeepTogether([_notes_box(job.notes, width)])]
