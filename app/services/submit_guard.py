@@ -13,6 +13,7 @@ so it can't commit or roll back anything a view is doing.
 
 from __future__ import annotations
 
+import json
 import random
 import re
 from datetime import datetime, timedelta, timezone
@@ -104,20 +105,34 @@ def register(app):
     @app.after_request
     def _remember_submit_result(response):
         token = g.pop("submit_token", None)
-        if not token:
-            return response
-        table = _table()
-        try:
-            with db.engine.begin() as conn:
-                if 300 <= response.status_code < 400 and response.location:
-                    location = _same_site(response.location) or "/"
-                    conn.execute(
-                        update(table).where(table.c.token == token).values(location=location[:500])
-                    )
-                else:
-                    conn.execute(delete(table).where(table.c.token == token))
-        except Exception:
-            app.logger.exception("submit guard: could not record result")
+        if token:
+            table = _table()
+            try:
+                with db.engine.begin() as conn:
+                    if 300 <= response.status_code < 400 and response.location:
+                        location = _same_site(response.location) or "/"
+                        conn.execute(
+                            update(table).where(table.c.token == token).values(location=location[:500])
+                        )
+                    else:
+                        conn.execute(delete(table).where(table.c.token == token))
+            except Exception:
+                app.logger.exception("submit guard: could not record result")
+
+        # Forms sent in the background by safe-submit.js get "go here" as JSON instead of a
+        # redirect, so the phone never has to follow a redirect after a POST. The response is
+        # changed in place, so session/flash cookies set by the view are kept.
+        if (
+            request.headers.get("X-Safe-Submit") == "1"
+            and 300 <= response.status_code < 400
+            and response.location
+        ):
+            target = _same_site(response.location) or response.location
+            response.status_code = 200
+            response.headers.pop("Location", None)
+            response.set_data(json.dumps({"ok": True, "safe_redirect": target}))
+            response.mimetype = "application/json"
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.teardown_request

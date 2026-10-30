@@ -3,7 +3,7 @@
 <div class="sh-bank-bar card compact-card">
     <form method="POST" action="{{ url_for('sh_main.select_bank') }}" class="inline-form">
         <label for="sh_bank_select"><strong>Bank:</strong></label>
-        <select id="sh_bank_select" name="bank_id" onchange="this.form.submit()">
+        <select id="sh_bank_select" name="bank_id" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
             {% for bank in banks %}
             <option value="{{ bank.id }}" {% if current_bank and bank.id == current_bank.id %}selected{% endif %}>
                 {{ bank.name }}{% if bank.is_default %} (default){% endif %}

@@ -1046,3 +1046,9 @@ textarea { resize: vertical; min-height: 4rem; }
 .job-save-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
 .job-save-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 #job-save-btn[disabled] { opacity: 0.75; cursor: progress; }
+
+
+/* Background form saving (safe-submit.js) */
+.safe-submit-status { margin-top: 0.6rem; border-radius: 8px; padding: 0.55rem 0.8rem; font-size: 0.88rem; font-weight: 600; flex-basis: 100%; width: 100%; }
+.safe-submit-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+.safe-submit-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }

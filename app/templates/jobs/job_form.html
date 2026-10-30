@@ -496,7 +496,7 @@
     function sendOnce(body) {
         var controller = window.AbortController ? new AbortController() : null;
         var timer = controller ? setTimeout(function () { controller.abort(); }, 45000) : null;
-        return fetch(form.action, {
+        return fetch(form.getAttribute('action') || window.location.href, {
             method: 'POST',
             body: body,
             credentials: 'same-origin',
