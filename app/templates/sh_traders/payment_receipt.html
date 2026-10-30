@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "sh_traders/macros.html" import sh_page_header %}
 {% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% from "shared/macros.html" import row_actions with context %}
 {% block title %}Payment Receipt - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Payment Receipt Confirmation', 'Receipt when payment is received from a client') }}
@@ -76,6 +77,7 @@
                 <th>Total Due</th>
                 <th>Invoice Ref</th>
                 <th>PDF</th>
+                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
@@ -91,9 +93,10 @@
                 <td>
                     <a href="{{ url_for('sh_main.payment_receipt_pdf', receipt_id=receipt.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
                 </td>
+                {{ row_actions(delete_url=url_for('stock_deletes.delete_sh_payment_receipt', receipt_id=receipt.id)) }}
             </tr>
             {% else %}
-            <tr><td colspan="8" class="empty">No payment receipts yet</td></tr>
+            <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No payment receipts yet</td></tr>
             {% endfor %}
         </tbody>
     </table>

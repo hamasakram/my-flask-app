@@ -3,6 +3,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.models import (
+    ShPaymentReceipt,
     ChemicalItem,
     ChemicalOpeningStock,
     ChemicalTransaction,
@@ -601,6 +602,25 @@ def delete_sh_client_ledger(entry_id):
         f"Deleted client ledger entry #{entry_id}",
         url_for("sh_main.client_ledger"),
     )
+
+
+@stock_deletes_bp.route("/sh/payment-receipt/<int:receipt_id>", methods=["POST"])
+@login_required
+def delete_sh_payment_receipt(receipt_id):
+    """Payment receipts are confirmation slips only — nothing else links to them."""
+    require_edit_access()
+    receipt = ShPaymentReceipt.query.get_or_404(receipt_id)
+    details = (
+        f"Deleted payment receipt {receipt.receipt_number} "
+        f"({receipt.client.name if receipt.client else 'client #' + str(receipt.client_company_id)}, "
+        f"{float(receipt.amount_received or 0):,.2f})"
+    )
+    number = receipt.receipt_number
+    db.session.delete(receipt)
+    log_audit(current_user.id, "DELETE", "ShPaymentReceipt", receipt_id, details)
+    db.session.commit()
+    flash(f"Payment receipt {number} deleted.", "success")
+    return redirect(url_for("sh_main.payment_receipt"))
 
 
 @stock_deletes_bp.route("/sh/supplier-ledger/<int:entry_id>", methods=["POST"])
