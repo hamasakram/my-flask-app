@@ -81,6 +81,11 @@ def create_app(config_class=Config):
             "all_modules": all_module_options(module),
         }
 
+    @app.route("/ping")
+    def ping():
+        """Tiny no-cache endpoint used by safe-submit.js to open a fresh connection before a POST."""
+        return "", 204, {"Cache-Control": "no-store"}
+
     @app.before_request
     def require_module_selection():
         if not current_user.is_authenticated:
@@ -91,6 +96,7 @@ def create_app(config_class=Config):
             "auth.logout",
             "auth.choose_module",
             "static",
+            "ping",
             None,
         }
         if request.endpoint in allowed:
@@ -104,6 +110,10 @@ def create_app(config_class=Config):
                 return redirect(module_dashboard_url(get_active_module()))
 
         return None
+
+    from app.services.submit_guard import register as register_submit_guard
+
+    register_submit_guard(app)
 
     with app.app_context():
         db.create_all()

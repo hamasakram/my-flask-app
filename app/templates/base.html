@@ -12,6 +12,7 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
     {% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="{{ url_for('static', filename='js/safe-submit.js') }}" defer></script>
 </head>
 <body>
     {% if current_user.is_authenticated and active_module %}

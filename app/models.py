@@ -344,7 +344,8 @@ class StockPurchaseReceipt(db.Model):
     title = db.Column(db.String(200))
     amount = db.Column(db.Float)
     screenshot_filename = db.Column(db.String(255), nullable=False)
-    screenshot_data = db.Column(db.LargeBinary)
+    # deferred: the image bytes load only when the file is opened, not for every list/query
+    screenshot_data = db.deferred(db.Column(db.LargeBinary))
     screenshot_mimetype = db.Column(db.String(100))
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -859,7 +860,8 @@ class ShPaymentScreenshot(db.Model):
     amount_paid = db.Column(db.Float)
     purchase_id = db.Column(db.Integer, db.ForeignKey("sh_purchases.id"))
     screenshot_filename = db.Column(db.String(255), nullable=False)
-    screenshot_data = db.Column(db.LargeBinary)
+    # deferred: the image bytes load only when the file is opened, not for every list/query
+    screenshot_data = db.deferred(db.Column(db.LargeBinary))
     screenshot_mimetype = db.Column(db.String(100))
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -882,7 +884,8 @@ class ShGatePassScreenshot(db.Model):
     sale_invoice_id = db.Column(db.Integer, db.ForeignKey("sh_sale_invoices.id"))
     title = db.Column(db.String(150))
     screenshot_filename = db.Column(db.String(255), nullable=False)
-    screenshot_data = db.Column(db.LargeBinary)
+    # deferred: the image bytes load only when the file is opened, not for every list/query
+    screenshot_data = db.deferred(db.Column(db.LargeBinary))
     screenshot_mimetype = db.Column(db.String(100))
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -1469,3 +1472,16 @@ class PrintJobInk(db.Model):
     required_kg = db.Column(db.Float, nullable=True)
 
     job = db.relationship("PrintJob", back_populates="inks")
+
+
+class SubmitToken(db.Model):
+    """One-time form token (see app/services/submit_guard.py) so a form is never saved twice."""
+
+    __tablename__ = "submit_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    user_id = db.Column(db.Integer, nullable=True)
+    endpoint = db.Column(db.String(120))
+    location = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False, index=True)

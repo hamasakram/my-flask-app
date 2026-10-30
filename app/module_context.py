@@ -100,6 +100,7 @@ def dashboard_only_allowed_endpoints() -> set[str | None]:
         "auth.logout",
         "auth.choose_module",
         "static",
+        "ping",
         None,
     }
 
