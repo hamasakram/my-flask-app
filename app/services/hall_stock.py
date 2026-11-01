@@ -219,6 +219,78 @@ def transfer_to_machine_hall(form, user_id: int | None) -> HallStockMovement:
     return movement
 
 
+def undo_transfer(movement: HallStockMovement, user_id: int | None = None) -> dict:
+    """Reverse a transfer to Machine Hall: take its KG/rolls off Machine Hall and put them back
+    into In Hall, then remove the transfer record. Blocked if part of it was already used."""
+    if movement.movement_type != HallStockMovement.TYPE_TRANSFER:
+        raise ValueError("Only transfers to Machine Hall can be undone here.")
+
+    kg = float(movement.gross_kg or 0)
+    rolls = float(movement.rolls or 0)
+    name = movement.material_name
+
+    dest = db.session.get(HallStockItem, movement.dest_item_id) if movement.dest_item_id else None
+    if dest is None or dest.location != HallStockItem.LOCATION_MACHINE:
+        dest = find_matching_item(
+            HallStockItem.LOCATION_MACHINE, name, movement.material_type or "",
+            movement.size or "", movement.micron or "",
+        )
+    if dest is not None:
+        left = float(dest.kg or 0)
+        if kg > left + 0.0001:
+            raise ValueError(
+                f"Can't delete this transfer: {kg:,.3f} kg of {name} was transferred, but only "
+                f"{left:,.3f} kg is left in Machine Hall (the rest was already used)."
+            )
+        dest.kg = _subtract_optional(dest.kg, kg, "Gross weight") if kg else dest.kg
+        if rolls:
+            dest.rolls_left = max(0.0, float(dest.rolls_left or 0) - rolls)
+    elif kg > 0.0001:
+        raise ValueError(
+            f"Can't delete this transfer: {name} is no longer in Machine Hall stock."
+        )
+
+    source = db.session.get(HallStockItem, movement.source_item_id) if movement.source_item_id else None
+    if source is None or source.location != HallStockItem.LOCATION_IN_HALL:
+        source = find_matching_item(
+            HallStockItem.LOCATION_IN_HALL, name, movement.material_type or "",
+            movement.size or "", movement.micron or "",
+        )
+    if source is not None:
+        source.kg = _add_optional(source.kg, kg)
+        if rolls:
+            source.rolls_left = _add_optional(source.rolls_left, rolls)
+    else:
+        source = HallStockItem(
+            location=HallStockItem.LOCATION_IN_HALL,
+            material_name=name,
+            material_type=movement.material_type or "",
+            size=movement.size or "",
+            micron=movement.micron or "",
+            kg=kg,
+            rolls_left=rolls or None,
+            created_by_id=user_id,
+        )
+        db.session.add(source)
+
+    db.session.delete(movement)
+    db.session.flush()
+
+    removed_machine_row = False
+    if dest is not None and float(dest.kg or 0) <= 0.0001 and float(dest.rolls_left or 0) <= 0.0001:
+        still_used = HallStockMovement.query.filter(
+            db.or_(
+                HallStockMovement.source_item_id == dest.id,
+                HallStockMovement.dest_item_id == dest.id,
+            )
+        ).count()
+        if not still_used:
+            db.session.delete(dest)
+            removed_machine_row = True
+    db.session.flush()
+    return {"name": name, "kg": kg, "rolls": rolls, "removed_machine_row": removed_machine_row}
+
+
 def record_machine_usage(form, user_id: int | None) -> HallStockMovement:
     item_id = form.get("item_id", type=int)
     used_kg = form.get("used_kg", type=float)

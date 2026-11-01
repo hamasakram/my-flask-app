@@ -12,6 +12,7 @@ from app.services.hall_stock import (
     parse_stock_fields,
     record_machine_usage,
     transfer_to_machine_hall,
+    undo_transfer,
     update_item_fields,
 )
 from app.services.hall_stock_pdf import generate_hall_stock_pdf
@@ -383,6 +384,34 @@ def machine_hall_stock_pdf():
         download_name=f"machine_hall_stock_{datetime.now().strftime('%Y%m%d')}.pdf",
         mimetype="application/pdf",
     )
+
+
+@materials_bp.route("/hall-transfer/<int:movement_id>/delete", methods=["POST"])
+@login_required
+def delete_hall_transfer(movement_id):
+    require_edit_access()
+    movement = db.session.get(HallStockMovement, movement_id)
+    if movement is None or movement.movement_type != HallStockMovement.TYPE_TRANSFER:
+        abort(404)
+    summary = (
+        f"Deleted transfer #{movement_id}: {movement.gross_kg or 0:,.3f} kg of "
+        f"{movement.material_name} moved back from Machine Hall to In Hall"
+    )
+    try:
+        result = undo_transfer(movement, current_user.id)
+        log_audit(current_user.id, "DELETE", "HallStockMovement", movement_id, summary)
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("materials.in_hall_stock"))
+    rolls = f" and {result['rolls']:,.2f} roll(s)" if result["rolls"] else ""
+    flash(
+        f"Transfer deleted: {result['kg']:,.3f} kg{rolls} of {result['name']} moved back to In Hall "
+        "and removed from Machine Hall.",
+        "success",
+    )
+    return redirect(url_for("materials.in_hall_stock"))
 
 
 @materials_bp.route("/hall-stock/<int:item_id>/edit", methods=["GET", "POST"])

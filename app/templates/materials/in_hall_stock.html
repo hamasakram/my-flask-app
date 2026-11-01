@@ -200,6 +200,7 @@
                     <th>Gross KG</th>
                     <th>Rolls</th>
                     <th>Notes</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -213,9 +214,17 @@
                     <td>{{ "{:,.3f}".format(row.gross_kg or 0) }}</td>
                     <td>{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
                     <td>{{ row.notes or '—' }}</td>
+                    {% if current_user.can_edit() %}
+                    <td class="table-actions">
+                        <form method="POST" action="{{ url_for('materials.delete_hall_transfer', movement_id=row.id) }}" class="inline-action-form"
+                              onsubmit="return confirm({{ ('Delete this transfer? ' ~ '{:,.3f}'.format(row.gross_kg or 0) ~ ' kg of ' ~ row.material_name ~ ' will go back to In Hall and be removed from Machine Hall.')|tojson|forceescape }});">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="empty">No transfers yet</td></tr>
+                <tr><td colspan="{{ 9 if current_user.can_edit() else 8 }}" class="empty">No transfers yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>
