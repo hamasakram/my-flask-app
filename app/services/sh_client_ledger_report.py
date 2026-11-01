@@ -40,6 +40,40 @@ def _format_balance(amount: float, balance_type: str) -> str:
     return _format_money(amount, blank_if_zero=False)
 
 
+def _fmt_qty(value: float) -> str:
+    return f"{value:,.0f}" if float(value).is_integer() else f"{value:,.2f}".rstrip("0").rstrip(".")
+
+
+def _qty_size_text(lines) -> str:
+    """Total rolls (or other unit) and size(s) from invoice / ledger lines,
+    e.g. "Rolls(72) Size(199)" or "Rolls(72) Size(199: 40, 210: 32)"."""
+    unit_totals: dict[str, float] = {}
+    size_totals: dict[str, float] = {}
+    for line in lines:
+        qty = float(line.qty or 0)
+        unit = (line.qty_unit or "Roll/Reel").strip() or "Roll/Reel"
+        unit_totals[unit] = unit_totals.get(unit, 0.0) + qty
+        size = (line.size or "").strip()
+        if size:
+            size_totals[size] = size_totals.get(size, 0.0) + qty
+
+    parts = []
+    for unit, total in unit_totals.items():
+        if total <= 0:
+            continue
+        lowered = unit.lower()
+        label = "Rolls" if ("roll" in lowered or "reel" in lowered) else unit
+        parts.append(f"{label}({_fmt_qty(total)})")
+    if len(size_totals) == 1:
+        parts.append(f"Size({next(iter(size_totals))})")
+    elif size_totals:
+        breakdown = ", ".join(
+            f"{size}: {_fmt_qty(qty)}" if qty else size for size, qty in size_totals.items()
+        )
+        parts.append(f"Size({breakdown})")
+    return " ".join(parts)
+
+
 def _invoice_narration(invoice: ShSaleInvoice) -> str:
     parts = []
     if invoice.factory_challan_no:
@@ -50,6 +84,9 @@ def _invoice_narration(invoice: ShSaleInvoice) -> str:
         rate = float(first.unit_price or 0)
         material = first.item_name or "Material"
         parts.append(f"Wt({net_weight:,.3f}-Kgs) Rate({rate:,.0f}) {material}")
+        qty_size = _qty_size_text(invoice.lines)
+        if qty_size:
+            parts.append(qty_size)
         if len(invoice.lines) > 1:
             parts.append(f"({len(invoice.lines)} line items)")
     if invoice.notes:
@@ -68,6 +105,9 @@ def _ledger_sale_narration(entry: ShClientLedgerEntry) -> str:
             f"Wt({net_weight:,.3f}-Kgs) Rate({float(first.unit_price or 0):,.0f}) "
             f"{first.item_name or 'Item'}"
         )
+        qty_size = _qty_size_text(entry.lines)
+        if qty_size:
+            parts.append(qty_size)
     if entry.notes:
         parts.append(entry.notes)
     return " ".join(parts) if parts else entry.reference_number
