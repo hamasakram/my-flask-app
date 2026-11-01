@@ -204,6 +204,7 @@
                     <th>Rolls</th>
                     <th>Where Used</th>
                     <th>Notes</th>
+                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -218,9 +219,18 @@
                     <td>{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
                     <td>{{ row.where_used or '—' }}</td>
                     <td>{{ row.notes or '—' }}</td>
+                    {% if current_user.can_edit() %}
+                    {% set amount_text = (('{:,.3f}'.format(row.gross_kg) ~ ' kg') if row.gross_kg else '') ~ ((' and ' if row.gross_kg else '') ~ '{:,.2f}'.format(row.rolls) ~ ' roll(s)' if row.rolls else '') %}
+                    <td class="table-actions">
+                        <form method="POST" action="{{ url_for('materials.delete_machine_usage', movement_id=row.id) }}" class="inline-action-form"
+                              onsubmit="return confirm({{ ('Delete this usage record? ' ~ amount_text ~ ' of ' ~ row.material_name ~ ' will be added back to Machine Hall stock.')|tojson|forceescape }});">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="empty">No usage recorded yet</td></tr>
+                <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No usage recorded yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>

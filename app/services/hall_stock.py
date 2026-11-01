@@ -338,3 +338,45 @@ def record_machine_usage(form, user_id: int | None) -> HallStockMovement:
     )
     db.session.add(movement)
     return movement
+
+
+def undo_machine_usage(movement: HallStockMovement, user_id: int | None = None) -> dict:
+    """Reverse a Machine Hall usage record: put its KG/rolls back into Machine Hall stock,
+    then remove the usage record."""
+    if movement.movement_type != HallStockMovement.TYPE_USED:
+        raise ValueError("Only Machine Hall usage records can be deleted here.")
+
+    kg = float(movement.gross_kg or 0)
+    rolls = float(movement.rolls or 0)
+    name = movement.material_name
+
+    item = db.session.get(HallStockItem, movement.source_item_id) if movement.source_item_id else None
+    if item is None or item.location != HallStockItem.LOCATION_MACHINE:
+        item = find_matching_item(
+            HallStockItem.LOCATION_MACHINE, name, movement.material_type or "",
+            movement.size or "", movement.micron or "",
+        )
+    created = False
+    if item is not None:
+        if kg:
+            item.kg = _add_optional(item.kg, kg)
+        if rolls:
+            item.rolls_left = _add_optional(item.rolls_left, rolls)
+    else:
+        # The Machine Hall row was removed since — bring the material back as a new row.
+        item = HallStockItem(
+            location=HallStockItem.LOCATION_MACHINE,
+            material_name=name,
+            material_type=movement.material_type or "",
+            size=movement.size or "",
+            micron=movement.micron or "",
+            kg=kg or None,
+            rolls_left=rolls or None,
+            created_by_id=user_id,
+        )
+        db.session.add(item)
+        created = True
+
+    db.session.delete(movement)
+    db.session.flush()
+    return {"name": name, "kg": kg, "rolls": rolls, "created_row": created, "item": item}

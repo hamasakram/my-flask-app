@@ -12,6 +12,7 @@ from app.services.hall_stock import (
     parse_stock_fields,
     record_machine_usage,
     transfer_to_machine_hall,
+    undo_machine_usage,
     undo_transfer,
     update_item_fields,
 )
@@ -412,6 +413,39 @@ def delete_hall_transfer(movement_id):
         "success",
     )
     return redirect(url_for("materials.in_hall_stock"))
+
+
+@materials_bp.route("/machine-usage/<int:movement_id>/delete", methods=["POST"])
+@login_required
+def delete_machine_usage(movement_id):
+    require_edit_access()
+    movement = db.session.get(HallStockMovement, movement_id)
+    if movement is None or movement.movement_type != HallStockMovement.TYPE_USED:
+        abort(404)
+    summary = (
+        f"Deleted usage #{movement_id}: {movement.gross_kg or 0:,.3f} kg / {movement.rolls or 0:,.2f} roll(s) "
+        f"of {movement.material_name} (used at {movement.where_used or '-'}) returned to Machine Hall"
+    )
+    try:
+        result = undo_machine_usage(movement, current_user.id)
+        log_audit(current_user.id, "DELETE", "HallStockMovement", movement_id, summary)
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("materials.machine_hall_stock"))
+    parts = []
+    if result["kg"]:
+        parts.append(f"{result['kg']:,.3f} kg")
+    if result["rolls"]:
+        parts.append(f"{result['rolls']:,.2f} roll(s)")
+    flash(
+        f"Usage deleted: {' and '.join(parts) or 'the amount'} of {result['name']} added back to Machine Hall stock.",
+        "success",
+    )
+    item = result["item"]
+    _flash_job_notice(item.material_name, item.size, item.micron)
+    return redirect(url_for("materials.machine_hall_stock"))
 
 
 @materials_bp.route("/hall-stock/<int:item_id>/edit", methods=["GET", "POST"])
