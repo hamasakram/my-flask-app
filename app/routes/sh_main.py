@@ -36,6 +36,10 @@ from app.services.sh_client_ledger_report import (
     build_client_ledger_timeline,
     generate_complete_client_ledger_pdf,
 )
+from app.services.sh_supplier_ledger_report import (
+    build_supplier_ledger_timeline,
+    generate_complete_supplier_ledger_pdf,
+)
 from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supplier_ledger_pdf
 from app.services.sh_ledger_sync import (
     compute_invoice_balances,
@@ -800,6 +804,80 @@ def client_ledger_report_pdf():
         output,
         as_attachment=True,
         download_name=f"ledger_report_{client_slug}{range_suffix}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@sh_main_bp.route("/supplier-ledger-report", methods=["GET"])
+@login_required
+def supplier_ledger_report():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    suppliers = ShSupplierCompany.query.order_by(ShSupplierCompany.name).all()
+    supplier_id = request.args.get("supplier_id", type=int)
+    date_from_str = request.args.get("date_from", "").strip()
+    date_to_str = request.args.get("date_to", "").strip()
+
+    preview = None
+    if supplier_id:
+        try:
+            date_from = _parse_date(date_from_str) if date_from_str else None
+            date_to = _parse_date(date_to_str) if date_to_str else None
+        except ValueError:
+            flash("Enter valid dates.", "danger")
+            return redirect(url_for("sh_main.supplier_ledger_report", supplier_id=supplier_id))
+        preview = build_supplier_ledger_timeline(supplier_id, date_from, date_to)
+
+    return render_template(
+        "sh_traders/supplier_ledger_report.html",
+        suppliers=suppliers,
+        selected_supplier_id=supplier_id,
+        date_from=date_from_str,
+        date_to=date_to_str,
+        preview=preview,
+        banks=get_all_banks(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/supplier-ledger-report/pdf")
+@login_required
+def supplier_ledger_report_pdf():
+    if not get_current_sh_bank():
+        flash("Add a bank first.", "warning")
+        return redirect(url_for("sh_main.banks"))
+
+    supplier_id = request.args.get("supplier_id", type=int)
+    if not supplier_id:
+        flash("Select a supplier for the ledger report.", "danger")
+        return redirect(url_for("sh_main.supplier_ledger_report"))
+
+    date_from_str = request.args.get("date_from", "").strip()
+    date_to_str = request.args.get("date_to", "").strip()
+    try:
+        date_from = _parse_date(date_from_str) if date_from_str else None
+        date_to = _parse_date(date_to_str) if date_to_str else None
+    except ValueError:
+        flash("Enter valid dates.", "danger")
+        return redirect(url_for("sh_main.supplier_ledger_report", supplier_id=supplier_id))
+
+    report = build_supplier_ledger_timeline(supplier_id, date_from, date_to)
+    output = generate_complete_supplier_ledger_pdf(report)
+    slug = "".join(ch if ch.isalnum() else "_" for ch in report["supplier"].name).strip("_")
+    range_suffix = ""
+    if date_from and date_to:
+        range_suffix = f"_{date_from.strftime('%Y%m%d')}_{date_to.strftime('%Y%m%d')}"
+    elif date_from:
+        range_suffix = f"_from_{date_from.strftime('%Y%m%d')}"
+    elif date_to:
+        range_suffix = f"_to_{date_to.strftime('%Y%m%d')}"
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"supplier_ledger_{slug}{range_suffix}.pdf",
         mimetype="application/pdf",
     )
 

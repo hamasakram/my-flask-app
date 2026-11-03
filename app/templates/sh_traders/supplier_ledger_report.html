@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header %}
+{% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
+{% block title %}Supplier Ledger Complete - SH Traders{% endblock %}
+
+{% macro money(v) -%}₨ {{ "{:,.2f}".format(v or 0) }}{%- endmacro %}
+{% macro bal(amount, kind) -%}
+{%- if kind == 'CR' -%}(₨ {{ "{:,.2f}".format(amount or 0) }}){%- else -%}₨ {{ "{:,.2f}".format(amount or 0) }}{%- endif -%}
+{%- endmacro %}
+
+{% block content %}
+{{ sh_page_header('Supplier Ledger Complete', 'Full supplier account — every purchase and every payment with running balance. Print for any date range or the full history.') }}
+{{ sh_bank_selector(banks, current_bank) }}
+
+{% if not suppliers %}
+<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
+{% else %}
+<div class="card highlight-card">
+    <h2>Generate Supplier Ledger</h2>
+    <p class="field-note">Purchases from the supplier increase what you owe (CREDIT). Payments to the supplier reduce it (DEBIT). A balance in brackets means you have paid in advance.</p>
+    <form method="GET" class="form-grid" id="supplier-ledger-report-form">
+        <div class="form-group">
+            <label for="supplier_id">Supplier</label>
+            <select id="supplier_id" name="supplier_id" required>
+                <option value="">Select supplier</option>
+                {% for s in suppliers %}
+                <option value="{{ s.id }}" {% if selected_supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="date_from">From Date <small>(optional)</small></label>
+            <input type="date" id="date_from" name="date_from" value="{{ date_from }}">
+            <small class="field-note">Leave blank for complete ledger from start</small>
+        </div>
+        <div class="form-group">
+            <label for="date_to">To Date <small>(optional)</small></label>
+            <input type="date" id="date_to" name="date_to" value="{{ date_to }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-secondary">Preview</button>
+            {% if selected_supplier_id %}
+            <a href="{{ url_for('sh_main.supplier_ledger_report_pdf', supplier_id=selected_supplier_id, date_from=date_from, date_to=date_to) }}"
+               target="_blank" class="btn btn-primary">Download PDF</a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+{% if preview %}
+<div class="stats-grid">
+    <div class="stat-card">
+        <span class="stat-label">Total Purchased</span>
+        <span class="stat-value">{{ money(preview.total_credit) }}</span>
+        <span class="field-note">{{ preview.purchase_count }} purchase(s)</span>
+    </div>
+    <div class="stat-card accent-green">
+        <span class="stat-label">Total Paid</span>
+        <span class="stat-value">{{ money(preview.total_debit) }}</span>
+        <span class="field-note">{{ preview.payment_count }} payment(s)</span>
+    </div>
+    {% if preview.date_from or preview.date_to %}
+    <div class="stat-card">
+        <span class="stat-label">Opening Balance</span>
+        <span class="stat-value">{{ bal(preview.opening_balance, preview.opening_type) }}</span>
+        <span class="field-note">before this period</span>
+    </div>
+    {% else %}
+    <div class="stat-card">
+        <span class="stat-label">Payments With Proof</span>
+        <span class="stat-value">{{ preview.proof_count }} of {{ preview.payment_count }}</span>
+        <span class="field-note">payment screenshots on file</span>
+    </div>
+    {% endif %}
+    <div class="stat-card {{ 'accent-orange' if preview.closing_type != 'CR' else 'accent-green' }}">
+        <span class="stat-label">{{ 'Advance Paid' if preview.closing_type == 'CR' else 'Balance Payable' }}</span>
+        <span class="stat-value">{{ bal(preview.closing_balance, preview.closing_type) }}</span>
+        <span class="field-note">closing balance</span>
+    </div>
+</div>
+
+<div class="card">
+    <div class="ledger-report-header">
+        <h2>SUPPLIER LEDGER — {{ preview.supplier.name }}</h2>
+        <p class="field-note">
+            {% if preview.date_from and preview.date_to %}
+            Dated: {{ preview.date_from.strftime('%d-%b-%y') }} TO {{ preview.date_to.strftime('%d-%b-%y') }}
+            {% elif preview.date_from %}
+            From {{ preview.date_from.strftime('%d-%b-%y') }}
+            {% elif preview.date_to %}
+            Up to {{ preview.date_to.strftime('%d-%b-%y') }}
+            {% else %}
+            Complete ledger from start
+            {% endif %}
+            · {{ 'Advance paid' if preview.closing_type == 'CR' else 'Payable' }}: {{ bal(preview.closing_balance, preview.closing_type) }}
+        </p>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table ledger-report-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>No</th>
+                    <th>E-#</th>
+                    <th>Narration</th>
+                    <th class="num">DEBIT (Paid)</th>
+                    <th class="num">CREDIT (Purchase)</th>
+                    <th class="num">BALANCE</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview.rows %}
+                <tr class="{% if row.is_opening %}ledger-opening-row{% elif row.is_payment %}supplier-payment-row{% endif %}">
+                    <td>{{ row.date.strftime('%d-%b-%y') }}</td>
+                    <td>{{ row.type or '—' }}</td>
+                    <td>{{ row.number or '—' }}</td>
+                    <td>{{ row.extra or '—' }}</td>
+                    <td>
+                        {{ row.narration }}
+                        {% if row.payment and row.payment.proof %}
+                        · <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=row.payment.proof.id) }}" target="_blank">View proof</a>
+                        {% endif %}
+                    </td>
+                    <td class="num">{% if row.debit %}{{ money(row.debit) }}{% endif %}</td>
+                    <td class="num">{% if row.credit %}{{ money(row.credit) }}{% endif %}</td>
+                    <td class="num">{{ bal(row.balance, row.balance_type) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No ledger entries for this supplier in the selected range</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if preview.rows %}
+            <tfoot>
+                <tr class="ledger-totals-row">
+                    <td colspan="5"><strong>Totals</strong></td>
+                    <td class="num"><strong>{{ money(preview.total_debit) }}</strong></td>
+                    <td class="num"><strong>{{ money(preview.total_credit) }}</strong></td>
+                    <td class="num"><strong>{{ bal(preview.closing_balance, preview.closing_type) }}</strong></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Payment Details ({{ preview.payment_count }})</h2>
+    <div class="table-scroll">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Date</th>
+                    <th>Reference</th>
+                    <th>Paid From</th>
+                    <th>Note</th>
+                    <th>Proof</th>
+                    <th class="num">Amount Paid</th>
+                    <th class="num">Balance After</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in preview.payments %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ row.date.strftime('%d-%b-%y') }}</td>
+                    <td><strong>{{ row.number }}</strong>{% if row.payment.reference %}<br><small class="field-note">{{ row.payment.reference }}</small>{% endif %}</td>
+                    <td>{{ row.payment.bank_name or row.payment.method }}</td>
+                    <td>{{ row.payment.note or '—' }}</td>
+                    <td>
+                        {% if row.payment.proof %}
+                        <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=row.payment.proof.id) }}" target="_blank" class="badge badge-green">Screenshot ✓</a>
+                        {% else %}
+                        <span class="badge badge-gray">Not uploaded</span>
+                        {% endif %}
+                    </td>
+                    <td class="num"><strong>{{ money(row.debit) }}</strong></td>
+                    <td class="num">{{ bal(row.balance, row.balance_type) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No payments to this supplier in the selected range</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if preview.payments %}
+            <tfoot>
+                <tr class="ledger-totals-row">
+                    <td colspan="6"><strong>Total paid</strong></td>
+                    <td class="num"><strong>{{ money(preview.total_debit) }}</strong></td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+    <p class="field-note">Payments come from the Bank Payments Ledger (entries tagged with this supplier) and manual supplier-ledger payment entries. A screenshot counts as proof when it is for the same supplier, date and amount.</p>
+</div>
+<style>
+    .supplier-payment-row td { background: #f0fdf4; }
+    .stats-grid .stat-card .field-note { display: block; margin-top: 0.15rem; }
+</style>
+{% endif %}
+{% endif %}
+{% endblock %}
