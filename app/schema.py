@@ -102,6 +102,12 @@ COLUMN_MIGRATIONS = {
     "used_ink_stock": {
         "entry_type": "VARCHAR(10) DEFAULT 'add'",
     },
+    "hall_stock_items": {
+        "roll_weights": "TEXT",
+    },
+    "hall_stock_movements": {
+        "roll_weights": "TEXT",
+    },
     "print_job_materials": {
         "status_at_save": "VARCHAR(20)",
     },
@@ -772,6 +778,10 @@ def ensure_schema():
     from app.services.print_jobs import backfill_status_snapshots
 
     backfill_status_snapshots()
+
+    from app.services.hall_stock_import import replace_in_hall_stock_nov_2026
+
+    replace_in_hall_stock_nov_2026()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

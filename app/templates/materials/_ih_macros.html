@@ -1,0 +1,29 @@
+{# In-Hall stock helpers: numbers without trailing zeros, with thousands separators. #}
+{% macro num(value, places=3) -%}
+{%- set text = ("{:,.%df}" % places).format(value or 0) -%}
+{%- if '.' in text %}{{ text.rstrip('0').rstrip('.') }}{% else %}{{ text }}{% endif -%}
+{%- endmacro %}
+
+{% macro rolls_text(value) -%}
+{%- set n = value or 0 -%}
+{{ num(n, 2) }} roll{{ '' if n == 1 else 's' }}
+{%- endmacro %}
+
+{% macro micron_text(value) -%}
+{%- set m = (value or '')|trim -%}
+{%- if m and m[-1] in '0123456789' %}{{ m }} μ{% else %}{{ m }}{% endif -%}
+{%- endmacro %}
+
+{% macro size_text(value) -%}
+{%- set s = (value or '')|trim -%}
+{%- if s and s[-1] in '0123456789' %}{{ s }} mm{% else %}{{ s }}{% endif -%}
+{%- endmacro %}
+
+{# Roll weights as grouped pills: "168.8 kg × 5", "30 kg". #}
+{% macro roll_pills(groups) -%}
+<ul class="ih-rolls" aria-label="Roll weights">
+    {%- for weight, count in groups %}
+    <li class="ih-roll"><span class="ih-roll-w">{{ num(weight) }} kg</span>{% if count > 1 %}<span class="ih-roll-n">× {{ count }}</span>{% endif %}</li>
+    {%- endfor %}
+</ul>
+{%- endmacro %}

@@ -1,39 +1,80 @@
 {% extends "base.html" %}
+{% from "materials/_ih_macros.html" import num %}
 {% block title %}Edit Hall Stock - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Edit {{ item.location_label }} Stock</h1>
-</div>
-<div class="card">
-    <form method="POST" class="form-grid">
-        <div class="form-group">
-            <label for="material_name">Material Name</label>
+{% include "materials/_ih_styles.html" %}
+<div class="ih-page">
+<header class="ih-header">
+    <div>
+        <h1>Edit {{ item.location_label }} stock</h1>
+        <p>{{ item.material_name }} · {{ item.material_type }}{% if item.size %} · {{ item.size }}{% endif %}{% if item.micron %} · {{ item.micron }}{% endif %}</p>
+    </div>
+</header>
+<section class="card ih-panel">
+    <form method="POST" class="ih-form">
+        <div class="ih-field ih-wide-phone">
+            <label for="material_name">Material name</label>
             <input type="text" id="material_name" name="material_name" value="{{ item.material_name }}" required>
         </div>
-        <div class="form-group">
-            <label for="material_type">Type of Material</label>
+        <div class="ih-field ih-wide-phone">
+            <label for="material_type">Type</label>
             <input type="text" id="material_type" name="material_type" value="{{ item.material_type }}" required>
         </div>
-        <div class="form-group">
-            <label for="size">Size</label>
-            <input type="text" id="size" name="size" value="{{ item.size or '' }}">
+        <div class="ih-field">
+            <label for="size">Size <small>(mm)</small></label>
+            <input type="text" id="size" name="size" value="{{ item.size or '' }}" inputmode="decimal">
         </div>
-        <div class="form-group">
+        <div class="ih-field">
             <label for="micron">Micron</label>
             <input type="text" id="micron" name="micron" value="{{ item.micron or '' }}">
         </div>
-        <div class="form-group">
-            <label for="rolls_left">Rolls Left</label>
-            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0" value="{{ item.rolls_left if item.rolls_left is not none else '' }}">
+
+        <div class="ih-builder" id="ih-roll-builder">
+            <div class="ih-builder-head">
+                <label class="ih-label" for="roll_spec">Roll weights <small>(optional)</small></label>
+                <span class="ih-roll-preview" data-roll-preview aria-live="polite">No roll weights — KG and rolls are typed below.</span>
+            </div>
+            <input type="text" id="roll_spec" name="roll_spec" value="{{ item.roll_spec }}" data-roll-spec data-roll-original="{{ item.roll_spec }}" data-orig-kg="{{ item.kg if item.kg is not none else '' }}" data-orig-rolls="{{ '%g'|format(item.rolls_left) if item.rolls_left is not none else '' }}" placeholder="168.8x5 + 30x1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="ih-roll-help">
+            <div class="ih-quick" role="group" aria-label="Add rolls of one weight">
+                <span class="ih-quick-label" id="ih-roll-help">Or add them one weight at a time:</span>
+                <span class="ih-quick-row">
+                    <input type="text" inputmode="decimal" data-roll-weight placeholder="Weight" aria-label="Roll weight in kg">
+                    <span class="ih-quick-unit">kg</span>
+                    <span class="ih-quick-x" aria-hidden="true">×</span>
+                    <input type="number" inputmode="numeric" min="1" max="500" step="1" value="1" data-roll-count aria-label="Number of rolls">
+                    <span class="ih-quick-unit">rolls</span>
+                    <button type="button" class="ih-act" data-roll-add>Add</button>
+                </span>
+            </div>
+            <ul class="ih-rolls" data-roll-chips hidden aria-label="Rolls entered"></ul>
+            {% if item.untracked_kg > 0 %}
+            <p class="ih-warn">The rolls listed cover {{ num(item.roll_list|sum) }} kg of {{ num(item.kg) }} kg. {{ num(item.untracked_kg) }} kg is not split into rolls. Saving without changing the roll weights keeps {{ num(item.kg) }} kg; if you change the roll weights, KG becomes their total.</p>
+            {% elif item.roll_excess_kg > 0 %}
+            <p class="ih-warn">The rolls listed weigh {{ num(item.roll_excess_kg) }} kg more than the stock ({{ num(item.kg) }} kg). Saving without changing the roll weights keeps the stock at {{ num(item.kg) }} kg; correct the roll weights to match what is left.</p>
+            {% endif %}
+            <p class="field-note" style="margin:0">With roll weights, KG and rolls are worked out from them. Clear this box to remove the roll list.</p>
         </div>
-        <div class="form-group">
-            <label for="kg">KGs</label>
-            <input type="number" id="kg" name="kg" step="0.001" min="0" value="{{ item.kg if item.kg is not none else '' }}">
+
+        <div class="ih-field ih-span-2 ih-half-phone">
+            <label for="kg">KG</label>
+            <input type="number" id="kg" name="kg" step="0.001" min="0" inputmode="decimal" value="{{ item.kg if item.kg is not none else '' }}" data-roll-kg>
+            <small class="ih-auto-note" data-auto-note="kg" hidden>From roll weights</small>
         </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-            <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+        <div class="ih-field ih-span-2 ih-half-phone">
+            <label for="rolls_left">Rolls</label>
+            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0" inputmode="decimal" value="{{ item.rolls_left if item.rolls_left is not none else '' }}" data-roll-rolls>
+            <small class="ih-auto-note" data-auto-note="rolls_left" hidden>From roll weights</small>
+        </div>
+        <div class="ih-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary">Save changes</button>
+            <a href="{{ cancel_url }}" class="ih-btn ih-btn-quiet">Cancel</a>
         </div>
     </form>
+</section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% include "materials/_ih_rolls_js.html" %}
+<script>window.IHRolls && window.IHRolls.builder(document.getElementById('ih-roll-builder'));</script>
 {% endblock %}

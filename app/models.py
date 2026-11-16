@@ -271,6 +271,9 @@ class HallStockItem(db.Model):
     micron = db.Column(db.String(50), default="")
     rolls_left = db.Column(db.Float, nullable=True)
     kg = db.Column(db.Float, nullable=True)
+    # Optional weight of each roll in KG, as a JSON list, e.g. [168.8, 168.8, 30].
+    # It may cover only part of the stock: kg stays the authoritative total.
+    roll_weights = db.Column(db.Text, nullable=True)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow, nullable=False)
@@ -282,6 +285,44 @@ class HallStockItem(db.Model):
         if self.location == self.LOCATION_MACHINE:
             return "Machine Hall"
         return "In Hall"
+
+    @property
+    def roll_list(self) -> list:
+        from app.services.hall_stock import load_rolls
+
+        return load_rolls(self.roll_weights)
+
+    @property
+    def roll_groups(self) -> list:
+        """[(weight, count), ...] in first-seen order, e.g. [(168.8, 5), (30.0, 1)]."""
+        from app.services.hall_stock import group_rolls
+
+        return group_rolls(self.roll_list)
+
+    @property
+    def roll_spec(self) -> str:
+        """The roll weights in the shorthand people type: '168.8x5 + 30x1'."""
+        from app.services.hall_stock import format_roll_spec
+
+        return format_roll_spec(self.roll_list)
+
+    @property
+    def untracked_kg(self) -> float:
+        """KG not covered by the listed roll weights (0 when every roll is listed)."""
+        rolls = self.roll_list
+        if not rolls:
+            return 0.0
+        extra = float(self.kg or 0) - sum(rolls)
+        return extra if extra > 0.01 else 0.0
+
+    @property
+    def roll_excess_kg(self) -> float:
+        """KG by which the listed rolls exceed the stock (after a part-roll transfer or use)."""
+        rolls = self.roll_list
+        if not rolls:
+            return 0.0
+        extra = sum(rolls) - float(self.kg or 0)
+        return extra if extra > 0.05 else 0.0
 
 
 class HallStockMovement(db.Model):
@@ -303,6 +344,8 @@ class HallStockMovement(db.Model):
     micron = db.Column(db.String(50), default="")
     gross_kg = db.Column(db.Float, nullable=True)
     rolls = db.Column(db.Float, nullable=True)
+    # Weights of the specific rolls moved (JSON list), so deleting a transfer can put them back.
+    roll_weights = db.Column(db.Text, nullable=True)
     where_used = db.Column(db.Text)
     notes = db.Column(db.Text)
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
@@ -1485,3 +1528,14 @@ class SubmitToken(db.Model):
     endpoint = db.Column(db.String(120))
     location = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False, index=True)
+
+
+class DataBackup(db.Model):
+    """Copy of rows removed by a one-time data change, kept so they can be restored."""
+
+    __tablename__ = "data_backups"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    payload = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)

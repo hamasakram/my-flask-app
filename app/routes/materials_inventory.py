@@ -254,16 +254,16 @@ def _save_hall_entry(location: str, redirect_endpoint: str):
         flash(f"{item.material_name} added to {item.location_label}.", "success")
     else:
         flash(f"Added onto existing {item.material_name} in {item.location_label}.", "success")
-    _flash_job_notice(item.material_name, item.size, item.micron)
+    _flash_job_notice(item.material_name, item.size, item.micron, item.material_type)
     return redirect(url_for(redirect_endpoint))
 
 
-def _flash_job_notice(name, size, micron):
+def _flash_job_notice(name, size, micron, material_type=""):
     """Tell the user which open Job Planning jobs this hall stock helps."""
     try:
         from app.services.print_jobs import hall_stock_job_notice
 
-        message = hall_stock_job_notice(name, size or "", micron or "")
+        message = hall_stock_job_notice(name, size or "", micron or "", material_type or "")
     except Exception:  # never block saving stock because of the jobs module
         db.session.rollback()
         return
@@ -309,11 +309,111 @@ def in_hall_stock():
             flash(str(exc), "danger")
         return redirect(url_for("materials.in_hall_stock"))
 
+    import re
+
+    from app.services.hall_stock import format_roll_spec, group_rolls, load_rolls
+
+    items = list_items(HallStockItem.LOCATION_IN_HALL)
+    transfers = list_movements(HallStockMovement.TYPE_TRANSFER)
+
+    # Page summary: material families (base film first, e.g. "LD · Natural", "OPP · Metalize").
+    films = {
+        "PET", "MPET", "METPET", "OPP", "BOPP", "MOPP", "CPP", "MCPP", "LD", "LDPE", "LLDPE",
+        "HD", "HDPE", "PE", "PP", "NYLON", "PVC", "PEARL", "PAPER", "FOIL", "ALU",
+    }
+    palette = ["#2f5fb3", "#0f8a7e", "#7353ba", "#c27c0e", "#56657a", "#b8476e", "#5f8f23", "#1b87a6"]
+
+    def family_of(item):
+        mtype = (item.material_type or "").strip()
+        name = (item.material_name or "").strip()
+        if mtype.upper() in films:
+            base, finish = mtype, name
+        elif name.upper() in films:
+            base, finish = name, mtype
+        else:
+            base, finish = (mtype, name) if mtype else (name, "")
+        if finish.casefold() == base.casefold():
+            finish = ""
+        return base, finish
+
+    def size_key(item):
+        match = re.match(r"\s*(\d+(?:\.\d+)?)", item.size or "")
+        micron = re.match(r"\s*(\d+(?:\.\d+)?)", item.micron or "")
+        return (
+            float(match.group(1)) if match else float("inf"),
+            (item.size or "").casefold(),
+            float(micron.group(1)) if micron else -1.0,
+            (item.micron or "").casefold(),
+        )
+
+    families: dict[str, dict] = {}
+    groups: dict[tuple, dict] = {}
+    item_data = []
+    for item in items:
+        base, finish = family_of(item)
+        fam = families.setdefault(
+            base.casefold(), {"key": base.casefold(), "name": base, "kg": 0.0, "rolls": 0.0, "count": 0}
+        )
+        fam["kg"] += float(item.kg or 0)
+        fam["rolls"] += float(item.rolls_left or 0)
+        fam["count"] += 1
+        group = groups.setdefault(
+            (base.casefold(), finish.casefold()),
+            {
+                "family": base.casefold(),
+                "label": f"{base} · {finish}" if finish else base,
+                "items": [],
+                "kg": 0.0,
+                "rolls": 0.0,
+            },
+        )
+        group["items"].append(item)
+        group["kg"] += float(item.kg or 0)
+        group["rolls"] += float(item.rolls_left or 0)
+        item_data.append(
+            {
+                "id": item.id,
+                "label": group["label"],
+                "size": item.size or "",
+                "micron": item.micron or "",
+                "kg": float(item.kg or 0),
+                "rolls": float(item.rolls_left or 0),
+                "roll_list": item.roll_list,
+            }
+        )
+    family_list = sorted(families.values(), key=lambda f: (-f["kg"], f["key"]))
+    for index, fam in enumerate(family_list):
+        fam["color"] = palette[index % len(palette)]
+    family_rank = {fam["key"]: index for index, fam in enumerate(family_list)}
+    group_list = sorted(groups.values(), key=lambda g: (family_rank[g["family"]], g["label"].casefold()))
+    for group in group_list:
+        group["items"].sort(key=size_key)
+        group["color"] = families[group["family"]]["color"]
+    summary = {
+        "kg": sum(f["kg"] for f in family_list),
+        "rolls": sum(f["rolls"] for f in family_list),
+        "count": len(items),
+        "families": family_list,
+        "groups": group_list,
+    }
+    transfer_info = {}
+    for movement in transfers:
+        base, finish = family_of(movement)
+        moved = load_rolls(movement.roll_weights)
+        transfer_info[movement.id] = {
+            "label": f"{base} · {finish}" if finish else base,
+            "roll_spec": format_roll_spec(moved),
+            "roll_groups": group_rolls(moved),
+        }
+
     return render_template(
         "materials/in_hall_stock.html",
-        items=list_items(HallStockItem.LOCATION_IN_HALL),
-        transfers=list_movements(HallStockMovement.TYPE_TRANSFER),
+        items=items,
+        transfers=transfers,
         job_suggestions=_job_suggestions(),
+        summary=summary,
+        item_data=item_data,
+        transfer_info=transfer_info,
     )
 
 
@@ -444,7 +544,7 @@ def delete_machine_usage(movement_id):
         "success",
     )
     item = result["item"]
-    _flash_job_notice(item.material_name, item.size, item.micron)
+    _flash_job_notice(item.material_name, item.size, item.micron, item.material_type)
     return redirect(url_for("materials.machine_hall_stock"))
 
 
@@ -471,7 +571,7 @@ def edit_hall_stock(item_id):
             )
             db.session.commit()
             flash("Stock row updated.", "success")
-            _flash_job_notice(item.material_name, item.size, item.micron)
+            _flash_job_notice(item.material_name, item.size, item.micron, item.material_type)
             return redirect(url_for(back))
         except ValueError as exc:
             flash(str(exc), "danger")

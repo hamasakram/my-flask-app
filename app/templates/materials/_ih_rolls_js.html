@@ -1,0 +1,224 @@
+{# Roll weights shorthand ("168.8x5 + 30x1") — parsing and the roll builder used by the
+   In-Hall add form and the hall stock edit form. Parsing mirrors
+   app/services/hall_stock.parse_roll_spec; the server validates again on save. #}
+<script>
+window.IHRolls = (function () {
+    'use strict';
+
+    // Same token as the server: number [kg] [x|×|* count [rolls]]; no count = one roll.
+    var TOKEN = /^(\d+(?:\.\d+)?)\s*(?:kgs?)?\s*(?:[x×*]\s*(\d+)\s*(?:rolls?)?)?$/i;
+
+    // The server's \d also accepts Arabic-Indic / Urdu digits; read them the same way here.
+    function asciiDigits(text) {
+        return String(text).replace(/[٠-٩۰-۹]/g, function (ch) {
+            var code = ch.charCodeAt(0);
+            return String(code >= 0x06F0 ? code - 0x06F0 : code - 0x0660);
+        });
+    }
+
+    function round3(value) { return Math.round(value * 1000) / 1000; }
+
+    function num(value) {
+        var text = Number(value || 0).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+        return text === '-0' ? '0' : (text || '0');
+    }
+
+    function kg(value) {
+        return Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
+    }
+
+    function parse(text) {
+        text = String(text || '').trim();
+        var rolls = [];
+        if (!text) return { rolls: rolls, error: null };
+        var tokens = text.split(/[+,;\n]/);
+        for (var i = 0; i < tokens.length; i++) {
+            var token = tokens[i].trim();
+            if (!token) continue;
+            var match = TOKEN.exec(asciiDigits(token));
+            if (!match) {
+                return { rolls: [], bad: token, error: 'Can’t read “' + token + '”. Use weight x number of rolls, e.g. 168.8x5 + 30x1.' };
+            }
+            var weight = parseFloat(match[1]);
+            var count = match[2] ? parseInt(match[2], 10) : 1;
+            if (!(weight > 0)) {
+                return { rolls: [], bad: token, error: 'Each roll must weigh more than 0 kg.' };
+            }
+            if (count < 1 || count > 500) {
+                return { rolls: [], bad: token, error: '“' + token + '” has an invalid number of rolls (1–500).' };
+            }
+            for (var n = 0; n < count; n++) rolls.push(round3(weight));
+        }
+        return { rolls: rolls, error: null };
+    }
+
+    function group(rolls) {
+        var groups = [];
+        (rolls || []).forEach(function (weight) {
+            for (var i = 0; i < groups.length; i++) {
+                if (Math.abs(groups[i][0] - weight) < 0.0005) { groups[i][1] += 1; return; }
+            }
+            groups.push([weight, 1]);
+        });
+        return groups;
+    }
+
+    function formatSpec(rolls) {
+        return group(rolls).map(function (g) { return num(g[0]) + 'x' + g[1]; }).join(' + ');
+    }
+
+    function sum(rolls) {
+        return round3((rolls || []).reduce(function (a, b) { return a + b; }, 0));
+    }
+
+    function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+    // Roll builder: a shorthand text field with live preview, removable chips and a
+    // "weight × rolls  Add" helper. While roll weights are entered, KG and Rolls are
+    // filled from them and read-only (the server does the same).
+    function builder(root) {
+        if (!root) return null;
+        var spec = root.querySelector('[data-roll-spec]');
+        var preview = root.querySelector('[data-roll-preview]');
+        var chips = root.querySelector('[data-roll-chips]');
+        var wInput = root.querySelector('[data-roll-weight]');
+        var nInput = root.querySelector('[data-roll-count]');
+        var addBtn = root.querySelector('[data-roll-add]');
+        var form = spec ? spec.form : null;
+        var kgInput = form ? form.querySelector('[data-roll-kg]') : null;
+        var rollsInput = form ? form.querySelector('[data-roll-rolls]') : null;
+        if (!spec) return null;
+        var emptyText = preview ? preview.textContent : '';
+
+        function lock(input, value) {
+            if (!input) return;
+            if (!input.readOnly) input.dataset.ihManual = input.value;
+            input.value = value;
+            input.readOnly = true;
+            input.classList.add('ih-auto');
+            var note = form.querySelector('[data-auto-note="' + input.name + '"]');
+            if (note) note.hidden = false;
+        }
+        function unlock(input) {
+            if (!input || !input.readOnly) return;
+            input.readOnly = false;
+            input.value = input.dataset.ihManual || '';
+            input.classList.remove('ih-auto');
+            var note = form.querySelector('[data-auto-note="' + input.name + '"]');
+            if (note) note.hidden = true;
+        }
+
+        function renderChips(rolls) {
+            if (!chips) return;
+            chips.textContent = '';
+            group(rolls).forEach(function (g, index) {
+                var li = document.createElement('li');
+                li.className = 'ih-roll ih-roll-edit';
+                var w = document.createElement('span');
+                w.className = 'ih-roll-w';
+                w.textContent = num(g[0]) + ' kg';
+                li.appendChild(w);
+                if (g[1] > 1) {
+                    var n = document.createElement('span');
+                    n.className = 'ih-roll-n';
+                    n.textContent = '× ' + g[1];
+                    li.appendChild(n);
+                }
+                var x = document.createElement('button');
+                x.type = 'button';
+                x.className = 'ih-roll-x';
+                x.setAttribute('aria-label', 'Remove ' + plural(g[1], 'roll') + ' of ' + num(g[0]) + ' kg');
+                x.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>';
+                x.addEventListener('click', function () {
+                    var groups = group(parse(spec.value).rolls);
+                    groups.splice(index, 1);
+                    var left = [];
+                    groups.forEach(function (gg) { for (var k = 0; k < gg[1]; k++) left.push(gg[0]); });
+                    spec.value = formatSpec(left);
+                    update();
+                    spec.focus({ preventScroll: true });
+                });
+                li.appendChild(x);
+                chips.appendChild(li);
+            });
+            chips.hidden = !chips.children.length;
+        }
+
+        function update() {
+            var result = parse(spec.value);
+            spec.classList.toggle('ih-invalid', !!result.error);
+            spec.setAttribute('aria-invalid', result.error ? 'true' : 'false');
+            if (result.error) {
+                if (preview) { preview.className = 'ih-roll-preview ih-roll-preview-error'; preview.textContent = result.error; }
+                renderChips([]);
+                unlock(kgInput); unlock(rollsInput);
+                return result;
+            }
+            if (result.rolls.length) {
+                var total = sum(result.rolls);
+                if (preview) {
+                    preview.className = 'ih-roll-preview ih-roll-preview-ok';
+                    preview.innerHTML = '';
+                    var b = document.createElement('strong');
+                    b.textContent = plural(result.rolls.length, 'roll') + ' · ' + kg(total) + ' kg';
+                    preview.appendChild(b);
+                }
+                renderChips(result.rolls);
+                // Edit page: while the roll list is unchanged the server keeps the stored
+                // KG/rolls (they can differ from the roll total after part-roll use).
+                var orig = spec.dataset.rollOriginal;
+                var same = orig !== undefined && orig !== '' &&
+                    parse(orig).rolls.slice().sort().join('|') === result.rolls.slice().sort().join('|');
+                lock(kgInput, same ? spec.dataset.origKg : num(total));
+                lock(rollsInput, same ? spec.dataset.origRolls : String(result.rolls.length));
+            } else {
+                if (preview) { preview.className = 'ih-roll-preview'; preview.textContent = emptyText; }
+                renderChips([]);
+                unlock(kgInput); unlock(rollsInput);
+            }
+            root.dispatchEvent(new CustomEvent('ih-rolls-change', { detail: result }));
+            return result;
+        }
+
+        function quickAdd() {
+            if (!wInput) return;
+            var w = parseFloat(asciiDigits(wInput.value));
+            var n = nInput && nInput.value !== '' ? parseInt(asciiDigits(nInput.value), 10) : 1;
+            if (!(w > 0)) { wInput.focus(); wInput.classList.add('ih-invalid'); return; }
+            if (!(n >= 1 && n <= 500)) { if (nInput) { nInput.focus(); nInput.classList.add('ih-invalid'); } return; }
+            wInput.classList.remove('ih-invalid');
+            if (nInput) nInput.classList.remove('ih-invalid');
+            var current = spec.value.replace(/\s+$/, '');
+            var part = num(w) + 'x' + n;
+            spec.value = current ? (/[+,;]$/.test(current) ? current + ' ' + part : current + ' + ' + part) : part;
+            wInput.value = '';
+            if (nInput) nInput.value = '1';
+            update();
+            wInput.focus();
+        }
+
+        spec.addEventListener('input', update);
+        if (addBtn) addBtn.addEventListener('click', quickAdd);
+        [wInput, nInput].forEach(function (el) {
+            if (!el) return;
+            el.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') { e.preventDefault(); quickAdd(); }
+            });
+            el.addEventListener('input', function () { el.classList.remove('ih-invalid'); });
+        });
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                if (parse(spec.value).error) {
+                    e.preventDefault();
+                    update();
+                    spec.focus();
+                }
+            });
+        }
+        update();
+        return { update: update, spec: spec };
+    }
+
+    return { parse: parse, group: group, formatSpec: formatSpec, sum: sum, num: num, kg: kg, plural: plural, builder: builder };
+})();
+</script>

@@ -77,8 +77,81 @@ def _norm_micron(value) -> str:
     return re.sub(r"\s+", "", text)
 
 
-def material_key(name: str, size: str = "", micron: str = "") -> str:
+def material_key(name: str, size: str = "", micron: str = "", category: str = "") -> str:
+    """Identity of a material: name + type + size + micron (case/spacing/unit-insensitive).
+    Type is part of it so e.g. LD Natural 660 and LD Milky 660 stay separate."""
+    return f"{_norm_text(name)}|{_norm_text(category)}|{_norm_size(size)}|{_norm_micron(micron)}"
+
+
+def loose_key(name: str, size: str = "", micron: str = "") -> str:
+    """Name + size + micron only (the key used before type was added)."""
     return f"{_norm_text(name)}|{_norm_size(size)}|{_norm_micron(micron)}"
+
+
+def _catalog_choice(catalog: dict, choice: str):
+    """Find a dropdown choice in the catalog. Also accepts the older name|size|micron key
+    (a Job page opened before type was added to the key) when it points to one material."""
+    entry = catalog.get(choice)
+    if entry:
+        return entry
+    parts = choice.split("|")
+    if len(parts) == 3:
+        loose = "|".join(parts)
+    elif len(parts) == 4 and not parts[1]:
+        loose = "|".join((parts[0], parts[2], parts[3]))
+    else:
+        return None
+    matches = [
+        e for key, e in catalog.items()
+        if len(key.split("|")) == 4 and "|".join(key.split("|")[i] for i in (0, 2, 3)) == loose
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _merge_entries(entries: list[dict]) -> dict:
+    merged = dict(entries[0])
+    for field in ("in_hall_kg", "in_hall_rolls", "machine_kg", "machine_rolls", "total_kg"):
+        merged[field] = sum(float(e.get(field) or 0) for e in entries)
+    merged["listed"] = any(e["listed"] for e in entries)
+    merged["in_stock"] = merged.get("total_kg", 0) > EPSILON
+    return merged
+
+
+def resolve_entry(line, catalog: dict[str, dict]) -> dict | None:
+    """Catalog entry for a saved job material line.
+
+    Exact key first. Lines saved before type was part of the key (or typed in without a
+    type) fall back to name + size + micron: the entry with the same type if there is one,
+    the only entry if there is just one, otherwise all of them added together.
+    """
+    entry = catalog.get(line.material_key)
+    if entry:
+        return entry
+    entry = catalog.get(material_key(line.material_name, line.size, line.micron, line.category))
+    if entry:
+        return entry
+    wanted = loose_key(line.material_name, line.size, line.micron)
+    candidates = [
+        e for e in catalog.values() if loose_key(e["name"], e["size"], e["micron"]) == wanted
+    ]
+    if not candidates:
+        return None
+    category = _norm_text(line.category)
+    same_type = [e for e in candidates if _norm_text(e["category"]) == category]
+    if len(same_type) == 1:
+        return same_type[0]
+    if len(candidates) == 1:
+        return candidates[0]
+    listed = [e for e in candidates if e["listed"]]
+    return _merge_entries(listed or candidates)
+
+
+def line_matches_material(line, name: str, size: str = "", micron: str = "", category: str = "") -> bool:
+    """Does this job line ask for the given hall material?"""
+    if loose_key(line.material_name, line.size, line.micron) != loose_key(name, size, micron):
+        return False
+    line_type, item_type = _norm_text(line.category), _norm_text(category)
+    return not line_type or not item_type or line_type == item_type
 
 
 def format_micron(micron: str) -> str:
@@ -130,7 +203,7 @@ def build_material_catalog() -> dict[str, dict]:
     entries: dict[str, dict] = {}
 
     def entry_for(category, name, size, micron) -> dict:
-        key = material_key(name, size, micron)
+        key = material_key(name, size, micron, category)
         if key not in entries:
             entries[key] = _blank_material_entry(key, category, name, size, micron)
         elif not entries[key]["category"] and _clean(category):
@@ -150,10 +223,13 @@ def build_material_catalog() -> dict[str, dict]:
         entry["listed"] = True
 
     # Materials typed on earlier jobs (not in either hall) stay selectable as "to purchase".
+    for entry in entries.values():
+        entry["total_kg"] = entry["in_hall_kg"] + entry["machine_kg"]
     for line in PrintJobMaterial.query.all():
-        if line.material_key not in entries:
-            entries[line.material_key] = _blank_material_entry(
-                line.material_key, line.category, line.material_name, line.size, line.micron
+        if resolve_entry(line, entries) is None:
+            key = material_key(line.material_name, line.size, line.micron, line.category)
+            entries[key] = _blank_material_entry(
+                key, line.category, line.material_name, line.size, line.micron
             )
 
     for entry in entries.values():
@@ -261,7 +337,7 @@ def _line_status(available: float, required, *, listed: bool) -> tuple[str, floa
 
 
 def check_material_line(line: PrintJobMaterial, catalog: dict[str, dict]) -> dict:
-    entry = catalog.get(line.material_key)
+    entry = resolve_entry(line, catalog)
     in_hall = entry["in_hall_kg"] if entry else 0.0
     machine = entry["machine_kg"] if entry else 0.0
     total = in_hall + machine
@@ -271,6 +347,7 @@ def check_material_line(line: PrintJobMaterial, catalog: dict[str, dict]) -> dic
     became_available = status == STATUS_OK and was in (STATUS_OUT, STATUS_UNLISTED, STATUS_SHORT)
     return {
         "line": line,
+        "entry_key": entry["key"] if entry else line.material_key,
         "position": line.position,
         "status_at_save": was,
         "became_available": became_available,
@@ -360,7 +437,7 @@ def build_purchase_list(evaluations: list[dict]) -> dict:
     for evaluation in evaluations:
         job = evaluation["job"]
         for row in evaluation["materials"]:
-            key = row["line"].material_key
+            key = row["entry_key"]
             item = items.get(key)
             if item is None:
                 item = items[key] = {
@@ -418,26 +495,29 @@ def purchase_list_for_open_jobs() -> dict:
 # --------------------------------------------------------------------------- hall stock hooks
 
 
-def open_jobs_using(name: str, size: str = "", micron: str = "") -> list[dict]:
+def open_jobs_using(name: str, size: str = "", micron: str = "", category: str = "") -> list[dict]:
     """Open jobs that need this material, with their live stock check (oldest first)."""
-    key = material_key(name, size, micron)
     jobs = [
         job for job in list_open_jobs()
-        if any(line.material_key == key for line in job.materials)
+        if any(line_matches_material(line, name, size, micron, category) for line in job.materials)
     ]
     return evaluate_jobs(jobs)
 
 
-def hall_stock_job_notice(name: str, size: str = "", micron: str = "") -> str | None:
+def hall_stock_job_notice(name: str, size: str = "", micron: str = "", category: str = "") -> str | None:
     """Message shown after hall stock is added: which open jobs need it and are they ready now."""
-    rows = open_jobs_using(name, size, micron)
+    rows = open_jobs_using(name, size, micron, category)
     if not rows:
         return None
-    key = material_key(name, size, micron)
     parts = []
+    total = 0.0
     for row in rows:
         job = row["job"]
-        line = next(m for m in row["materials"] if m["line"].material_key == key)
+        line = next(
+            m for m in row["materials"]
+            if line_matches_material(m["line"], name, size, micron, category)
+        )
+        total = line["total_kg"]
         if row["ready"]:
             state = "now READY to run"
         elif line["status"] == STATUS_OK:
@@ -447,9 +527,6 @@ def hall_stock_job_notice(name: str, size: str = "", micron: str = "") -> str | 
         else:
             state = "still not in stock"
         parts.append(f"{job.job_number} {job.job_name} ({state})")
-    total = rows[0]["materials"] and next(
-        m for m in rows[0]["materials"] if m["line"].material_key == key
-    )["total_kg"]
     return (
         f"Job Planning: {_clean(name)} is needed by {len(rows)} open job(s) — "
         f"{total:,.2f} kg now in In Hall + Machine Hall. " + "; ".join(parts) + "."
@@ -479,7 +556,7 @@ def hall_material_suggestions() -> list[dict]:
         for m in row["materials"]:
             if m["status"] == STATUS_OK:
                 continue
-            key = m["line"].material_key
+            key = m["entry_key"]
             item = seen.setdefault(
                 key,
                 {
@@ -627,7 +704,7 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict | None = None
             size = _clean(form.get(f"material_{slot}_size"))
             micron = _clean(form.get(f"material_{slot}_micron"))
         else:
-            entry = material_catalog.get(choice)
+            entry = _catalog_choice(material_catalog, choice)
             if not entry:
                 raise ValueError(f"{label}: that material is no longer in the list. Pick it again.")
             category, name, size, micron = (
@@ -637,7 +714,7 @@ def parse_job_form(form, material_catalog: dict, ink_catalog: dict | None = None
         data["materials"].append(
             {
                 "position": slot,
-                "material_key": material_key(name, size, micron),
+                "material_key": material_key(name, size, micron, category),
                 "category": category,
                 "material_name": name,
                 "size": size,
@@ -778,8 +855,10 @@ def job_form_values(job: PrintJob | None, material_catalog: dict, ink_catalog: d
 
     materials = {slot: {"choice": "", "kg": ""} for slot in MATERIAL_SLOTS}
     for line in job.materials:
+        resolved = resolve_entry(line, material_catalog)
+        resolved_key = resolved["key"] if resolved else ""
         materials[line.position] = {
-            "choice": line.material_key if line.material_key in material_catalog else "",
+            "choice": resolved_key if resolved_key in material_catalog else "",
             "kg": _fmt_kg_input(line.required_kg),
         }
 

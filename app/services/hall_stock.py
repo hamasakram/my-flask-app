@@ -1,9 +1,129 @@
 """In Hall and Machine Hall stock — separate from printing materials stock in/left."""
 
+import json
+import re
 from datetime import datetime
+from itertools import combinations
 
 from app import db
 from app.models import HallStockItem, HallStockMovement
+
+ROLL_TOLERANCE = 0.05  # KG
+
+
+# --------------------------------------------------------------------------- roll weights
+
+
+def load_rolls(raw) -> list[float]:
+    if not raw:
+        return []
+    try:
+        values = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    rolls = []
+    for value in values if isinstance(values, list) else []:
+        try:
+            weight = round(float(value), 3)
+        except (TypeError, ValueError):
+            continue
+        if weight > 0:
+            rolls.append(weight)
+    return rolls
+
+
+def dump_rolls(rolls) -> str | None:
+    rolls = [round(float(w), 3) for w in (rolls or []) if float(w) > 0]
+    return json.dumps(rolls) if rolls else None
+
+
+def _num(value: float) -> str:
+    text = f"{float(value):.3f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def group_rolls(rolls) -> list[tuple[float, int]]:
+    groups: list[list] = []
+    for weight in rolls or []:
+        for group in groups:
+            if abs(group[0] - weight) < 0.0005:
+                group[1] += 1
+                break
+        else:
+            groups.append([weight, 1])
+    return [(w, n) for w, n in groups]
+
+
+def format_roll_spec(rolls) -> str:
+    """[168.8]*5 + [30] -> '168.8x5 + 30x1' (the shorthand used on the floor)."""
+    return " + ".join(f"{_num(w)}x{n}" for w, n in group_rolls(rolls))
+
+
+_ROLL_TOKEN = re.compile(
+    r"^(\d+(?:\.\d+)?)\s*(?:kgs?)?\s*(?:[x×*]\s*(\d+)\s*(?:rolls?)?)?$", re.IGNORECASE
+)
+
+
+def parse_roll_spec(text: str) -> list[float]:
+    """Parse '168.8x5 + 30x1', '79x1 + 76+86+84+84 + 12', '81x1, 77x5' or '54+53kg'
+    into one weight per roll. A number without 'xN' is one roll."""
+    text = (text or "").strip()
+    if not text:
+        return []
+    rolls: list[float] = []
+    for token in re.split(r"[+,;\n]", text):
+        token = token.strip()
+        if not token:
+            continue
+        match = _ROLL_TOKEN.match(token)
+        if not match:
+            raise ValueError(
+                f"Roll weights: can't read \"{token}\". Use weight x number of rolls, "
+                "e.g. 168.8x5 + 30x1."
+            )
+        weight = float(match.group(1))
+        count = int(match.group(2) or 1)
+        if weight <= 0:
+            raise ValueError("Roll weights: each roll must weigh more than 0 KG.")
+        if count < 1 or count > 500:
+            raise ValueError(f"Roll weights: \"{token}\" has an invalid number of rolls.")
+        rolls.extend([round(weight, 3)] * count)
+    return rolls
+
+
+def _remove_rolls(available: list[float], picked: list[float]) -> list[float]:
+    """Remove each picked weight once from available; raises if one isn't there."""
+    remaining = list(available)
+    for weight in picked:
+        for index, candidate in enumerate(remaining):
+            if abs(candidate - weight) < 0.0005:
+                del remaining[index]
+                break
+        else:
+            raise ValueError(f"A roll of {_num(weight)} kg is not in this material's roll list.")
+    return remaining
+
+
+def _auto_pick(available: list[float], kg: float, count: int | None) -> list[float] | None:
+    """Find rolls whose weights add up to kg (and match the roll count when given)."""
+    if not available or kg is None:
+        return None
+    sizes = [int(count)] if count else range(1, min(len(available), 4) + 1)
+    unique_order = list(available)
+    for size in sizes:
+        if size < 1 or size > len(available) or size > 6:
+            continue
+        seen = set()
+        for combo in combinations(range(len(unique_order)), size):
+            weights = tuple(sorted(unique_order[i] for i in combo))
+            if weights in seen:
+                continue
+            seen.add(weights)
+            if abs(sum(weights) - kg) <= ROLL_TOLERANCE:
+                return list(weights)
+            if len(seen) > 20000:
+                break
+    return None
 
 
 def _clean(value: str) -> str:
@@ -57,7 +177,8 @@ def list_movements(movement_type: str, limit: int = 80) -> list[HallStockMovemen
 def _add_optional(current, incoming) -> float | None:
     if incoming is None:
         return current
-    return float(current or 0) + float(incoming)
+    # Round to grams so repeated adds/subtracts don't leave float noise (858.4000000000001).
+    return round(float(current or 0) + float(incoming), 3)
 
 
 def _subtract_optional(current, outgoing, label: str) -> float | None:
@@ -69,7 +190,7 @@ def _subtract_optional(current, outgoing, label: str) -> float | None:
     remaining = available - float(outgoing)
     if remaining <= 0.0001:
         return 0.0
-    return remaining
+    return round(remaining, 3)
 
 
 def parse_stock_fields(form, *, require_quantity: bool = True) -> dict:
@@ -83,6 +204,12 @@ def parse_stock_fields(form, *, require_quantity: bool = True) -> dict:
         rolls = None
     if form.get("kg", "").strip() == "":
         kg = None
+
+    rolls_list = parse_roll_spec(form.get("roll_spec", ""))
+    if rolls_list:
+        # Roll weights given: they decide the KG total and the number of rolls.
+        kg = round(sum(rolls_list), 3)
+        rolls = float(len(rolls_list))
 
     if not name:
         raise ValueError("Material name is required.")
@@ -102,6 +229,7 @@ def parse_stock_fields(form, *, require_quantity: bool = True) -> dict:
         "micron": micron,
         "rolls_left": rolls,
         "kg": kg,
+        "roll_list": rolls_list,
     }
 
 
@@ -116,6 +244,8 @@ def add_or_increase_stock(location: str, data: dict, user_id: int | None) -> tup
     if existing:
         existing.rolls_left = _add_optional(existing.rolls_left, data["rolls_left"])
         existing.kg = _add_optional(existing.kg, data["kg"])
+        if data.get("roll_list"):
+            existing.roll_weights = dump_rolls(load_rolls(existing.roll_weights) + data["roll_list"])
         return existing, False
 
     item = HallStockItem(
@@ -126,6 +256,7 @@ def add_or_increase_stock(location: str, data: dict, user_id: int | None) -> tup
         micron=data["micron"],
         rolls_left=data["rolls_left"],
         kg=data["kg"],
+        roll_weights=dump_rolls(data.get("roll_list")),
         created_by_id=user_id,
     )
     db.session.add(item)
@@ -147,8 +278,16 @@ def update_item_fields(item: HallStockItem, data: dict) -> None:
     item.material_type = data["material_type"]
     item.size = data["size"]
     item.micron = data["micron"]
-    item.rolls_left = data["rolls_left"]
-    item.kg = data["kg"]
+    new_rolls = data.get("roll_list") or []
+    if new_rolls and sorted(new_rolls) == sorted(item.roll_list):
+        # Roll list unchanged (e.g. only the micron was corrected): keep the stock KG/rolls
+        # as they are, so rows with part-used rolls or unsplit KG are not changed silently.
+        pass
+    else:
+        item.rolls_left = data["rolls_left"]
+        item.kg = data["kg"]
+    # Editing: the roll list on the form replaces the stored one (blank clears it).
+    item.roll_weights = dump_rolls(data.get("roll_list"))
 
 
 def transfer_to_machine_hall(form, user_id: int | None) -> HallStockMovement:
@@ -164,17 +303,46 @@ def transfer_to_machine_hall(form, user_id: int | None) -> HallStockMovement:
 
     if not item_id:
         raise ValueError("Select the In Hall material to transfer.")
-    item = HallStockItem.query.get(item_id)
+    item = db.session.get(HallStockItem, item_id)
     if not item or item.location != HallStockItem.LOCATION_IN_HALL:
         raise ValueError("Selected material is not in In Hall stock.")
+
+    available_rolls = load_rolls(item.roll_weights)
+    picked: list[float] = []
+    for raw in form.getlist("roll_pick") if hasattr(form, "getlist") else []:
+        try:
+            weight = round(float(raw), 3)
+        except (TypeError, ValueError):
+            continue
+        if weight > 0:
+            picked.append(weight)
+    if picked:
+        remaining_rolls = _remove_rolls(available_rolls, picked)
+        if gross_kg is None:
+            gross_kg = round(sum(picked), 3)
+        if rolls is None:
+            rolls = float(len(picked))
+
     if gross_kg is None or gross_kg <= 0:
         raise ValueError("Gross weight (KG) to transfer must be greater than zero.")
     if rolls is not None and rolls < 0:
         raise ValueError("Rolls cannot be negative.")
 
+    if not picked and available_rolls:
+        auto = _auto_pick(available_rolls, gross_kg, int(rolls) if rolls and float(rolls).is_integer() else None)
+        if auto:
+            picked = auto
+            remaining_rolls = _remove_rolls(available_rolls, picked)
+        else:
+            remaining_rolls = available_rolls
+
     item.kg = _subtract_optional(item.kg, gross_kg, "Gross weight")
     if rolls:
         item.rolls_left = _subtract_optional(item.rolls_left, rolls, "Rolls")
+    if available_rolls:
+        # Picked/matched rolls are removed. If the KG didn't match whole rolls the list is
+        # kept as it is and the page flags the difference (HallStockItem.roll_excess_kg).
+        item.roll_weights = dump_rolls(remaining_rolls)
 
     dest = find_matching_item(
         HallStockItem.LOCATION_MACHINE,
@@ -212,6 +380,7 @@ def transfer_to_machine_hall(form, user_id: int | None) -> HallStockMovement:
         micron=item.micron or "",
         gross_kg=gross_kg,
         rolls=rolls,
+        roll_weights=dump_rolls(picked),
         notes=notes or None,
         created_by_id=user_id,
     )
@@ -256,10 +425,13 @@ def undo_transfer(movement: HallStockMovement, user_id: int | None = None) -> di
             HallStockItem.LOCATION_IN_HALL, name, movement.material_type or "",
             movement.size or "", movement.micron or "",
         )
+    moved_rolls = load_rolls(movement.roll_weights)
     if source is not None:
         source.kg = _add_optional(source.kg, kg)
         if rolls:
             source.rolls_left = _add_optional(source.rolls_left, rolls)
+        if moved_rolls:
+            source.roll_weights = dump_rolls(load_rolls(source.roll_weights) + moved_rolls)
     else:
         source = HallStockItem(
             location=HallStockItem.LOCATION_IN_HALL,
@@ -269,6 +441,7 @@ def undo_transfer(movement: HallStockMovement, user_id: int | None = None) -> di
             micron=movement.micron or "",
             kg=kg,
             rolls_left=rolls or None,
+            roll_weights=dump_rolls(moved_rolls),
             created_by_id=user_id,
         )
         db.session.add(source)
