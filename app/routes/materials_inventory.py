@@ -423,8 +423,8 @@ def in_hall_stock_pdf():
     output = generate_hall_stock_pdf(
         "In Hall Stock",
         list_items(HallStockItem.LOCATION_IN_HALL),
-        list_movements(HallStockMovement.TYPE_TRANSFER, limit=200),
-        "Transfers to Machine Hall",
+        [],
+        None,  # stock only: transfers are left out of the In Hall PDF
     )
     return send_file(
         output,
@@ -507,6 +507,13 @@ def delete_hall_transfer(movement_id):
         flash(str(exc), "danger")
         return redirect(url_for("materials.in_hall_stock"))
     rolls = f" and {result['rolls']:,.2f} roll(s)" if result["rolls"] else ""
+    if result.get("history_only"):
+        flash(
+            f"Transfer record deleted ({result['name']}). It was made before the stock count, "
+            "so the counted In Hall and Machine Hall stock was not changed.",
+            "success",
+        )
+        return redirect(url_for("materials.in_hall_stock"))
     flash(
         f"Transfer deleted: {result['kg']:,.3f} kg{rolls} of {result['name']} moved back to In Hall "
         "and removed from Machine Hall.",
@@ -533,6 +540,13 @@ def delete_machine_usage(movement_id):
     except ValueError as exc:
         db.session.rollback()
         flash(str(exc), "danger")
+        return redirect(url_for("materials.machine_hall_stock"))
+    if result.get("history_only"):
+        flash(
+            f"Usage record deleted ({result['name']}). It was made before the stock count, "
+            "so the counted Machine Hall stock was not changed.",
+            "success",
+        )
         return redirect(url_for("materials.machine_hall_stock"))
     parts = []
     if result["kg"]:

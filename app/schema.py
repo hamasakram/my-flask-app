@@ -779,9 +779,13 @@ def ensure_schema():
 
     backfill_status_snapshots()
 
-    from app.services.hall_stock_import import replace_in_hall_stock_nov_2026
+    from app.services.hall_stock_import import (
+        replace_in_hall_stock_nov_2026,
+        replace_machine_hall_stock_nov_2026,
+    )
 
     replace_in_hall_stock_nov_2026()
+    replace_machine_hall_stock_nov_2026()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

@@ -147,3 +147,111 @@ def replace_in_hall_stock_nov_2026() -> None:
 
     db.session.add(AppSetting(key=FLAG_KEY, value=f"replaced {len(old_ids)} rows"))
     db.session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Machine Hall: count of 16 Nov 2026 (KG only; no roll counts were given)
+# ---------------------------------------------------------------------------
+
+MACHINE_FLAG_KEY = "machine_hall_replaced_2026_11_16"
+MACHINE_BACKUP_KEY = "machine_hall_backup_2026_11_16"
+# Transfers / usage records up to the stored movement id belong to the old counts: deleting
+# them removes the history line only and does not move stock (see hall_stock.py).
+STOCK_COUNT_KEY = "hall_stock_count_last_movement_id"
+
+# (material name, type, size mm, micron, kg). Same size listed twice is added together
+# into one row (PET 540 = 26 + 21.65, MPET 510 = 10.1 + 58.4).
+MACHINE_HALL_STOCK_2026_11_16 = [
+    # PET
+    ("PET", "PET", "510", "", 8.35),
+    ("PET", "PET", "810", "", 81),
+    ("PET", "PET", "540", "", 26),
+    ("PET", "PET", "570", "", 15.8),
+    ("PET", "PET", "540", "", 21.65),
+    ("PET", "PET", "765", "", 14),
+    ("PET", "PET", "680", "", 65.8),
+    ("PET", "PET", "855", "", 140),
+    # OPP
+    ("Heatsealable", "OPP", "765", "", 11.4),
+    ("Metalize", "OPP", "810", "", 124),
+    ("Metalize", "OPP", "680", "", 119.4),
+    # LD Milky
+    ("LD", "Milky", "640", "50", 39.7),
+    ("LD", "Milky", "640", "40", 5.7),
+    ("LD", "Milky", "640", "90", 15.55),
+    ("LD", "Milky", "610", "50", 21.4),
+    # LD Natural
+    ("LD", "Natural", "570", "90", 58.9),
+    ("LD", "Natural", "765", "40", 45.8),
+    ("LD", "Natural", "740", "70", 31.1),
+    ("LD", "Natural", "640", "40", 24),
+    ("LD", "Natural", "485", "50", 5.95),
+    ("LD", "Natural", "680", "50", 53.6),
+    # MPET
+    ("MPET", "MPET", "510", "", 10.1),
+    ("MPET", "MPET", "640", "", 39.8),
+    ("MPET", "MPET", "510", "", 58.4),
+    # CPP Metalize
+    ("Metalize", "CPP", "510", "", 33.5),
+    ("Metalize", "CPP", "570", "", 19.1),
+    ("Metalize", "CPP", "680", "", 21.8),
+]
+
+
+def new_machine_hall_rows() -> list[dict]:
+    merged: dict[tuple, dict] = {}
+    for name, material_type, size, micron, kg in MACHINE_HALL_STOCK_2026_11_16:
+        key = (name.lower(), material_type.lower(), size, micron)
+        if key in merged:
+            merged[key]["kg"] = round(merged[key]["kg"] + kg, 3)
+        else:
+            merged[key] = {
+                "material_name": name,
+                "material_type": material_type,
+                "size": size,
+                "micron": micron,
+                "kg": float(kg),
+                "rolls_left": None,
+                "roll_weights": None,
+            }
+    return list(merged.values())
+
+
+def replace_machine_hall_stock_nov_2026() -> None:
+    if AppSetting.query.filter_by(key=MACHINE_FLAG_KEY).first():
+        return
+
+    old_items = HallStockItem.query.filter_by(location=HallStockItem.LOCATION_MACHINE).all()
+    old_ids = [item.id for item in old_items]
+
+    if not DataBackup.query.filter_by(key=MACHINE_BACKUP_KEY).first():
+        db.session.add(
+            DataBackup(
+                key=MACHINE_BACKUP_KEY,
+                payload=json.dumps([_row_snapshot(item) for item in old_items]),
+            )
+        )
+
+    if old_ids:
+        HallStockMovement.query.filter(HallStockMovement.source_item_id.in_(old_ids)).update(
+            {HallStockMovement.source_item_id: None}, synchronize_session=False
+        )
+        HallStockMovement.query.filter(HallStockMovement.dest_item_id.in_(old_ids)).update(
+            {HallStockMovement.dest_item_id: None}, synchronize_session=False
+        )
+        for item in old_items:
+            db.session.delete(item)
+        db.session.flush()
+
+    for row in new_machine_hall_rows():
+        db.session.add(HallStockItem(location=HallStockItem.LOCATION_MACHINE, **row))
+
+    # Every transfer/usage recorded so far (id <= this) belongs to the old counts.
+    last_id = db.session.query(db.func.max(HallStockMovement.id)).scalar() or 0
+    setting = AppSetting.query.filter_by(key=STOCK_COUNT_KEY).first()
+    if setting:
+        setting.value = str(last_id)
+    else:
+        db.session.add(AppSetting(key=STOCK_COUNT_KEY, value=str(last_id)))
+    db.session.add(AppSetting(key=MACHINE_FLAG_KEY, value=f"replaced {len(old_ids)} rows"))
+    db.session.commit()

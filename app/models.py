@@ -351,6 +351,13 @@ class HallStockMovement(db.Model):
     created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
+    @property
+    def before_stock_count(self) -> bool:
+        """Recorded before the last stock count: deleting it doesn't move stock."""
+        from app.services.hall_stock import is_before_stock_count
+
+        return is_before_stock_count(self)
+
     source_item = db.relationship("HallStockItem", foreign_keys=[source_item_id])
     dest_item = db.relationship("HallStockItem", foreign_keys=[dest_item_id])
     created_by = db.relationship("User", foreign_keys=[created_by_id])

@@ -206,7 +206,7 @@ def generate_hall_stock_pdf(
     title: str,
     items: list[HallStockItem],
     movements: list[HallStockMovement],
-    movement_title: str,
+    movement_title: str | None,
     *,
     include_where_used: bool = False,
 ) -> BytesIO:
@@ -425,8 +425,12 @@ def generate_hall_stock_pdf(
         elements.append(grand)
 
     # ------------------------------------------------------------------ movements
-    elements.append(Paragraph(_t(movement_title), section_style))
-    if not movements:
+    # No movement_title = stock only (the In Hall PDF leaves transfers out).
+    if movement_title:
+        elements.append(Paragraph(_t(movement_title), section_style))
+    if not movement_title:
+        pass
+    elif not movements:
         elements.append(Paragraph("No records yet.", cell))
     else:
         moved_rolls = {row.id: load_rolls(row.roll_weights) for row in movements}

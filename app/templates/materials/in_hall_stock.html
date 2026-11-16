@@ -359,7 +359,7 @@
                     {% if can_edit %}
                     <td data-cell="actions">
                         <form method="POST" action="{{ url_for('materials.delete_hall_transfer', movement_id=row.id) }}" class="inline-action-form"
-                              onsubmit="return confirm({{ ('Delete this transfer? ' ~ '{:,.3f}'.format(row.gross_kg or 0) ~ ' kg of ' ~ row.material_name ~ ' will go back to In Hall and be removed from Machine Hall.')|tojson|forceescape }});">
+                              onsubmit="return confirm({{ (('Delete this transfer record? It was made before the stock count, so stock will not change.') if row.before_stock_count else ('Delete this transfer? ' ~ '{:,.3f}'.format(row.gross_kg or 0) ~ ' kg of ' ~ row.material_name ~ ' will go back to In Hall and be removed from Machine Hall.'))|tojson|forceescape }});">
                             <button type="submit" class="ih-act ih-act-del">Delete</button>
                         </form>
                     </td>

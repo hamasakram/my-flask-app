@@ -388,11 +388,44 @@ def transfer_to_machine_hall(form, user_id: int | None) -> HallStockMovement:
     return movement
 
 
+def stock_count_last_id() -> int:
+    """Id of the last transfer/usage record made before the stock count (0 if none)."""
+    from app.models import AppSetting
+
+    setting = AppSetting.query.filter_by(key="hall_stock_count_last_movement_id").first()
+    try:
+        return int(setting.value) if setting else 0
+    except ValueError:
+        return 0
+
+
+def is_before_stock_count(movement: HallStockMovement) -> bool:
+    """True for transfers/usage recorded before the stock count. The counted rows already
+    reflect them, so deleting such a record must not move any stock."""
+    return bool(movement.id) and movement.id <= stock_count_last_id()
+
+
+def _delete_history_only(movement: HallStockMovement) -> dict:
+    result = {
+        "name": movement.material_name,
+        "kg": float(movement.gross_kg or 0),
+        "rolls": float(movement.rolls or 0),
+        "history_only": True,
+        "created_row": False,
+        "item": None,
+    }
+    db.session.delete(movement)
+    db.session.flush()
+    return result
+
+
 def undo_transfer(movement: HallStockMovement, user_id: int | None = None) -> dict:
     """Reverse a transfer to Machine Hall: take its KG/rolls off Machine Hall and put them back
     into In Hall, then remove the transfer record. Blocked if part of it was already used."""
     if movement.movement_type != HallStockMovement.TYPE_TRANSFER:
         raise ValueError("Only transfers to Machine Hall can be undone here.")
+    if is_before_stock_count(movement):
+        return _delete_history_only(movement)
 
     kg = float(movement.gross_kg or 0)
     rolls = float(movement.rolls or 0)
@@ -518,6 +551,8 @@ def undo_machine_usage(movement: HallStockMovement, user_id: int | None = None) 
     then remove the usage record."""
     if movement.movement_type != HallStockMovement.TYPE_USED:
         raise ValueError("Only Machine Hall usage records can be deleted here.")
+    if is_before_stock_count(movement):
+        return _delete_history_only(movement)
 
     kg = float(movement.gross_kg or 0)
     rolls = float(movement.rolls or 0)
