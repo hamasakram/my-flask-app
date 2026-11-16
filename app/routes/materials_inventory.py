@@ -475,9 +475,8 @@ def machine_hall_stock_pdf():
     output = generate_hall_stock_pdf(
         "Machine Hall Stock",
         list_items(HallStockItem.LOCATION_MACHINE),
-        list_movements(HallStockMovement.TYPE_USED, limit=200),
-        "Material Used",
-        include_where_used=True,
+        [],
+        None,  # stock only: the Material Used list is left out of the PDF
     )
     return send_file(
         output,
