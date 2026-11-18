@@ -30,8 +30,8 @@
             <li><a href="{{ url_for('main.dashboard') }}" class="{% if request.endpoint == 'main.dashboard' %}active{% endif %}">Dashboard</a></li>
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">Ink Management</li>
+            <li><a href="{{ url_for('inventory.current_stock') }}">Ink Hall Stock</a></li>
             <li><a href="{{ url_for('inventory.inks_list') }}">Inks</a></li>
-            <li><a href="{{ url_for('inventory.current_stock') }}">Current Stock</a></li>
             <li><a href="{{ url_for('inventory.cans_in') }}">Cans In</a></li>
             <li><a href="{{ url_for('inventory.cans_out') }}">Cans Out</a></li>
             <li><a href="{{ url_for('inventory.used_ink_names_setup') }}">Used Ink Names &amp; Setup</a></li>

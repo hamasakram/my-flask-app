@@ -1,108 +1,191 @@
 {% extends "base.html" %}
+{% from "ink/_used_macros.html" import num, cans_text, icon, search_box, date_bar, stock_status, status_tag, company_color %}
 {% block title %}Daily Report - Ink{% endblock %}
 {% block content %}
-<div class="page-header">
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_used_styles.html" %}
+{% set rd = report_data %}
+{% set ns = namespace(now_cans=0, now_kg=0, inks=0, active=0) %}
+{% for company in rd.grouped_companies %}
+    {% set ns.now_cans = ns.now_cans + company.total_current_cans %}
+    {% set ns.now_kg = ns.now_kg + company.total_weight_left %}
+    {% set ns.inks = ns.inks + company.inks|length %}
+    {% for block in company.inks %}{% if block.cans_in_today or block.cans_out_today %}{% set ns.active = ns.active + 1 %}{% endif %}{% endfor %}
+{% endfor %}
+<div class="ih-page used-page"{% if not date_in_url %} data-pk-default-date="{{ selected_date }}"{% endif %}>
+
+<header class="ih-header">
     <div>
         <h1>Daily Report</h1>
-        <p class="page-subtitle">{{ report_data.report_date.strftime('%d %B %Y') }}</p>
+        <p>Cans In and Cans Out for one day, with Ink Hall Stock as it stands now.</p>
     </div>
-    <div class="header-actions">
-        <a href="{{ url_for('ink_reports.daily_report_pdf', date=selected_date) }}" class="btn btn-primary">Download PDF</a>
+    <div class="ih-header-actions">
+        <a href="{{ url_for('ink_reports.daily_report_pdf', date=selected_date) }}" class="ih-btn ih-btn-primary">{{ icon('download') }}Download PDF</a>
     </div>
-</div>
+</header>
 
-<div class="card">
-    <form method="GET" class="filter-bar">
-        <input type="date" name="date" value="{{ selected_date }}">
-        <button type="submit" class="btn btn-secondary">View Date</button>
-    </form>
-</div>
-
-<div class="stats-grid">
-    <div class="stat-card accent-green">
-        <span class="stat-label">Cans In Today</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_cans_in) }}</span>
-    </div>
-    <div class="stat-card accent-orange">
-        <span class="stat-label">Cans Used Today</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_used) }}</span>
-    </div>
-</div>
-
-{% for company in report_data.grouped_companies %}
-<div class="card report-category-block">
-    <div class="report-category-header">
-        <h2>{{ company.name }}</h2>
-        <div class="report-category-stats">
-            <span>Current Cans: <strong>{{ "%.1f"|format(company.total_cans_left) }}</strong></span>
-            <span>Weight Left: <strong>{{ "%.1f"|format(company.total_weight_left) }} kg</strong></span>
-            <span>Cans In Today: <strong>{{ "%.1f"|format(company.cans_in_today) }}</strong></span>
-            <span>Used Today: <strong>{{ "%.1f"|format(company.used_today) }}</strong></span>
+<section class="card used-section" aria-label="Report date">
+    <div class="used-section-head">
+        <div class="used-dayline">
+            <strong>{{ rd.report_date.strftime('%A, %d %B %Y') }}</strong>
+            <span class="used-daytag" data-used-daytag="{{ selected_date }}" hidden></span>
         </div>
+        {{ date_bar('ink_reports.daily_report', selected_date, prev_date, next_date, 'Report date') }}
     </div>
+</section>
 
-    <table class="data-table">
+<section class="used-tiles" aria-label="Day summary">
+    <div class="used-tile used-tone-in">
+        <span class="used-tile-label">{{ icon('in') }}Cans In</span>
+        <span class="used-tile-value">{{ num(rd.total_cans_in) }}<small>can{{ '' if rd.total_cans_in == 1 else 's' }}</small></span>
+        <span class="used-tile-sub"><strong>{{ num(day_in_kg) }}</strong> kg · {{ rd.cans_in_today|length }} entr{{ 'y' if rd.cans_in_today|length == 1 else 'ies' }}</span>
+    </div>
+    <div class="used-tile used-tone-out">
+        <span class="used-tile-label">{{ icon('out') }}Cans Out</span>
+        <span class="used-tile-value">{{ num(rd.total_used) }}<small>can{{ '' if rd.total_used == 1 else 's' }}</small></span>
+        <span class="used-tile-sub"><strong>{{ num(day_out_kg) }}</strong> kg · {{ rd.cans_out_today|length }} entr{{ 'y' if rd.cans_out_today|length == 1 else 'ies' }}</span>
+    </div>
+    <div class="used-tile">
+        <span class="used-tile-label">{{ icon('list') }}Inks moved</span>
+        <span class="used-tile-value">{{ ns.active }}</span>
+        <span class="used-tile-sub">of {{ ns.inks }} ink{{ '' if ns.inks == 1 else 's' }}</span>
+    </div>
+    <a class="used-tile used-tone-main" href="{{ url_for('inventory.current_stock') }}">
+        <span class="used-tile-label">{{ icon('can') }}Ink Hall Stock now</span>
+        <span class="used-tile-value">{{ num(ns.now_cans) }}<small>can{{ '' if ns.now_cans == 1 else 's' }}</small></span>
+        <span class="used-tile-sub"><strong>{{ num(ns.now_kg) }}</strong> kg</span>
+    </a>
+</section>
+
+{# ------------------------------------------------------------------ Activity #}
+<section class="card used-section" aria-labelledby="dr-act-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="dr-act-title">Cans In &amp; Cans Out</h2>
+            <p>Every entry on this day, in the order it was made.</p>
+        </div>
+        <span class="used-count">{{ day_txns|length }}</span>
+    </div>
+    <table class="used-table">
         <thead>
             <tr>
-                <th>Color Code</th><th>Color</th><th>Init. Cans</th><th>Wt/Can</th>
-                <th>Init. Wt</th><th>Cans In</th><th>Cans Out</th><th>Current Cans</th><th>Current Wt</th>
+                <th>Type</th>
+                <th>Ink</th>
+                <th class="used-r">Cans</th>
+                <th class="used-r">KG</th>
+                <th class="used-r">Cans left</th>
+                <th>Where used</th>
+                <th>Notes</th>
             </tr>
         </thead>
         <tbody>
-            {% for block in company.inks %}
+            {% for txn in day_txns %}
+            {% set is_in = txn.transaction_type == 'Cans In' %}
+            {% set ink = txn.ink_type %}
             <tr>
-                <td>{{ block.ink.color_code or '—' }}</td>
-                <td>{{ block.ink.name }}</td>
-                <td>{{ "%.1f"|format(block.stock.initial_cans) }}</td>
-                <td>{{ "%.1f"|format(block.ink.weight_per_can) }}</td>
-                <td>{{ "%.1f"|format(block.stock.initial_weight) }}</td>
-                <td>{{ "%.1f"|format(block.stock.cans_in) }}</td>
-                <td>{{ "%.1f"|format(block.stock.used) }}</td>
-                <td><strong>{{ "%.1f"|format(block.stock.current_cans) }}</strong></td>
-                <td><strong>{{ "%.1f"|format(block.stock.current_weight) }}</strong></td>
+                <td data-cell="phone-hide">{% if is_in %}<span class="used-tag used-tag-in">Cans In</span>{% else %}<span class="used-tag used-tag-out">Cans Out</span>{% endif %}</td>
+                <td class="used-ink-cell">
+                    <strong>{% if ink.color_code %}<span class="used-code">{{ ink.color_code }}</span> {% endif %}{{ ink.name }}</strong>
+                    <span>{{ ink.ink_company }}</span>
+                </td>
+                <td class="used-r"><span class="{{ 'used-delta-in' if is_in else 'used-delta-out' }}">{{ '+' if is_in else '−' }}{{ cans_text(txn.quantity) }}</span></td>
+                <td class="used-r" data-cell="phone-hide">{{ num((txn.quantity or 0) * (ink.weight_per_can or 0)) }} kg</td>
+                <td class="used-r" data-cell="phone-hide">{{ num(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
+                <td data-cell="phone-hide">{{ txn.where_used or '—' }}</td>
+                <td class="used-sub used-phone-only">{% if is_in %}<span class="used-tag used-tag-in">Cans In</span>{% else %}<span class="used-tag used-tag-out">Cans Out</span>{% endif %} {{ num((txn.quantity or 0) * (ink.weight_per_can or 0)) }} kg{% if txn.quantity_left is not none %} · {{ num(txn.quantity_left) }} left{% endif %}{% if txn.where_used %} · {{ txn.where_used }}{% endif %}</td>
+                <td class="used-notes">{{ txn.notes or '' }}</td>
             </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty used-empty"><strong>No Cans In or Cans Out on this day</strong>Use the arrows to see another day.</td></tr>
             {% endfor %}
         </tbody>
     </table>
+</section>
 
-    {% set has_activity = namespace(value=false) %}
-    {% for block in company.inks %}
-        {% if block.cans_in_today or block.cans_out_today or block.cans_left_today %}{% set has_activity.value = true %}{% endif %}
-    {% endfor %}
-
-    {% if has_activity.value %}
-    <h4>Today's Activity</h4>
-    <table class="data-table compact">
-        <thead><tr><th>Type</th><th>Color</th><th>Code</th><th>Cans Out</th><th>Remaining</th><th>Where Used</th><th>Notes</th></tr></thead>
-        <tbody>
-            {% for block in company.inks %}
-                {% for txn in block.cans_in_today %}
-                <tr>
-                    <td><span class="badge badge-green">Cans In</span></td>
-                    <td>{{ block.ink.name }}</td>
-                    <td>{{ block.ink.color_code or '—' }}</td>
-                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                    <td>—</td><td>—</td>
-                    <td>{{ txn.notes or '—' }}</td>
-                </tr>
-                {% endfor %}
-                {% for txn in block.cans_out_today or block.cans_left_today %}
-                <tr>
-                    <td><span class="badge badge-orange">Cans Out</span></td>
-                    <td>{{ block.ink.name }}</td>
-                    <td>{{ block.ink.color_code or '—' }}</td>
-                    <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                    <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
-                    <td>{{ txn.where_used or '—' }}</td>
-                    <td>{{ txn.notes or '—' }}</td>
-                </tr>
-                {% endfor %}
-            {% endfor %}
-        </tbody>
-    </table>
+{# ------------------------------------------------------------------ Stock by company #}
+<section class="card used-section" aria-labelledby="dr-stock-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="dr-stock-title">Ink Hall Stock by company</h2>
+            <p>Cans now, with this day's movement marked. 1 can = {{ num(rd.live_stock[0].ink.weight_per_can) if rd.live_stock else 25 }} kg.</p>
+        </div>
+        <span class="used-count" data-used-count-for="dr-stock">{{ ns.inks }}</span>
+    </div>
+    {% if rd.grouped_companies %}
+    <div class="used-section-bar">
+        {{ search_box('dr-stock-search', 'Search code or colour', 'Search inks', 'dr-stock') }}
+        <div class="used-chips" role="group" aria-label="Filter">
+            <button type="button" class="ih-chip" data-used-chip-for="dr-stock" data-used-chip="" aria-pressed="true">All <span>{{ ns.inks }}</span></button>
+            <button type="button" class="ih-chip" data-used-chip-for="dr-stock" data-used-chip="moved" aria-pressed="false">Moved this day <span>{{ ns.active }}</span></button>
+        </div>
+    </div>
     {% endif %}
+    <div id="dr-stock">
+        {% for company in rd.grouped_companies|sort(attribute='total_current_cans', reverse=true) %}
+        <div data-used-group>
+            <div class="used-company-head">
+                <span class="ih-dot" style="background: {{ company_color(company.name, loop.index0) }}" aria-hidden="true"></span>
+                <h3 class="used-company-name">{{ company.name }}</h3>
+                <span class="used-company-figs">
+                    <span><strong>{{ num(company.total_current_cans) }}</strong> cans · <strong>{{ num(company.total_weight_left) }}</strong> kg</span>
+                    {% if company.cans_in_today %}<span class="used-fig-in">In <strong>+{{ num(company.cans_in_today) }}</strong></span>{% endif %}
+                    {% if company.used_today %}<span class="used-fig-out">Out <strong>−{{ num(company.used_today) }}</strong></span>{% endif %}
+                </span>
+            </div>
+            <table class="used-table">
+                <thead>
+                    <tr>
+                        <th>Ink</th>
+                        <th class="used-r">Opening</th>
+                        <th class="used-r">In (total)</th>
+                        <th class="used-r">Out (total)</th>
+                        <th class="used-r">This day</th>
+                        <th class="used-r">Cans now</th>
+                        <th class="used-r">KG now</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for block in company.inks %}
+                    {% set s = block.stock %}
+                    {% set day_in = block.cans_in_today|sum(attribute='quantity') %}
+                    {% set day_out = block.cans_out_today|sum(attribute='quantity') %}
+                    {% set moved = block.cans_in_today or block.cans_out_today %}
+                    {% set st = stock_status(s.current_cans, block.ink.low_stock_threshold)|trim %}
+                    <tr class="{% if moved %}used-hl{% endif %}" data-search="{{ (company.name ~ ' ' ~ (block.ink.color_code or '') ~ ' ' ~ block.ink.name)|lower }}" data-state="{{ 'moved' if moved else '' }} {{ st }}">
+                        <td class="used-ink-cell">
+                            <strong>{% if block.ink.color_code %}<span class="used-code">{{ block.ink.color_code }}</span> {% endif %}{{ block.ink.name }} {{ status_tag(st) }}</strong>
+                        </td>
+                        <td class="used-r" data-cell="phone-hide">{{ num(s.initial_cans) }}</td>
+                        <td class="used-r" data-cell="phone-hide">{{ num(s.cans_in) }}</td>
+                        <td class="used-r" data-cell="phone-hide">{{ num(s.used) }}</td>
+                        <td class="used-r" data-cell="phone-hide">
+                            {% if day_in %}<span class="used-delta-in">+{{ num(day_in) }}</span>{% endif %}
+                            {% if day_out %}<span class="used-delta-out">−{{ num(day_out) }}</span>{% endif %}
+                            {% if not moved %}<span class="used-muted">—</span>{% endif %}
+                        </td>
+                        <td class="used-r used-strong">{{ num(s.current_cans) }}<span class="used-phone-only"> can{{ '' if s.current_cans == 1 else 's' }}</span></td>
+                        <td class="used-r used-strong" data-cell="phone-hide">{{ num(s.current_weight) }}</td>
+                        <td class="used-sub used-phone-only">{{ num(s.current_weight) }} kg · opening {{ num(s.initial_cans) }}, in {{ num(s.cans_in) }}, out {{ num(s.used) }}{% if day_in %} · <span class="used-delta-in">+{{ num(day_in) }} this day</span>{% endif %}{% if day_out %} · <span class="used-delta-out">−{{ num(day_out) }} this day</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="used-empty"><strong>No inks added yet</strong></div>
+        {% endfor %}
+    </div>
+    {% if rd.grouped_companies %}
+    <div class="used-empty" data-used-empty-for="dr-stock" hidden>
+        <strong>No ink matches</strong>
+        <button type="button" class="ih-link" data-used-reset="dr-stock">Show all inks</button>
+    </div>
+    {% endif %}
+</section>
+
 </div>
-{% else %}
-<div class="card"><p class="empty-state">No inks added yet.</p></div>
-{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+{% include "ink/_used_js.html" %}
 {% endblock %}

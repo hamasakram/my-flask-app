@@ -1,93 +1,241 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "ink/_stock_macros.html" import lid, code_badge, plural %}
 {% block title %}Inks - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Inks</h1>
-    <p class="page-subtitle">Add and manage the ink catalog — view live stock on <a href="{{ url_for('inventory.current_stock') }}">Current Stock</a></p>
-</div>
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_stock_styles.html" %}
+{% set can_edit = current_user.can_edit() %}
+<div class="ih-page ink-page">
 
-{% if current_user.can_edit() %}
-<div class="card highlight-card">
-    <h2>Add Ink</h2>
-    <form method="POST" class="form-grid" id="add-ink-form">
-        <div class="form-group">
-            <label for="ink_company">Ink Company</label>
-            <input type="text" id="ink_company" name="ink_company" required>
+<header class="ih-header">
+    <div>
+        <h1>Inks</h1>
+        <p>Every ink the hall stocks, by company. Add a new ink here with the cans you have now; after that, stock changes go through Cans In and Cans Out.</p>
+    </div>
+    <div class="ih-header-actions">
+        <a href="{{ url_for('inventory.current_stock') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Ink Hall Stock
+        </a>
+    </div>
+</header>
+
+{% if can_edit %}
+<section class="card ih-panel" id="ink-add" aria-labelledby="ink-add-title">
+    <div class="ih-panel-head">
+        <div>
+            <h2 id="ink-add-title">Add ink</h2>
+            <p>The cans you enter become this ink's opening stock in Ink Hall Stock.</p>
         </div>
-        <div class="form-group">
-            <label for="color_code">Shade / Color Code</label>
-            <input type="text" id="color_code" name="color_code">
+    </div>
+    <form method="POST" class="ink-add-grid" id="add-ink-form" autocomplete="off">
+        <div class="ih-field ink-wide-phone">
+            <label for="ink_company">Company</label>
+            <input type="text" id="ink_company" name="ink_company" list="ink-companies" required placeholder="e.g. RL" autocapitalize="words">
+            <datalist id="ink-companies">{% for c in companies %}<option value="{{ c }}"></option>{% endfor %}</datalist>
+            <div class="ink-company-quick" role="group" aria-label="Pick a company">
+                {% for c in companies %}<button type="button" class="ih-chip" data-company-pick="{{ c }}" aria-pressed="false">{{ c }}</button>{% endfor %}
+            </div>
         </div>
-        <div class="form-group">
-            <label for="color">Ink Name / Color</label>
-            <input type="text" id="color" name="color" required>
+        <div class="ih-field">
+            <label for="color_code">Colour code</label>
+            <input type="text" id="color_code" name="color_code" placeholder="e.g. ALAM 0140" autocapitalize="characters" spellcheck="false">
         </div>
-        <div class="form-group">
-            <label for="total_cans">Total Cans</label>
-            <input type="number" id="total_cans" name="total_cans" step="0.1" min="0" value="0" required>
+        <div class="ih-field">
+            <label for="color">Colour</label>
+            <input type="text" id="color" name="color" list="ink-colours" required placeholder="e.g. Magenta" autocapitalize="words">
+            <datalist id="ink-colours">{% for c in colours %}<option value="{{ c }}"></option>{% endfor %}</datalist>
         </div>
-        <div class="form-group">
-            <label for="weight_per_can">Weight Per Can (kg)</label>
-            <input type="number" id="weight_per_can" name="weight_per_can" step="0.01" min="0" value="0" required>
+        <div class="ih-field">
+            <label for="total_cans">Cans now</label>
+            <input type="number" id="total_cans" name="total_cans" step="any" min="0" value="" inputmode="decimal" required placeholder="e.g. 4">
         </div>
-        <div class="form-group">
-            <label>Total Weight (kg)</label>
-            <input type="text" id="total_weight_preview" readonly value="0.0">
-            <small class="field-note">Auto-calculated: Weight Per Can × Total Cans</small>
+        <div class="ih-field">
+            <label for="weight_per_can">KG per can</label>
+            <input type="number" id="weight_per_can" name="weight_per_can" step="any" min="0" value="25" inputmode="decimal" required>
         </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Ink</button>
+        <p class="ink-dup" id="ink-dup" role="status" hidden></p>
+        <div class="ih-form-foot">
+            <div class="ink-preview">
+                <button type="submit" class="ih-btn ih-btn-primary">Add ink</button>
+                <span class="ink-total" id="ink-total" aria-live="polite">= <strong>0</strong> kg</span>
+            </div>
         </div>
     </form>
-</div>
+</section>
 {% endif %}
 
-<div class="card">
-    <h2>All Inks</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Company</th>
-                <th>Shade / Code</th>
-                <th>Ink Name</th>
-                <th>Opening Cans</th>
-                <th>Wt/Can</th>
-                <th>Opening Wt</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for ink in inks %}
-            <tr>
-                <td>{{ ink.ink_company }}</td>
-                <td>{{ ink.color_code or '—' }}</td>
-                <td>{{ ink.name }}</td>
-                <td>{{ "%.1f"|format(ink.initial_cans) }}</td>
-                <td>{{ "%.1f"|format(ink.weight_per_can) }}</td>
-                <td>{{ "%.1f"|format(ink.initial_total_weight) }}</td>
-                {{ row_actions(
-                    url_for('stock_edits.edit_ink_catalog', ink_id=ink.id),
-                    url_for('stock_deletes.delete_ink_catalog', ink_id=ink.id)
-                ) }}
-            </tr>
-            {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No inks yet</td></tr>
+<section aria-labelledby="ink-cat-title">
+    <h2 class="sr-only" id="ink-cat-title">Ink list</h2>
+    {% if summary.rows %}
+    <div class="ih-toolbar" id="ih-toolbar">
+        <div class="ih-toolbar-row">
+            <div class="ih-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                <input type="search" id="ink-search" placeholder="Search colour or code" aria-label="Search inks" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+                <button type="button" class="ih-search-clear" id="ink-search-clear" aria-label="Clear search" hidden>
+                    <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="ih-chips" role="group" aria-label="Filter by company">
+            <button type="button" class="ih-chip" data-chip-company="" aria-pressed="true">All <span>{{ summary.count }}</span></button>
+            {% for g in summary.groups %}
+            <button type="button" class="ih-chip" data-chip-company="{{ g.key }}" aria-pressed="false">{{ g.name }} <span>{{ g.count }}</span></button>
             {% endfor %}
-        </tbody>
-    </table>
+        </div>
+        <p class="ih-count" id="ink-count" aria-live="polite">{{ summary.count }} {{ plural(summary.count, 'ink') }}</p>
+    </div>
+    {% endif %}
+
+    <div class="card ih-list" id="ink-list">
+        {% for g in summary.groups %}
+        <div class="ih-group" data-company="{{ g.key }}">
+            <div class="ih-group-head">
+                <span class="ih-dot" style="background: {{ g.color }}" aria-hidden="true"></span>
+                <h3>{{ g.name }}</h3>
+                <span class="ih-group-figs ih-num">{{ g.count }} {{ plural(g.count, 'ink') }}</span>
+            </div>
+            <ul class="ih-rows">
+                {% for r in g.rows %}
+                {% set label = (r.code ~ ' ' ~ r.colour)|trim %}
+                <li class="ink-cat-row" id="ink-{{ r.id }}" data-company="{{ r.company_key }}"
+                    data-search="{{ (r.colour ~ ' ' ~ r.code ~ ' ' ~ r.code|replace(' ', '') ~ ' ' ~ r.company)|lower }}">
+                    {{ lid(r) }}
+                    <div class="ink-name">
+                        <span class="ink-colour">{{ r.colour }}</span>
+                        <span class="ink-meta">{{ code_badge(r) }}</span>
+                    </div>
+                    <div class="ink-open">Opening <b>{{ qty(r.opening) }}</b> {{ plural(r.opening, 'can') }} · {{ qty(r.weight_per_can) }} kg/can</div>
+                    <div class="ink-now">Now <strong>{{ qty(r.cans) }}</strong> {{ plural(r.cans, 'can') }}</div>
+                    {% if can_edit %}
+                    <div class="ih-actions">
+                        <a href="{{ url_for('stock_edits.edit_ink_catalog', ink_id=r.id) }}" class="ih-act" aria-label="Edit {{ label }}">Edit</a>
+                        {% if r.id not in in_use %}
+                        <form method="POST" action="{{ url_for('stock_deletes.delete_ink_catalog', ink_id=r.id) }}"
+                              onsubmit="return confirm({{ ('Delete ' ~ r.company ~ ' ' ~ label ~ ' from the ink list?')|tojson|forceescape }});">
+                            <button type="submit" class="ih-act ih-act-del ink-icon-btn" aria-label="Delete {{ label }}" title="Delete">
+                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+
+        {% if summary.rows %}
+        <div class="ih-empty" id="ink-nomatch" hidden>
+            <strong>No ink matches</strong>
+            Try a colour like Magenta or a code like 0140.
+            <div><button type="button" class="ih-btn ih-btn-quiet" id="ink-reset">Show all inks</button></div>
+        </div>
+        {% else %}
+        <div class="ih-empty">
+            <strong>No inks yet</strong>
+            {% if can_edit %}Use the form above to add the first ink.{% else %}Inks added by the team will show here.{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% if can_edit and summary.rows %}
+    <p class="ink-legend">An ink with Cans In or Cans Out records can't be deleted, so it only has Edit.</p>
+    {% endif %}
+</section>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% if current_user.can_edit() %}
+<script type="application/json" id="ink-existing">{{ existing|tojson }}</script>
+{% endif %}
 <script>
-function updateTotalWeight() {
-    const cans = parseFloat(document.getElementById('total_cans')?.value) || 0;
-    const wt = parseFloat(document.getElementById('weight_per_can')?.value) || 0;
-    const preview = document.getElementById('total_weight_preview');
-    if (preview) preview.value = (cans * wt).toFixed(1);
-}
-document.getElementById('total_cans')?.addEventListener('input', updateTotalWeight);
-document.getElementById('weight_per_can')?.addEventListener('input', updateTotalWeight);
+(function () {
+    'use strict';
+    function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
+    function fmt(n) {
+        n = Number(n || 0);
+        return Math.abs(n - Math.round(n)) < 0.005 ? Math.round(n).toLocaleString('en-US') : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+    function plural(n, w) { return w + (Math.abs(Number(n) - 1) < 0.0001 ? '' : 's'); }
+
+    // ------------------------------------------------------------ add form
+    var form = document.getElementById('add-ink-form');
+    if (form) {
+        var company = document.getElementById('ink_company');
+        var code = document.getElementById('color_code');
+        var colour = document.getElementById('color');
+        var cans = document.getElementById('total_cans');
+        var perCan = document.getElementById('weight_per_can');
+        var totalEl = document.getElementById('ink-total');
+        var dup = document.getElementById('ink-dup');
+        var existing = [];
+        try { existing = JSON.parse(document.getElementById('ink-existing').textContent) || []; } catch (e) { /* ignore */ }
+        function norm(v) { return String(v || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+
+        function update() {
+            var c = parseFloat(cans.value) || 0;
+            var w = parseFloat(perCan.value) || 0;
+            totalEl.innerHTML = '';
+            if (c > 0 && w > 0) totalEl.appendChild(document.createTextNode(fmt(c) + ' ' + plural(c, 'can') + ' × ' + fmt(w) + ' kg = '));
+            else totalEl.appendChild(document.createTextNode('= '));
+            var s = document.createElement('strong');
+            s.textContent = fmt(c * w);
+            totalEl.appendChild(s);
+            totalEl.appendChild(document.createTextNode(' kg'));
+
+            var co = norm(company.value), cd = norm(code.value), cl = norm(colour.value);
+            var hit = co && cl && existing.some(function (x) { return x.company === co && x.code === cd && x.colour === cl; });
+            dup.hidden = !hit;
+            dup.textContent = hit ? 'This ink is already in the list. To add cans to it, use Cans In; to change its opening cans, use Edit.' : '';
+            each('[data-company-pick]', function (b) { b.setAttribute('aria-pressed', norm(b.dataset.companyPick) === co ? 'true' : 'false'); });
+        }
+        [company, code, colour, cans, perCan].forEach(function (el) { el.addEventListener('input', update); });
+        each('[data-company-pick]', function (b) {
+            b.addEventListener('click', function () { company.value = b.dataset.companyPick; update(); code.focus(); });
+        });
+        update();
+        if (location.hash === '#ink-add') company.focus({ preventScroll: true });
+    }
+
+    // ------------------------------------------------------------ list: search + company
+    var list = document.getElementById('ink-list');
+    var search = document.getElementById('ink-search');
+    if (!list || !search) return;
+    var clearBtn = document.getElementById('ink-search-clear');
+    var countEl = document.getElementById('ink-count');
+    var noMatch = document.getElementById('ink-nomatch');
+    var state = { q: '', company: '' };
+    function apply() {
+        var terms = state.q.toLowerCase().split(/\s+/).filter(Boolean);
+        var shown = 0, total = 0;
+        each('#ink-list .ih-group', function (group) {
+            var visible = 0;
+            Array.prototype.forEach.call(group.querySelectorAll('.ink-cat-row'), function (row) {
+                total += 1;
+                var ok = (!state.company || row.dataset.company === state.company) &&
+                    terms.every(function (w) { return row.dataset.search.indexOf(w) !== -1; });
+                row.hidden = !ok;
+                if (ok) { visible += 1; shown += 1; }
+            });
+            group.hidden = visible === 0;
+        });
+        noMatch.hidden = shown !== 0;
+        countEl.textContent = shown === total ? total + ' ' + plural(total, 'ink') : 'Showing ' + shown + ' of ' + total + ' inks';
+        clearBtn.hidden = !state.q;
+        each('[data-chip-company]', function (c) { c.setAttribute('aria-pressed', c.dataset.chipCompany === state.company ? 'true' : 'false'); });
+    }
+    var toolbar = document.getElementById('ih-toolbar');
+    function toolbarHeight() { if (toolbar) document.documentElement.style.setProperty('--ih-toolbar-h', toolbar.offsetHeight + 'px'); }
+    toolbarHeight();
+    window.addEventListener('resize', toolbarHeight);
+    search.addEventListener('input', function () { state.q = search.value; apply(); });
+    clearBtn.addEventListener('click', function () { state.q = ''; search.value = ''; apply(); search.focus(); });
+    each('[data-chip-company]', function (c) { c.addEventListener('click', function () { state.company = c.dataset.chipCompany; apply(); }); });
+    document.getElementById('ink-reset').addEventListener('click', function () { state.q = ''; state.company = ''; search.value = ''; apply(); });
+    apply();
+})();
 </script>
 {% endblock %}

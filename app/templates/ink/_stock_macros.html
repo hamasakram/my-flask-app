@@ -1,0 +1,19 @@
+{# Shared bits for Ink Hall Stock and Inks. Rows come from services/ink_stock_pdf.summarize_ink_stock. #}
+
+{% macro lid(row, small=False) -%}
+<span class="ink-lid{% if small %} ink-lid-sm{% endif %}" data-sw="{{ row.swatch }}" aria-hidden="true"></span>
+{%- endmacro %}
+
+{% macro code_badge(row) -%}
+{% if row.code %}{% set rest = row.code[row.series|length:]|trim if row.series else row.code %}
+<span class="ink-code">{% if row.series %}<b>{{ row.series }}</b>{% endif %}{% if rest %}<span>{{ rest }}</span>{% endif %}</span>
+{%- else %}<span class="ink-code ink-code-none">No code</span>{% endif %}
+{%- endmacro %}
+
+{% macro status_badge(row, extra='') -%}
+<span class="ink-status ink-status-{{ row.status }}{% if extra %} {{ extra }}{% endif %}">{{ row.status_label }}</span>
+{%- endmacro %}
+
+{% macro plural(n, word) -%}
+{{ word }}{{ '' if (n|float - 1)|abs < 0.0001 else 's' }}
+{%- endmacro %}

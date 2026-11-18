@@ -1,95 +1,264 @@
 {% extends "base.html" %}
+{% from "ink/_used_macros.html" import num, cans_text, icon, search_box, stock_status, status_tag, company_color %}
 {% block title %}Ink Dashboard - RN COLOUR{% endblock %}
+
+{% macro activity_row(txn, show_date=false) %}
+{% set is_in = txn.transaction_type == 'Cans In' %}
+{% set ink = txn.ink_type %}
+<li class="used-act-row">
+    <span class="used-act-ico {{ 'used-in' if is_in else 'used-out' }}" aria-hidden="true">{{ icon('in' if is_in else 'out') }}</span>
+    <div class="used-act-main">
+        <strong>{% if ink.color_code %}<span class="used-code">{{ ink.color_code }}</span> {% endif %}{{ ink.name }}</strong>
+        <span>{% if show_date %}{{ txn.transaction_date.strftime('%d %b') }} · {% endif %}{{ txn.transaction_type }} · {{ ink.ink_company }}{% if txn.where_used %} · {{ txn.where_used }}{% endif %}{% if txn.notes %} · {{ txn.notes }}{% endif %}</span>
+    </div>
+    <div class="used-act-qty">
+        <strong class="{{ 'used-delta-in' if is_in else 'used-delta-out' }}">{{ '+' if is_in else '−' }}{{ cans_text(txn.quantity) }}</strong>
+        <span>{{ num((txn.quantity or 0) * (ink.weight_per_can or 0)) }} kg</span>
+    </div>
+</li>
+{% endmacro %}
+
 {% block content %}
-<div class="page-header">
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_used_styles.html" %}
+{% set can_edit = current_user.can_edit() %}
+{% set can_browse = not current_user.is_dashboard_only() %}
+
+{# ---- figures ---- #}
+{% set ns = namespace(in_kg=0, out_kg=0, alerts=[], companies=[], out_n=0, low_n=0) %}
+{% for txn in today_txns %}
+    {% set kg = (txn.quantity or 0) * (txn.ink_type.weight_per_can or 0) %}
+    {% if txn.transaction_type == 'Cans In' %}{% set ns.in_kg = ns.in_kg + kg %}{% else %}{% set ns.out_kg = ns.out_kg + kg %}{% endif %}
+{% endfor %}
+{% for item in stats.live_stock %}
+    {% set st = stock_status(item.current_cans, item.ink.low_stock_threshold)|trim %}
+    {% if st != 'ok' %}
+        {% set ns.alerts = ns.alerts + [{'item': item, 'status': st, 'cans': item.current_cans}] %}
+        {% if st == 'out' %}{% set ns.out_n = ns.out_n + 1 %}{% else %}{% set ns.low_n = ns.low_n + 1 %}{% endif %}
+    {% endif %}
+{% endfor %}
+{% for group in stats.live_stock|groupby('ink.ink_company') %}
+    {% set g = namespace(cans=0, kg=0, low=0) %}
+    {% for item in group.list %}
+        {% set g.cans = g.cans + item.current_cans %}
+        {% set g.kg = g.kg + item.current_weight %}
+        {% if stock_status(item.current_cans, item.ink.low_stock_threshold)|trim != 'ok' %}{% set g.low = g.low + 1 %}{% endif %}
+    {% endfor %}
+    {% set ns.companies = ns.companies + [{'name': group.grouper or 'Other', 'items': group.list, 'cans': g.cans, 'kg': g.kg, 'low': g.low}] %}
+{% endfor %}
+{% set companies = ns.companies|sort(attribute='cans', reverse=true) %}
+{% set alerts = ns.alerts|sort(attribute='cans') %}
+
+<div class="ih-page used-page">
+
+<header class="ih-header">
     <div>
         <h1>Ink Dashboard</h1>
-        <p class="page-subtitle">Overview — {{ today.strftime('%d %B %Y') }}</p>
+        <p>{{ today.strftime('%A, %d %B %Y') }} — Ink Hall Stock, today's Cans In / Cans Out and used ink at a glance.</p>
     </div>
-    <div class="header-actions">
-        <a href="{{ url_for('ink_reports.daily_report') }}" class="btn btn-secondary">Daily Report</a>
-    </div>
-</div>
+</header>
 
-<div class="stats-grid">
-    <div class="stat-card">
-        <span class="stat-label">Total Cans</span>
-        <span class="stat-value">{{ "%.1f"|format(stats.total_cans) }}</span>
-    </div>
-    <div class="stat-card">
-        <span class="stat-label">Total Weight (kg)</span>
-        <span class="stat-value">{{ "%.1f"|format(stats.total_weight) }}</span>
-    </div>
-    <div class="stat-card accent-green">
-        <span class="stat-label">Cans In Today</span>
-        <span class="stat-value">{{ "%.1f"|format(stats.cans_in_today) }}</span>
-    </div>
-    <div class="stat-card accent-orange">
-        <span class="stat-label">Cans Used Today</span>
-        <span class="stat-value">{{ "%.1f"|format(stats.used_today) }}</span>
-    </div>
-</div>
-
-<div class="card">
-    <h2>Current Stock <a href="{{ url_for('inventory.current_stock') }}" class="btn btn-secondary btn-sm">View Full Page</a></h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Company</th>
-                <th>Shade</th>
-                <th>Ink Name</th>
-                <th>Cans In</th>
-                <th>Cans Out</th>
-                <th>Current Cans</th>
-                <th>Current Wt (kg)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in stats.live_stock %}
-            <tr>
-                <td>{{ item.ink.ink_company }}</td>
-                <td>{{ item.ink.color_code or '—' }}</td>
-                <td>{{ item.ink.name }}</td>
-                <td>{{ "%.1f"|format(item.cans_in) }}</td>
-                <td>{{ "%.1f"|format(item.used) }}</td>
-                <td><strong>{{ "%.1f"|format(item.current_cans) }}</strong></td>
-                <td><strong>{{ "%.1f"|format(item.current_weight) }}</strong></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="7" class="empty">No inks yet. Add your first ink.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-<div class="card">
-    <h2>Recent Activity</h2>
-    <table class="data-table compact">
-        <thead><tr><th>Date</th><th>Ink</th><th>Type</th><th>Cans</th><th>Where Used</th><th>Notes</th></tr></thead>
-        <tbody>
-            {% for txn in stats.recent_transactions %}
-            <tr>
-                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ txn.ink_type.display_name }}</td>
-                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Cans In' else 'orange' }}">{{ txn.transaction_type }}</span></td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ txn.where_used or '—' }}</td>
-                <td>{{ txn.notes or '—' }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" class="empty">No activity yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-{% if current_user.can_edit() %}
-<div class="quick-actions">
-    <a href="{{ url_for('inventory.inks_list') }}" class="btn btn-primary">+ Add Ink</a>
-    <a href="{{ url_for('inventory.current_stock') }}" class="btn btn-secondary">Current Stock</a>
-    <a href="{{ url_for('inventory.cans_in') }}" class="btn btn-secondary">Cans In</a>
-    <a href="{{ url_for('inventory.cans_out') }}" class="btn btn-secondary">Cans Out</a>
-    <a href="{{ url_for('inventory.used_inks_stock') }}" class="btn btn-secondary">Used Inks Stock</a>
-</div>
+{% if can_browse %}
+<nav class="used-qas" aria-label="Quick actions">
+    {% if can_edit %}
+    <a href="{{ url_for('inventory.cans_in') }}" class="used-qa used-qa-in"><span class="used-qa-ico">{{ icon('in') }}</span>Cans In</a>
+    <a href="{{ url_for('inventory.cans_out') }}" class="used-qa used-qa-out"><span class="used-qa-ico">{{ icon('out') }}</span>Cans Out</a>
+    {% endif %}
+    <a href="{{ url_for('inventory.current_stock') }}" class="used-qa used-qa-main"><span class="used-qa-ico">{{ icon('can') }}</span>Ink Hall Stock</a>
+    <a href="{{ url_for('inventory.used_inks_stock') }}" class="used-qa used-qa-blue"><span class="used-qa-ico">{{ icon('drop') }}</span>Used Inks Stock</a>
+    <a href="{{ url_for('ink_reports.daily_report') }}" class="used-qa"><span class="used-qa-ico">{{ icon('report') }}</span>Daily Report</a>
+    <a href="{{ url_for('inventory.inks_list') }}" class="used-qa"><span class="used-qa-ico">{{ icon('tag') }}</span>{{ 'Add / edit inks' if can_edit else 'Inks' }}</a>
+</nav>
 {% endif %}
+
+<section class="used-tiles" aria-label="Summary">
+    <div class="used-tile used-tone-main">
+        <span class="used-tile-label">{{ icon('can') }}Ink Hall Stock</span>
+        <span class="used-tile-value">{{ num(stats.total_cans) }}<small>can{{ '' if stats.total_cans == 1 else 's' }}</small></span>
+        <span class="used-tile-sub"><strong>{{ num(stats.total_weight) }}</strong> kg · {{ stats.live_stock|length }} inks</span>
+    </div>
+    <div class="used-tile used-tone-in">
+        <span class="used-tile-label">{{ icon('in') }}Cans In today</span>
+        <span class="used-tile-value">{{ num(stats.cans_in_today) }}<small>can{{ '' if stats.cans_in_today == 1 else 's' }}</small></span>
+        <span class="used-tile-sub"><strong>{{ num(ns.in_kg) }}</strong> kg</span>
+    </div>
+    <div class="used-tile used-tone-out">
+        <span class="used-tile-label">{{ icon('out') }}Cans Out today</span>
+        <span class="used-tile-value">{{ num(stats.used_today) }}<small>can{{ '' if stats.used_today == 1 else 's' }}</small></span>
+        <span class="used-tile-sub"><strong>{{ num(ns.out_kg) }}</strong> kg</span>
+    </div>
+    <div class="used-tile used-tone-blue">
+        <span class="used-tile-label">{{ icon('drop') }}Used ink in use</span>
+        <span class="used-tile-value">{{ num(used_ink_kg) }}<small>kg</small></span>
+        <span class="used-tile-sub">{{ used_ink_count }} ink{{ '' if used_ink_count == 1 else 's' }} opened</span>
+    </div>
+</section>
+
+{# ------------------------------------------------------------------ Hall stock by company #}
+<section class="card used-hall" aria-labelledby="dash-hall-title">
+    <div class="used-hall-top">
+        <div>
+            <h2 id="dash-hall-title">Ink Hall Stock</h2>
+            <div class="used-hall-figs">
+                <span class="used-hall-main">{{ num(stats.total_weight) }}<small>kg</small></span>
+                <span class="used-hall-sub"><strong>{{ num(stats.total_cans) }}</strong> cans</span>
+                <span class="used-hall-sub"><strong>{{ stats.live_stock|length }}</strong> inks</span>
+            </div>
+        </div>
+        {% if can_browse %}<a href="{{ url_for('inventory.current_stock') }}" class="ih-btn ih-btn-quiet">Open Ink Hall Stock {{ icon('right') }}</a>{% endif %}
+    </div>
+    {% if stats.total_weight > 0 %}
+    <div class="ih-bar" role="img" aria-label="KG by company: {% for c in companies %}{{ c.name }} {{ num(c.kg) }} kg{% if not loop.last %}, {% endif %}{% endfor %}">
+        {% for c in companies %}{% if c.kg > 0 %}<span style="width: {{ '%.3f'|format(100 * c.kg / stats.total_weight) }}%; background: {{ company_color(c.name, loop.index0) }}" title="{{ c.name }} {{ num(c.kg) }} kg"></span>{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    <ul class="used-comps">
+        {% for c in companies %}
+        <li class="used-comp">
+            <span class="ih-dot" style="background: {{ company_color(c.name, loop.index0) }}" aria-hidden="true"></span>
+            <span class="used-comp-name">{{ c.name }}</span>
+            <span class="used-comp-kg">{{ num(c.kg) }} kg</span>
+            <span class="used-comp-sub">{{ cans_text(c.cans) }} · {{ c['items']|length }} ink{{ '' if c['items']|length == 1 else 's' }}{% if c.low %} · {{ c.low }} low / out{% endif %}</span>
+        </li>
+        {% else %}
+        <li class="used-empty"><strong>No inks yet</strong>{% if can_edit %}<a href="{{ url_for('inventory.inks_list') }}" class="ih-btn ih-btn-primary">Add your first ink</a>{% endif %}</li>
+        {% endfor %}
+    </ul>
+</section>
+
+<div class="used-dash-cols">
+    {# -------------------------------------------------------------- Low / out #}
+    <section class="card used-section" aria-labelledby="dash-alert-title">
+        <div class="used-section-head">
+            <div>
+                <h2 id="dash-alert-title">Low &amp; out of stock</h2>
+                <p>{% if alerts %}{% if ns.out_n %}{{ ns.out_n }} out{% endif %}{% if ns.out_n and ns.low_n %} · {% endif %}{% if ns.low_n %}{{ ns.low_n }} low{% endif %} — low means 1 can or less, or at the ink's own low-stock level.{% else %}Every ink has more than its low-stock level.{% endif %}</p>
+            </div>
+            <span class="used-count">{{ alerts|length }}</span>
+        </div>
+        {% if alerts %}
+        <ul class="used-rows used-scroll">
+            {% for a in alerts %}
+            {% set ink = a['item'].ink %}
+            <li class="used-alert-row{% if a.status == 'out' %} used-is-out{% endif %}">
+                <span class="used-alert-name">{% if ink.color_code %}<span class="used-code">{{ ink.color_code }}</span>{% endif %}{{ ink.name }}</span>
+                <span class="used-alert-cans">{{ cans_text(a['item'].current_cans) }}</span>
+                <span class="used-alert-sub">{{ ink.ink_company }} · {{ num(a['item'].current_weight) }} kg{% if ink.low_stock_threshold is not none %} · low at {{ ink.low_stock_threshold }}{% endif %}</span>
+                {{ status_tag(a.status) }}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="used-empty"><strong>All inks are stocked</strong>Nothing needs ordering right now.</div>
+        {% endif %}
+    </section>
+
+    {# -------------------------------------------------------------- Today #}
+    <section class="card used-section" aria-labelledby="dash-today-title">
+        <div class="used-section-head">
+            <div>
+                <h2 id="dash-today-title">Today's activity</h2>
+                <p>Cans In and Cans Out recorded for {{ today.strftime('%d %B') }}.</p>
+            </div>
+            <span class="used-count">{{ today_txns|length }}</span>
+        </div>
+        {% if today_txns %}
+        <ul class="used-rows used-scroll">
+            {% for txn in today_txns %}{{ activity_row(txn) }}{% endfor %}
+        </ul>
+        {% else %}
+        <div class="used-empty">
+            <strong>Nothing recorded today</strong>
+            {% if can_edit %}Cans received or taken out today will show here.
+            <div class="used-chips" style="justify-content: center; margin-top: 0.8rem;">
+                <a href="{{ url_for('inventory.cans_in') }}" class="ih-btn ih-btn-quiet">{{ icon('in') }}Cans In</a>
+                <a href="{{ url_for('inventory.cans_out') }}" class="ih-btn ih-btn-quiet">{{ icon('out') }}Cans Out</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% if can_browse %}
+        <div class="used-section-foot">
+            <span>{{ num(stats.cans_in_today) }} in · {{ num(stats.used_today) }} out</span>
+            <a href="{{ url_for('ink_reports.daily_report') }}" class="used-link">Daily Report {{ icon('right') }}</a>
+        </div>
+        {% endif %}
+    </section>
+</div>
+
+{# ------------------------------------------------------------------ Recent #}
+<section class="card used-section" aria-labelledby="dash-recent-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="dash-recent-title">Recent activity</h2>
+            <p>The last {{ stats.recent_transactions|length }} Cans In / Cans Out entries.</p>
+        </div>
+    </div>
+    {% if stats.recent_transactions %}
+    <ul class="used-rows">
+        {% for txn in stats.recent_transactions %}{{ activity_row(txn, true) }}{% endfor %}
+    </ul>
+    {% else %}
+    <div class="used-empty"><strong>No activity yet</strong>Cans In and Cans Out entries will show here.</div>
+    {% endif %}
+</section>
+
+{# ------------------------------------------------------------------ All inks #}
+{% if stats.live_stock %}
+<section class="card used-section" aria-labelledby="dash-inks-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="dash-inks-title">All inks in Ink Hall Stock</h2>
+            <p>Cans and KG now, per ink.</p>
+        </div>
+        <span class="used-count" data-used-count-for="dash-inks">{{ stats.live_stock|length }}</span>
+    </div>
+    <div class="used-section-bar">
+        {{ search_box('dash-inks-search', 'Search code or colour', 'Search inks', 'dash-inks') }}
+        <div class="used-chips" role="group" aria-label="Filter">
+            <button type="button" class="ih-chip" data-used-chip-for="dash-inks" data-used-chip="" aria-pressed="true">All <span>{{ stats.live_stock|length }}</span></button>
+            {% if alerts %}<button type="button" class="ih-chip" data-used-chip-for="dash-inks" data-used-chip="alert" aria-pressed="false">Low / out <span>{{ alerts|length }}</span></button>{% endif %}
+        </div>
+    </div>
+    <div id="dash-inks">
+        {% for c in companies %}
+        <div data-used-group>
+            <div class="used-company-head">
+                <span class="ih-dot" style="background: {{ company_color(c.name, loop.index0) }}" aria-hidden="true"></span>
+                <h3>{{ c.name }}</h3>
+                <span class="used-company-figs"><span><strong>{{ num(c.cans) }}</strong> cans · <strong>{{ num(c.kg) }}</strong> kg</span></span>
+            </div>
+            <table class="used-table">
+                <thead>
+                    <tr><th>Ink</th><th class="used-r">Cans In</th><th class="used-r">Cans Out</th><th class="used-r">Cans now</th><th class="used-r">KG now</th></tr>
+                </thead>
+                <tbody>
+                    {% for item in c['items'] %}
+                    {% set st = stock_status(item.current_cans, item.ink.low_stock_threshold)|trim %}
+                    <tr data-search="{{ (c.name ~ ' ' ~ (item.ink.color_code or '') ~ ' ' ~ item.ink.name)|lower }}" data-state="{{ 'alert' if st != 'ok' else '' }}">
+                        <td class="used-ink-cell"><strong>{% if item.ink.color_code %}<span class="used-code">{{ item.ink.color_code }}</span> {% endif %}{{ item.ink.name }} {{ status_tag(st) }}</strong></td>
+                        <td class="used-r" data-cell="phone-hide">{{ num(item.cans_in) }}</td>
+                        <td class="used-r" data-cell="phone-hide">{{ num(item.used) }}</td>
+                        <td class="used-r used-strong">{{ num(item.current_cans) }}<span class="used-phone-only"> can{{ '' if item.current_cans == 1 else 's' }}</span></td>
+                        <td class="used-r used-strong" data-cell="phone-hide">{{ num(item.current_weight) }}</td>
+                        <td class="used-sub used-phone-only">{{ num(item.current_weight) }} kg · in {{ num(item.cans_in) }}, out {{ num(item.used) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="used-empty" data-used-empty-for="dash-inks" hidden>
+        <strong>No ink matches</strong>
+        <button type="button" class="ih-link" data-used-reset="dash-inks">Show all inks</button>
+    </div>
+</section>
+{% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "ink/_used_js.html" %}
 {% endblock %}

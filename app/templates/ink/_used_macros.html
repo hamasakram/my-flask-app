@@ -1,0 +1,82 @@
+{# Helpers for the redesigned Ink pages (Used Inks Stock, Used Ink Names, Daily Report, Dashboard). #}
+
+{# Number without trailing zeros, with thousands separators: 1425 -> "1,425", 12.50 -> "12.5". #}
+{% macro num(value, places=2) -%}
+{%- set text = ("{:,.%df}" % places).format(value or 0) -%}
+{%- if '.' in text %}{{ text.rstrip('0').rstrip('.') }}{% else %}{{ text }}{% endif -%}
+{%- endmacro %}
+
+{% macro cans_text(value) -%}
+{%- set n = value or 0 -%}
+{{ num(n) }} can{{ '' if n == 1 else 's' }}
+{%- endmacro %}
+
+{# Ink Hall Stock status for one ink: "out" (0 cans or less), "low" (at or under its low-stock
+   level, or 1 can or less when no level is set), else "ok". Use as stock_status(...)|trim. #}
+{% macro stock_status(current_cans, threshold) -%}
+{%- set limit = threshold if threshold is not none else 1 -%}
+{%- if current_cans <= 0.0001 %}out{% elif current_cans <= limit + 0.0001 %}low{% else %}ok{% endif -%}
+{%- endmacro %}
+
+{% macro status_tag(status) -%}
+{%- if status == 'out' %}<span class="used-tag used-tag-none">Out of stock</span>
+{%- elif status == 'low' %}<span class="used-tag used-tag-low">Low</span>
+{%- endif -%}
+{%- endmacro %}
+
+{# Colour dot per ink company. #}
+{% macro company_color(name, index=0) -%}
+{%- set key = (name or '')|lower -%}
+{%- if key == 'rl' %}#b21e22{% elif 'horizon' in key %}#1d4ed8{% else %}{{ ['#0f766e', '#7c3aed', '#b45309', '#475569'][index % 4] }}{% endif -%}
+{%- endmacro %}
+
+{# Small stroke icons (24x24). #}
+{% macro icon(name) -%}
+<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+{%- if name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+{%- elif name == 'minus' %}<path d="M5 12h14"/>
+{%- elif name == 'download' %}<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>
+{%- elif name == 'left' %}<path d="M15 5l-7 7 7 7"/>
+{%- elif name == 'right' %}<path d="M9 5l7 7-7 7"/>
+{%- elif name == 'in' %}<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+{%- elif name == 'out' %}<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+{%- elif name == 'drop' %}<path d="M12 3c3.5 4.2 6 7.6 6 10.5A6 6 0 0 1 6 13.5C6 10.6 8.5 7.2 12 3z"/>
+{%- elif name == 'can' %}<path d="M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3v12c0 1.7-3.1 3-7 3s-7-1.3-7-3z"/><path d="M5 6c0 1.7 3.1 3 7 3s7-1.3 7-3"/>
+{%- elif name == 'report' %}<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>
+{%- elif name == 'tag' %}<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.3"/>
+{%- elif name == 'list' %}<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>
+{%- elif name == 'search' %}<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>
+{%- elif name == 'x' %}<path d="M6 6l12 12M18 6L6 18"/>
+{%- elif name == 'edit' %}<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>
+{%- elif name == 'alert' %}<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>
+{%- elif name == 'calendar' %}<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>
+{%- elif name == 'grid' %}<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{# Search box used on these pages. #}
+{% macro search_box(id, placeholder, label, target) -%}
+<div class="ih-search used-search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input type="search" id="{{ id }}" data-used-search="{{ target }}" placeholder="{{ placeholder }}" aria-label="{{ label }}" autocomplete="off" enterkeyhint="search">
+    <button type="button" class="ih-search-clear" data-clear-for="{{ id }}" aria-label="Clear search" hidden>
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+    </button>
+</div>
+{%- endmacro %}
+
+{# Date bar: previous day / date picker / next day / today (GET form). #}
+{% macro date_bar(endpoint, selected_date, prev_date, next_date, label='Day') -%}
+<form method="GET" action="{{ url_for(endpoint) }}" class="used-datebar" data-used-datebar>
+    <a href="{{ url_for(endpoint, date=prev_date) }}" class="used-daybtn" aria-label="Previous day">{{ icon('left') }}</a>
+    <label class="used-datefield">
+        <span class="sr-only">{{ label }}</span>
+        {{ icon('calendar') }}
+        <input type="date" name="date" value="{{ selected_date }}" required data-used-date>
+    </label>
+    <a href="{{ url_for(endpoint, date=next_date) }}" class="used-daybtn" aria-label="Next day" data-used-next>{{ icon('right') }}</a>
+    <a href="{{ url_for(endpoint) }}" class="used-today" data-used-today hidden>Today</a>
+    <noscript><button type="submit" class="ih-btn ih-btn-quiet">View</button></noscript>
+</form>
+{%- endmacro %}

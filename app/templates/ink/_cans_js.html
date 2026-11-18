@@ -1,0 +1,406 @@
+{# Cans In / Cans Out form script: searchable ink picker, stepper, live preview, checks.
+   The form is a normal POST form; safe-submit.js sends it. Field names are unchanged. #}
+<script>
+(function () {
+    'use strict';
+    var page = document.querySelector('.cans-page');
+    if (page) page.classList.add('cans-js');
+
+    function pkToday() {
+        try {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        } catch (e) {
+            return new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10);
+        }
+    }
+    function r2(v) { return Math.round(v * 100) / 100; }
+    function fmt(v) { return Number(r2(v || 0)).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+    function cansWord(v) { return fmt(v) + ' can' + (r2(v) === 1 ? '' : 's'); }
+    function el(tag, cls, text) {
+        var node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+    }
+
+    // ------------------------------------------------------------ day bar (Cans Out, all users)
+    var dayForm = document.querySelector('[data-cans-day]');
+    if (dayForm) {
+        var dayInput = dayForm.querySelector('input[type="date"]');
+        dayInput.addEventListener('change', function () { if (dayInput.value) dayForm.submit(); });
+    }
+
+    var form = document.querySelector('form[data-cans-form]');
+    if (!form) return;
+    var mode = form.getAttribute('data-cans-form');   // "in" or "out"
+    var EPS = 0.0001;
+
+    var select = form.querySelector('#ink_type_id');
+    var picker = form.querySelector('[data-cans-picker]');
+    var trigger = form.querySelector('[data-cans-trigger]');
+    var pop = form.querySelector('[data-cans-pop]');
+    var search = form.querySelector('[data-cans-search]');
+    var list = form.querySelector('[data-cans-list]');
+    var nomatch = form.querySelector('[data-cans-nomatch]');
+    var card = form.querySelector('[data-cans-card]');
+    var qty = form.querySelector('[data-cans-qty]');
+    var stepBox = form.querySelector('[data-cans-step]');
+    var inc = form.querySelector('[data-cans-inc]');
+    var dec = form.querySelector('[data-cans-dec]');
+    var meta = form.querySelector('[data-cans-meta]');
+    var unitEl = form.querySelector('[data-cans-unit]');
+    var preview = form.querySelector('[data-cans-preview]');
+    var errorEl = form.querySelector('[data-cans-error]');
+    var submitBtn = form.querySelector('[data-cans-submit]');
+    var dateInput = form.querySelector('#transaction_date');
+    var dateNote = form.querySelector('[data-cans-date-note]');
+    var linkBox = form.querySelector('#link_used_ink');
+    var linkGroup = form.querySelector('#used-ink-link-group');
+    var linkDesc = form.querySelector('[data-cans-link-desc]');
+    var usedName = form.querySelector('#used_ink_name');
+    var usedShade = form.querySelector('#used_ink_shade');
+    if (!select || !picker || !qty) return;
+
+    // Our own checks show inline messages; the browser's bubbles are not used.
+    form.noValidate = true;
+    picker.hidden = false;
+
+    var opts = Array.prototype.slice.call(list.querySelectorAll('.cans-opt'));
+    var groups = Array.prototype.slice.call(list.querySelectorAll('[data-cans-grp]'));
+    var inks = {};
+    opts.forEach(function (o) {
+        inks[o.dataset.id] = {
+            id: o.dataset.id, el: o,
+            company: o.dataset.company, code: o.dataset.code, colour: o.dataset.colour,
+            cans: parseFloat(o.dataset.cans) || 0, perCan: parseFloat(o.dataset.perCan) || 0,
+            sw: o.dataset.sw, search: o.dataset.search, words: o.dataset.search.split(/\s+/),
+            disabled: o.getAttribute('aria-disabled') === 'true'
+        };
+    });
+    var activeId = null;
+    var touched = false;   // user tried to submit: keep showing problems as they edit
+
+    function current() { return inks[select.value] || null; }
+    function qtyValue() { var v = parseFloat(String(qty.value).replace(',', '.')); return isFinite(v) ? v : NaN; }
+    function inkLabel(ink) { return [ink.code, ink.colour].filter(Boolean).join(' '); }
+
+    // ------------------------------------------------------------ picker
+    function isOpen() { return !pop.hidden; }
+    function visibleOpts() { return opts.filter(function (o) { return !o.hidden && o.getAttribute('aria-disabled') !== 'true'; }); }
+
+    function setActive(id, scroll) {
+        activeId = id;
+        opts.forEach(function (o) { o.classList.toggle('cans-active', o.dataset.id === id); });
+        if (id) {
+            search.setAttribute('aria-activedescendant', 'cans-opt-' + id);
+            if (scroll) {
+                var o = inks[id].el;
+                var top = o.offsetTop - list.offsetTop, h = o.offsetHeight;
+                var head = 32;
+                if (top - head < list.scrollTop) list.scrollTop = Math.max(0, top - head);
+                else if (top + h > list.scrollTop + list.clientHeight) list.scrollTop = top + h - list.clientHeight;
+            }
+        } else {
+            search.removeAttribute('aria-activedescendant');
+        }
+    }
+
+    function filter() {
+        var words = search.value.toLowerCase().replace(/[.·,\-]/g, ' ').split(/\s+/).filter(Boolean);
+        // Numbers match anywhere ("140" finds ALAM 0140); words match the start of a word
+        // ("d red" finds D. Red only, "mag" finds Magenta).
+        function hit(o, w) {
+            var ink = inks[o.dataset.id];
+            if (/^\d+$/.test(w)) return ink.search.indexOf(w) !== -1;
+            return ink.words.some(function (hw) { return hw.indexOf(w) === 0; });
+        }
+        var shown = 0;
+        groups.forEach(function (g) {
+            var n = 0;
+            Array.prototype.forEach.call(g.querySelectorAll('.cans-opt'), function (o) {
+                var ok = words.every(function (w) { return hit(o, w); });
+                o.hidden = !ok;
+                if (ok) n += 1;
+            });
+            g.hidden = n === 0;
+            var countEl = g.querySelector('[data-cans-grp-count]');
+            if (countEl) countEl.textContent = n + ' ink' + (n === 1 ? '' : 's');
+            shown += n;
+        });
+        nomatch.hidden = shown !== 0;
+        var vis = visibleOpts();
+        var keep = vis.filter(function (o) { return o.dataset.id === activeId; })[0];
+        setActive(keep ? activeId : (words.length && vis[0] ? vis[0].dataset.id : null), false);
+        if (!words.length) list.scrollTop = 0;
+    }
+
+    function openPicker() {
+        card.hidden = true;
+        trigger.hidden = false;
+        pop.hidden = false;
+        trigger.setAttribute('aria-expanded', 'true');
+        trigger.classList.remove('cans-invalid');
+        search.value = '';
+        filter();
+        if (select.value && inks[select.value]) setActive(select.value, true);
+        if (window.matchMedia('(max-width: 760px)').matches) {
+            trigger.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        search.focus({ preventScroll: true });
+    }
+
+    function closePicker(focusTrigger) {
+        if (!isOpen()) return;
+        pop.hidden = true;
+        trigger.setAttribute('aria-expanded', 'false');
+        showSelection();
+        if (focusTrigger) {
+            if (!trigger.hidden) trigger.focus();
+            else { var ch = card.querySelector('[data-cans-change]'); if (ch) ch.focus(); }
+        }
+    }
+
+    function choose(id) {
+        var ink = inks[id];
+        if (!ink || ink.disabled) return;
+        select.value = id;
+        opts.forEach(function (o) { o.setAttribute('aria-selected', o.dataset.id === id ? 'true' : 'false'); });
+        closePicker(false);
+        update();
+        if (!window.matchMedia('(pointer: coarse)').matches) qty.focus();
+        else card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function showSelection() {
+        var ink = current();
+        if (!ink) { card.hidden = true; trigger.hidden = false; return; }
+        trigger.hidden = true;
+        card.hidden = false;
+        card.classList.toggle('cans-card-zero', ink.cans <= EPS);
+        var sw = card.querySelector('[data-cans-card-sw]');
+        sw.className = 'cans-sw cans-sw-lg cans-sw-' + ink.sw;
+        var name = card.querySelector('[data-cans-card-name]');
+        name.textContent = '';
+        if (ink.code) name.appendChild(el('span', 'cans-code', ink.code));
+        name.appendChild(document.createTextNode(ink.colour));
+        card.querySelector('[data-cans-card-co]').textContent = ink.company || '';
+        var num = card.querySelector('[data-cans-card-num]');
+        num.textContent = fmt(ink.cans);
+        num.appendChild(el('small', '', r2(ink.cans) === 1 ? 'can' : 'cans'));
+        card.querySelector('[data-cans-card-kg]').textContent = fmt(ink.cans * ink.perCan) + ' kg' + (ink.perCan ? ' · ' + fmt(ink.perCan) + ' kg per can' : '');
+    }
+
+    trigger.addEventListener('click', function () { if (isOpen()) closePicker(true); else openPicker(); });
+    card.querySelector('[data-cans-change]').addEventListener('click', openPicker);
+    search.addEventListener('input', filter);
+    search.addEventListener('keydown', function (e) {
+        var vis = visibleOpts();
+        var idx = vis.map(function (o) { return o.dataset.id; }).indexOf(activeId);
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (vis.length) setActive(vis[Math.min(vis.length - 1, idx + 1)].dataset.id, true);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (vis.length) setActive(vis[Math.max(0, idx - 1)].dataset.id, true);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();   // never submit the form from the search box
+            if (activeId) choose(activeId);
+            else if (vis.length === 1) choose(vis[0].dataset.id);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closePicker(true);
+        }
+    });
+    list.addEventListener('click', function (e) {
+        var o = e.target.closest('.cans-opt');
+        if (o) choose(o.dataset.id);
+    });
+    list.addEventListener('mousemove', function (e) {
+        var o = e.target.closest('.cans-opt');
+        if (o && o.dataset.id !== activeId && o.getAttribute('aria-disabled') !== 'true') setActive(o.dataset.id, false);
+    });
+    document.addEventListener('click', function (e) {
+        if (isOpen() && !picker.contains(e.target) && !e.target.closest('[data-cans-change]')) closePicker(false);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOpen()) closePicker(true);
+    });
+
+    // ------------------------------------------------------------ stepper
+    function setQty(v) { qty.value = v > 0 ? String(r2(v)) : ''; update(); }
+    inc.addEventListener('click', function () {
+        var v = qtyValue(); if (!(v > 0)) v = 0;
+        var next = r2(v + 1);
+        var ink = current();
+        if (mode === 'out' && ink && next > ink.cans + EPS) next = ink.cans;
+        setQty(next);
+    });
+    dec.addEventListener('click', function () {
+        var v = qtyValue();
+        if (v - 1 > EPS) setQty(r2(v - 1));
+    });
+    qty.addEventListener('input', update);
+
+    // ------------------------------------------------------------ used ink link (Cans Out)
+    function usedTarget(ink) {
+        if (linkBox && linkBox.checked) {
+            var nm = usedName && usedName.value ? usedName.value : ink.colour;
+            var sh = usedShade && usedShade.value ? usedShade.value : '';
+            return nm + (sh ? ' · ' + sh : '');
+        }
+        return ink.colour + (ink.code ? ' · ' + ink.code : '');
+    }
+    function syncLink() {
+        if (!linkBox || !linkGroup) return;
+        linkGroup.hidden = !linkBox.checked;
+        // Hidden choices are not sent, so switching off really means "use the defaults".
+        Array.prototype.forEach.call(linkGroup.querySelectorAll('select'), function (s) { s.disabled = !linkBox.checked; });
+        update();
+    }
+    if (linkBox) linkBox.addEventListener('change', syncLink);
+    [usedName, usedShade].forEach(function (s) { if (s) s.addEventListener('change', update); });
+
+    // ------------------------------------------------------------ preview + checks
+    function problem(forSubmit) {
+        var ink = current(), q = qtyValue();
+        if (!ink) return forSubmit ? { msg: 'Choose the ink first.', field: 'ink' } : null;
+        if (mode === 'out' && q > ink.cans + EPS) {
+            return { msg: ink.cans <= EPS
+                ? 'There are no cans of ' + inkLabel(ink) + ' in stock.'
+                : 'Only ' + cansWord(ink.cans) + ' of ' + inkLabel(ink) + ' in stock. Lower the cans out.', field: 'qty' };
+        }
+        if (forSubmit && !(q > 0)) return { msg: 'Enter how many cans' + (mode === 'out' ? ' go out.' : ' came in.'), field: 'qty' };
+        if (forSubmit && dateInput && !dateInput.value) return { msg: 'Choose the date.', field: 'date' };
+        return null;
+    }
+
+    function update() {
+        var ink = current(), q = qtyValue(), ok = q > 0;
+        var p = touched ? problem(true) : null;
+
+        // stepper buttons + unit
+        if (unitEl) unitEl.textContent = ok && r2(q) === 1 ? 'can' : 'cans';
+        dec.disabled = !(q - 1 > EPS);
+        inc.disabled = mode === 'out' && !!ink && (ink.cans <= EPS || (ok && q >= ink.cans - EPS));
+
+        // available line (Cans Out)
+        if (meta) {
+            meta.textContent = '';
+            if (ink) {
+                meta.hidden = false;
+                var left = el('span');
+                left.appendChild(document.createTextNode('Available: '));
+                left.appendChild(el('strong', '', cansWord(ink.cans)));
+                meta.appendChild(left);
+                if (ink.cans > EPS && !(Math.abs(q - ink.cans) < EPS)) {
+                    var all = el('button', 'ih-link', 'Take all ' + fmt(ink.cans));
+                    all.type = 'button';
+                    all.addEventListener('click', function () { setQty(ink.cans); qty.focus(); });
+                    meta.appendChild(all);
+                }
+            } else {
+                meta.hidden = true;
+            }
+        }
+
+        // preview
+        preview.className = 'cans-preview';
+        preview.textContent = '';
+        var over = !!(mode === 'out' && ink && q > ink.cans + EPS);
+        if (ink && ok && !over) {
+            var after = mode === 'out' ? r2(ink.cans - q) : r2(ink.cans + q);
+            preview.classList.add(mode === 'out' ? 'cans-ready-out' : 'cans-ready');
+            preview.appendChild(el('span', 'cans-preview-label', mode === 'out' ? 'Left after saving' : 'Stock after saving'));
+            var eq = el('span', 'cans-preview-eq');
+            eq.appendChild(document.createTextNode(fmt(ink.cans) + ' '));
+            eq.appendChild(el('span', mode === 'out' ? 'cans-minus' : 'cans-plus', (mode === 'out' ? '− ' : '+ ') + fmt(q)));
+            eq.appendChild(document.createTextNode(' = '));
+            eq.appendChild(el('b', '', cansWord(after)));
+            if (ink.perCan) eq.appendChild(el('small', '', fmt(after * ink.perCan) + ' kg'));
+            preview.appendChild(eq);
+            var sub = el('span', 'cans-preview-sub');
+            if (mode === 'out') {
+                sub.appendChild(el('strong', '', '+' + fmt(q * ink.perCan) + ' kg'));
+                sub.appendChild(document.createTextNode(' goes to Used Inks Stock as ' + usedTarget(ink)));
+            } else {
+                sub.appendChild(document.createTextNode('Adding '));
+                sub.appendChild(el('strong', '', fmt(q * ink.perCan) + ' kg'));
+                sub.appendChild(document.createTextNode(' of ' + inkLabel(ink)));
+            }
+            preview.appendChild(sub);
+        } else if (over) {
+            preview.classList.add('cans-bad');
+            preview.appendChild(el('span', 'cans-preview-label', 'Not enough stock'));
+            preview.appendChild(el('span', 'cans-preview-eq', cansWord(ink.cans) + ' available'));
+        } else {
+            preview.appendChild(el('span', 'cans-preview-idle', !ink
+                ? 'Choose an ink to see its stock.'
+                : (mode === 'out' ? 'Enter the cans going out to see what is left.' : 'Enter the cans that came in to see the new stock.')));
+        }
+
+        // used-ink description
+        if (linkDesc) {
+            linkDesc.textContent = '';
+            var kgOut = ink && ok && !over ? fmt(q * ink.perCan) + ' kg' : 'The KG';
+            linkDesc.appendChild(el('strong', '', kgOut));
+            if (linkBox && linkBox.checked) {
+                linkDesc.appendChild(document.createTextNode(' is added under the name and shade you choose below.'));
+            } else {
+                linkDesc.appendChild(document.createTextNode(' is added to Used Inks Stock as ' + (ink ? usedTarget(ink) : 'the ink colour and code') + '. Switch on to choose a name & shade.'));
+            }
+        }
+
+        // error + field states
+        errorEl.hidden = !p;
+        errorEl.textContent = p ? p.msg : '';
+        stepBox.classList.toggle('cans-invalid', over || (!!p && p.field === 'qty'));
+        trigger.classList.toggle('cans-invalid', !!p && p.field === 'ink');
+        if (dateInput) dateInput.classList.toggle('ih-invalid', !!p && p.field === 'date');
+
+        // button text
+        var label = mode === 'out'
+            ? (ok && ink && !over ? 'Take out ' + cansWord(q) : 'Save Cans Out')
+            : (ok && ink ? 'Save ' + cansWord(q) + ' in' : 'Save Cans In');
+        submitBtn.querySelector('[data-cans-submit-text]').textContent = label;
+    }
+
+    function updateDateNote() {
+        if (!dateNote || !dateInput) return;
+        var today = pkToday();
+        if (!dateInput.value) { dateNote.textContent = ''; return; }
+        dateNote.textContent = dateInput.value === today ? 'Today (Pakistan time)' : 'Not today — check the date';
+        dateNote.style.color = dateInput.value === today ? '' : '#92400e';
+    }
+
+    form.addEventListener('submit', function (e) {
+        touched = true;
+        var p = problem(true);
+        update();
+        if (p) {
+            e.preventDefault();
+            if (p.field === 'ink') { openPicker(); }
+            else if (p.field === 'qty') { qty.focus(); }
+            else if (p.field === 'date' && dateInput) { dateInput.focus(); }
+            errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+
+    // ------------------------------------------------------------ start
+    if (dateInput) {
+        if (!dateInput.value) dateInput.value = pkToday();
+        dateInput.addEventListener('input', function () { updateDateNote(); if (touched) update(); });
+        dateInput.addEventListener('change', updateDateNote);
+        updateDateNote();
+    }
+    function init() {
+        if (select.value && inks[select.value]) {
+            opts.forEach(function (o) { o.setAttribute('aria-selected', o.dataset.id === select.value ? 'true' : 'false'); });
+        }
+        showSelection();
+        if (linkBox) syncLink(); else update();
+    }
+    init();
+    // Back button (page restored from cache): show what the browser kept.
+    window.addEventListener('pageshow', function (e) { if (e.persisted) init(); });
+})();
+</script>

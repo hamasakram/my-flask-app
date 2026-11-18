@@ -1,0 +1,138 @@
+{# Shared behaviour for the redesigned Ink pages (used-* markup). No form field names are touched. #}
+<script>
+(function () {
+    'use strict';
+    var KEY_TZ = 'Asia/Karachi';
+
+    // Today's date in Pakistan (YYYY-MM-DD), not UTC: after 7pm UTC it is already tomorrow there.
+    function pkToday() {
+        try {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: KEY_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        } catch (e) {
+            return new Date(Date.now() + 5 * 3600 * 1000).toISOString().slice(0, 10);
+        }
+    }
+    function shiftDay(iso, days) {
+        var d = new Date(iso + 'T12:00:00Z');
+        d.setUTCDate(d.getUTCDate() + days);
+        return d.toISOString().slice(0, 10);
+    }
+    var today = pkToday();
+    window.UsedInk = { pkToday: pkToday };
+
+    // A page opened without ?date= shows the server's "today"; move it to Pakistan's today.
+    var page = document.querySelector('[data-pk-default-date]');
+    if (page) {
+        var shown = page.getAttribute('data-pk-default-date');
+        if (shown && shown !== today && !/[?&]date=/.test(location.search)) {
+            var url = new URL(location.href);
+            url.searchParams.set('date', today);
+            location.replace(url.toString());
+            return;
+        }
+    }
+
+    // Date bars: change the date -> open that day; Today link; no "next" past today.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-used-datebar]'), function (form) {
+        var input = form.querySelector('[data-used-date]');
+        var todayLink = form.querySelector('[data-used-today]');
+        var next = form.querySelector('[data-used-next]');
+        if (!input) return;
+        input.max = today;
+        input.addEventListener('change', function () {
+            if (!input.value) return;
+            if (form.requestSubmit) form.requestSubmit(); else form.submit();
+        });
+        if (todayLink) {
+            var url = new URL(form.action, location.href);
+            url.searchParams.set('date', today);
+            todayLink.href = url.toString();
+            todayLink.hidden = input.value === today;
+        }
+        if (next && input.value >= today) {
+            next.setAttribute('aria-disabled', 'true');
+            next.setAttribute('tabindex', '-1');
+        }
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-used-daytag]'), function (tag) {
+        var d = tag.getAttribute('data-used-daytag');
+        if (d === today) { tag.textContent = 'Today'; tag.hidden = false; }
+        else if (d === shiftDay(today, -1)) { tag.textContent = 'Yesterday'; tag.hidden = false; }
+    });
+
+    // Search + filter chips for any list with data-search rows.
+    function setupFilter(targetId) {
+        var target = document.getElementById(targetId);
+        if (!target) return;
+        var input = document.querySelector('[data-used-search="' + targetId + '"]');
+        var clear = input ? document.querySelector('[data-clear-for="' + input.id + '"]') : null;
+        var chips = document.querySelectorAll('[data-used-chip-for="' + targetId + '"]');
+        var empty = document.querySelector('[data-used-empty-for="' + targetId + '"]');
+        var count = document.querySelector('[data-used-count-for="' + targetId + '"]');
+        var state = '';
+        Array.prototype.forEach.call(chips, function (chip) {
+            if (chip.getAttribute('aria-pressed') === 'true') state = chip.getAttribute('data-used-chip');
+        });
+        function apply() {
+            var words = String(input ? input.value : '').toLowerCase().split(/\s+/).filter(Boolean);
+            var rows = target.querySelectorAll('[data-search]');
+            var shownN = 0;
+            Array.prototype.forEach.call(rows, function (row) {
+                var hay = row.getAttribute('data-search');
+                var states = (row.getAttribute('data-state') || '').split(' ');
+                var ok = (!state || states.indexOf(state) !== -1) && words.every(function (w) { return hay.indexOf(w) !== -1; });
+                row.hidden = !ok;
+                if (ok) shownN += 1;
+            });
+            Array.prototype.forEach.call(target.querySelectorAll('[data-used-group]'), function (g) {
+                g.hidden = !g.querySelector('[data-search]:not([hidden])');
+            });
+            if (empty) empty.hidden = shownN !== 0 || !rows.length;
+            if (count) count.textContent = shownN === rows.length ? String(rows.length) : shownN + ' of ' + rows.length;
+            if (clear) clear.hidden = !(input && input.value);
+            Array.prototype.forEach.call(chips, function (chip) {
+                chip.setAttribute('aria-pressed', chip.getAttribute('data-used-chip') === state ? 'true' : 'false');
+            });
+        }
+        if (input) input.addEventListener('input', apply);
+        if (clear) clear.addEventListener('click', function () { input.value = ''; apply(); input.focus(); });
+        Array.prototype.forEach.call(chips, function (chip) {
+            chip.addEventListener('click', function () { state = chip.getAttribute('data-used-chip'); apply(); });
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('[data-used-reset="' + targetId + '"]'), function (btn) {
+            btn.addEventListener('click', function () { if (input) input.value = ''; state = ''; apply(); });
+        });
+        apply();
+    }
+    var seen = {};
+    Array.prototype.forEach.call(document.querySelectorAll('[data-used-search], [data-used-chip-for]'), function (el) {
+        var id = el.getAttribute('data-used-search') || el.getAttribute('data-used-chip-for');
+        if (!seen[id]) { seen[id] = true; setupFilter(id); }
+    });
+
+    // Panels (forms that open from header buttons).
+    function openPanel(id, focusSel) {
+        var panel = document.getElementById(id);
+        if (!panel) return;
+        Array.prototype.forEach.call(document.querySelectorAll('[data-used-panel]'), function (p) {
+            if (p !== panel) p.hidden = true;
+        });
+        panel.hidden = false;
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var t = panel.querySelector(focusSel || 'input:not([type=hidden]), select');
+        if (t) { try { t.focus({ preventScroll: true }); } catch (e) { t.focus(); } }
+    }
+    window.UsedInk.openPanel = openPanel;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-used-open]'), function (link) {
+        link.addEventListener('click', function (e) { e.preventDefault(); openPanel(link.getAttribute('data-used-open')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-used-close]'), function (btn) {
+        btn.addEventListener('click', function () {
+            var p = document.getElementById(btn.getAttribute('data-used-close'));
+            if (p) p.hidden = true;
+        });
+    });
+    var hashPanel = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+    if (hashPanel && hashPanel.hasAttribute('data-used-panel')) openPanel(hashPanel.id);
+})();
+</script>

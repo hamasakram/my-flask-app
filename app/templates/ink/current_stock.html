@@ -1,54 +1,276 @@
 {% extends "base.html" %}
-{% block title %}Current Stock - RN COLOUR{% endblock %}
+{% from "ink/_stock_macros.html" import lid, code_badge, status_badge, plural %}
+{% block title %}Ink Hall Stock - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Current Stock</h1>
-    <p class="page-subtitle">Live ink inventory updated by Cans In and Cans Out</p>
-</div>
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_stock_styles.html" %}
+{% set can_edit = current_user.can_edit() %}
+<div class="ih-page ink-page">
 
-<div class="stats-grid">
-    <div class="stat-card accent-green">
-        <span class="stat-label">Total Current Cans</span>
-        <span class="stat-value">{{ "%.1f"|format(live_stock | sum(attribute='current_cans')) }}</span>
+<header class="ih-header">
+    <div>
+        <h1>Ink Hall Stock</h1>
+        <p>Ink cans in the hall now. Cans In adds to an ink, Cans Out takes cans off. 1 can = 25 kg.</p>
     </div>
-    <div class="stat-card accent-blue">
-        <span class="stat-label">Total Current Weight</span>
-        <span class="stat-value">{{ "%.1f"|format(live_stock | sum(attribute='current_weight')) }} kg</span>
+    <div class="ih-header-actions">
+        {% if can_edit %}
+        <a href="{{ url_for('inventory.cans_in') }}" class="ih-btn ih-btn-primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Cans In
+        </a>
+        <a href="{{ url_for('inventory.cans_out') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>Cans Out
+        </a>
+        <a href="{{ url_for('inventory.inks_list') }}#ink-add" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8.5v7M8.5 12h7"/></svg>Add ink
+        </a>
+        {% else %}
+        <a href="{{ url_for('inventory.inks_list') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h9"/></svg>Ink list
+        </a>
+        {% endif %}
+        <a href="{{ url_for('inventory.current_stock_pdf') }}" class="ih-btn ih-btn-quiet" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download PDF
+        </a>
     </div>
-</div>
+</header>
 
-<div class="card">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Company</th>
-                <th>Color Code</th>
-                <th>Color</th>
-                <th>Initial Cans</th>
-                <th>Cans In</th>
-                <th>Cans Out</th>
-                <th>Current Cans</th>
-                <th>Wt/Can</th>
-                <th>Current Weight</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in live_stock %}
-            <tr>
-                <td>{{ item.ink.ink_company }}</td>
-                <td>{{ item.ink.color_code or '—' }}</td>
-                <td>{{ item.ink.name }}</td>
-                <td>{{ "%.1f"|format(item.initial_cans) }}</td>
-                <td>{{ "%.1f"|format(item.cans_in) }}</td>
-                <td>{{ "%.1f"|format(item.used) }}</td>
-                <td><strong>{{ "%.1f"|format(item.current_cans) }}</strong></td>
-                <td>{{ "%.1f"|format(item.ink.weight_per_can) }}</td>
-                <td><strong>{{ "%.1f"|format(item.current_weight) }} kg</strong></td>
-            </tr>
+{% if summary.rows %}
+<section class="card ih-summary ink-summary" aria-label="Stock summary">
+    <div class="ih-totals">
+        <span class="ih-total-label">In the hall now</span>
+        <span class="ih-total-main ih-num">{{ qty(summary.total_cans) }}<small>{{ plural(summary.total_cans, 'can') }}</small></span>
+        <span class="ih-total-sub ih-num"><strong>{{ qty(summary.total_kg) }}</strong> kg</span>
+        <span class="ih-total-sub ih-num"><strong>{{ summary.count }}</strong> {{ plural(summary.count, 'ink') }}</span>
+    </div>
+    {% if summary.total_cans > 0 %}
+    <div class="ih-bar" role="img" aria-label="Share of cans by company: {% for g in summary.groups %}{{ g.name }} {{ qty(g.cans) }} cans{% if not loop.last %}, {% endif %}{% endfor %}">
+        {% for g in summary.groups %}{% if g.cans > 0 %}<span style="width: {{ '%.3f'|format(100 * g.cans / summary.total_cans) }}%; background: {{ g.color }}" title="{{ g.name }} {{ qty(g.cans) }} cans"></span>{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    <ul class="ih-fams ink-fams">
+        {% for g in summary.groups %}
+        <li>
+            <button type="button" class="ih-fam" data-ink-company="{{ g.key }}" aria-pressed="false" aria-label="Show only {{ g.name }}: {{ qty(g.cans) }} cans, {{ qty(g.kg) }} kg">
+                <span class="ih-dot" style="background: {{ g.color }}" aria-hidden="true"></span>
+                <span class="ih-fam-name">{{ g.name }}</span>
+                <span class="ih-fam-kg ih-num">{{ qty(g.cans) }} {{ plural(g.cans, 'can') }}</span>
+                <span class="ih-fam-rolls ih-num"><span class="ink-nw">{{ qty(g.kg) }} kg</span> · <span class="ink-nw">{{ g.count }} {{ plural(g.count, 'ink') }}</span></span>
+            </button>
+        </li>
+        {% endfor %}
+        <li>
+            {% if summary.attention_count %}
+            <button type="button" class="ih-fam ink-attn" data-ink-status="attention" aria-pressed="false" aria-label="Show only low or out of stock inks: {{ summary.attention_count }}">
+                <span class="ink-attn-icon" aria-hidden="true"></span>
+                <span class="ih-fam-name">Low / out of stock</span>
+                <span class="ih-fam-kg ih-num">{{ summary.attention_count }} {{ plural(summary.attention_count, 'ink') }}</span>
+                <span class="ih-fam-rolls ih-num">{{ summary.out_count }} out · {{ summary.low_count }} low</span>
+            </button>
             {% else %}
-            <tr><td colspan="9" class="empty">No inks in stock yet</td></tr>
+            <div class="ih-fam ink-attn ink-attn-none">
+                <span class="ink-attn-icon" aria-hidden="true"></span>
+                <span class="ih-fam-name">Low / out of stock</span>
+                <span class="ih-fam-kg ih-num">None</span>
+                <span class="ih-fam-rolls">Every ink has more than its low level</span>
+            </div>
+            {% endif %}
+        </li>
+    </ul>
+</section>
+{% endif %}
+
+<section aria-labelledby="ink-list-title">
+    <h2 class="sr-only" id="ink-list-title">Inks in stock</h2>
+    {% if summary.rows %}
+    <div class="ih-toolbar" id="ih-toolbar">
+        <div class="ih-toolbar-row">
+            <div class="ih-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                <input type="search" id="ink-search" placeholder="Colour or code" aria-label="Search inks by colour, code or company" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+                <button type="button" class="ih-search-clear" id="ink-search-clear" aria-label="Clear search" hidden>
+                    <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+                </button>
+            </div>
+            <label class="sr-only" for="ink-sort">Sort</label>
+            <select id="ink-sort" class="ih-sort">
+                <option value="code">By code</option>
+                <option value="cans">Most cans</option>
+                <option value="colour">Colour A–Z</option>
+            </select>
+        </div>
+        <div class="ih-chips" role="group" aria-label="Filter inks">
+            <button type="button" class="ih-chip" data-chip-company="" aria-pressed="true">All <span>{{ summary.count }}</span></button>
+            {% for g in summary.groups %}
+            <button type="button" class="ih-chip" data-chip-company="{{ g.key }}" aria-pressed="false">{{ g.name }} <span>{{ g.count }}</span></button>
             {% endfor %}
-        </tbody>
-    </table>
+            {% if summary.attention_count %}
+            <span class="ink-chip-sep" aria-hidden="true"></span>
+            <button type="button" class="ih-chip ink-chip-low" data-chip-status="attention" aria-pressed="false">Low / out <span>{{ summary.attention_count }}</span></button>
+            {% endif %}
+            {% if summary.series|length > 1 %}
+            <span class="ink-chip-sep" aria-hidden="true"></span>
+            {% for s in summary.series %}
+            <button type="button" class="ih-chip ink-chip-code" data-chip-series="{{ s.key }}" aria-pressed="false" aria-label="Code {{ s.key }}, {{ s.count }} inks">{{ s.key }} <span>{{ s.count }}</span></button>
+            {% endfor %}
+            {% endif %}
+        </div>
+        <p class="ih-count" id="ink-count" aria-live="polite">{{ summary.count }} {{ plural(summary.count, 'ink') }}</p>
+    </div>
+    {% endif %}
+
+    <div class="card ih-list" id="ink-list">
+        {% for g in summary.groups %}
+        <div class="ih-group" data-company="{{ g.key }}">
+            <div class="ih-group-head">
+                <span class="ih-dot" style="background: {{ g.color }}" aria-hidden="true"></span>
+                <h3>{{ g.name }}</h3>
+                <span class="ih-group-figs ink-group-figs ih-num" data-group-figs><strong>{{ qty(g.cans) }} {{ plural(g.cans, 'can') }}</strong> <span>{{ qty(g.kg) }} kg</span> <span>{{ g.count }} {{ plural(g.count, 'ink') }}</span></span>
+            </div>
+            <div class="ink-cols" aria-hidden="true"><span>Colour and code</span><span>Opening · In · Out</span><span>Cans</span><span>KG</span><span>Status</span></div>
+            <ul class="ih-rows">
+                {% for r in g.rows %}
+                <li class="ink-row ink-row-{{ r.status }}" data-company="{{ r.company_key }}" data-series="{{ r.series }}" data-status="{{ r.status }}"
+                    data-order="{{ r.order }}" data-cans="{{ r.cans }}" data-kg="{{ r.kg }}" data-colour="{{ r.colour|lower }}"
+                    data-search="{{ (r.colour ~ ' ' ~ r.code ~ ' ' ~ r.code|replace(' ', '') ~ ' ' ~ r.company ~ ' ' ~ r.status_label)|lower }}">
+                    {{ lid(r) }}
+                    <div class="ink-name">
+                        <span class="ink-colour">{{ r.colour }}</span>
+                        <span class="ink-meta">{{ code_badge(r) }}{{ status_badge(r, 'ink-status-phone') }}</span>
+                    </div>
+                    <div class="ink-flow">Opening <b>{{ qty(r.opening) }}</b> · In <b class="ink-in">+{{ qty(r.cans_in) }}</b> · Out <b class="ink-out">−{{ qty(r.cans_out) }}</b></div>
+                    <div class="ink-cans"><strong>{{ qty(r.cans) }}</strong><small>{{ plural(r.cans, 'can') }}</small></div>
+                    <div class="ink-kg">{{ qty(r.kg) }}<small>kg</small></div>
+                    {{ status_badge(r) }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endfor %}
+
+        {% if summary.rows %}
+        <div class="ih-empty" id="ink-nomatch" hidden>
+            <strong>No ink matches</strong>
+            Try a colour like Magenta, a code like 0140, or clear the filters.
+            <div><button type="button" class="ih-btn ih-btn-quiet" id="ink-reset">Show all inks</button></div>
+        </div>
+        {% else %}
+        <div class="ih-empty">
+            <strong>No inks in the hall yet</strong>
+            {% if can_edit %}Add each ink with the cans you have to start tracking stock.
+            <div><a href="{{ url_for('inventory.inks_list') }}#ink-add" class="ih-btn ih-btn-primary">Add ink</a></div>
+            {% else %}Inks added by the team will show here.{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% if summary.rows %}
+    <p class="ink-legend">Stock = opening cans + Cans In − Cans Out. Low means 1 can or less (or the ink's own low-stock level when one is set).</p>
+    {% endif %}
+</section>
+
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+    var list = document.getElementById('ink-list');
+    var search = document.getElementById('ink-search');
+    if (!list || !search) return;
+    var sortSel = document.getElementById('ink-sort');
+    var clearBtn = document.getElementById('ink-search-clear');
+    var countEl = document.getElementById('ink-count');
+    var noMatch = document.getElementById('ink-nomatch');
+    var STORE = 'ink-stock-state';
+    var state = { q: '', company: '', status: '', series: '', sort: 'code' };
+    try { var saved = JSON.parse(sessionStorage.getItem(STORE) || 'null'); if (saved) state = Object.assign(state, saved); } catch (e) { /* ignore */ }
+    if (['code', 'cans', 'colour'].indexOf(state.sort) < 0) state.sort = 'code';
+
+    function fmt(n) {
+        n = Number(n || 0);
+        return Math.abs(n - Math.round(n)) < 0.005 ? Math.round(n).toLocaleString('en-US') : n.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    }
+    function plural(n, w) { return w + (Math.abs(Number(n) - 1) < 0.0001 ? '' : 's'); }
+    function words(q) { return String(q || '').toLowerCase().split(/\s+/).filter(Boolean); }
+    function each(sel, fn) { Array.prototype.forEach.call(document.querySelectorAll(sel), fn); }
+
+    function apply() {
+        var terms = words(state.q);
+        var shown = 0, total = 0;
+        Array.prototype.forEach.call(list.querySelectorAll('.ih-group'), function (group) {
+            var rowsEl = group.querySelector('.ih-rows');
+            var rows = Array.prototype.slice.call(rowsEl.children);
+            rows.sort(function (a, b) {
+                var base = Number(a.dataset.order) - Number(b.dataset.order);
+                if (state.sort === 'cans') return Number(b.dataset.cans) - Number(a.dataset.cans) || base;
+                if (state.sort === 'colour') return a.dataset.colour.localeCompare(b.dataset.colour) || base;
+                return base;
+            }).forEach(function (row) { rowsEl.appendChild(row); });
+            var visible = 0, cans = 0, kg = 0;
+            rows.forEach(function (row) {
+                total += 1;
+                var ok = (!state.company || row.dataset.company === state.company) &&
+                    (!state.series || row.dataset.series === state.series) &&
+                    (!state.status || row.dataset.status !== 'ok') &&
+                    terms.every(function (w) { return row.dataset.search.indexOf(w) !== -1; });
+                row.hidden = !ok;
+                if (ok) { visible += 1; shown += 1; cans += Number(row.dataset.cans); kg += Number(row.dataset.kg); }
+            });
+            group.hidden = visible === 0;
+            // Group totals follow the filter so the header always matches the rows under it.
+            var figs = group.querySelector('[data-group-figs]');
+            if (figs && visible) {
+                figs.children[0].textContent = fmt(cans) + ' ' + plural(cans, 'can');
+                figs.children[1].textContent = fmt(kg) + ' kg';
+                figs.children[2].textContent = visible + ' ' + plural(visible, 'ink');
+            }
+        });
+        if (noMatch) noMatch.hidden = shown !== 0;
+        countEl.textContent = shown === total ? total + ' ' + plural(total, 'ink') : 'Showing ' + shown + ' of ' + total + ' inks';
+        clearBtn.hidden = !state.q;
+        var none = !state.company && !state.status && !state.series;
+        each('[data-chip-company]', function (c) {
+            var on = c.dataset.chipCompany ? c.dataset.chipCompany === state.company : none;
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        each('[data-chip-status]', function (c) { c.setAttribute('aria-pressed', state.status ? 'true' : 'false'); });
+        each('[data-chip-series]', function (c) { c.setAttribute('aria-pressed', c.dataset.chipSeries === state.series ? 'true' : 'false'); });
+        each('[data-ink-company]', function (b) { b.setAttribute('aria-pressed', state.company && b.dataset.inkCompany === state.company ? 'true' : 'false'); });
+        each('[data-ink-status]', function (b) { b.setAttribute('aria-pressed', state.status ? 'true' : 'false'); });
+        try { sessionStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    }
+
+    var toolbar = document.getElementById('ih-toolbar');
+    function toolbarHeight() { if (toolbar) document.documentElement.style.setProperty('--ih-toolbar-h', toolbar.offsetHeight + 'px'); }
+    toolbarHeight();
+    window.addEventListener('resize', toolbarHeight);
+
+    search.value = state.q;
+    sortSel.value = state.sort;
+    search.addEventListener('input', function () { state.q = search.value; apply(); });
+    sortSel.addEventListener('change', function () { state.sort = sortSel.value; apply(); });
+    clearBtn.addEventListener('click', function () { state.q = ''; search.value = ''; apply(); search.focus(); });
+    document.addEventListener('click', function (e) {
+        var t = e.target.closest('[data-chip-company], [data-chip-status], [data-chip-series], [data-ink-company], [data-ink-status]');
+        if (!t) return;
+        var d = t.dataset;
+        if (d.chipCompany !== undefined) {
+            state.company = d.chipCompany;
+            if (!d.chipCompany) { state.status = ''; state.series = ''; }
+        } else if (d.chipStatus !== undefined || d.inkStatus !== undefined) {
+            state.status = state.status ? '' : 'attention';
+        } else if (d.chipSeries !== undefined) {
+            state.series = state.series === d.chipSeries ? '' : d.chipSeries;
+        } else if (d.inkCompany !== undefined) {
+            state.company = state.company === d.inkCompany ? '' : d.inkCompany;
+        }
+        apply();
+        if (d.inkCompany !== undefined || d.inkStatus !== undefined) toolbar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.getElementById('ink-reset').addEventListener('click', function () {
+        state.q = ''; state.company = ''; state.status = ''; state.series = ''; search.value = ''; apply();
+    });
+    apply();
+})();
+</script>
 {% endblock %}

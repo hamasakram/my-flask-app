@@ -71,15 +71,50 @@ def inks_list():
             flash("Could not save ink due to a database error. Please try again.", "danger")
         return redirect(url_for("inventory.inks_list"))
 
-    inks = list_inks()
-    return render_template("ink/inks.html", inks=inks)
+    from app.models import OpeningStock
+    from app.services.ink_stock_pdf import fmt_qty, summarize_ink_stock
+
+    summary = summarize_ink_stock(calculate_live_stock())
+    # Inks with Cans In / Cans Out (or opening) records can't be deleted; hide Delete for them.
+    in_use = {
+        row[0]
+        for row in db.session.query(InventoryTransaction.ink_type_id).distinct()
+        if row[0] is not None
+    } | {row[0] for row in db.session.query(OpeningStock.ink_type_id).distinct()}
+    companies = sorted({g["name"] for g in summary["groups"]} | {"RL", "Horizon Inks"}, key=str.lower)
+    colours = sorted({r["colour"] for r in summary["rows"] if r["colour"]}, key=str.lower)
+    existing = [
+        {"company": r["company"].lower(), "code": r["code"].lower(), "colour": r["colour"].lower()}
+        for r in summary["rows"]
+    ]
+    return render_template(
+        "ink/inks.html",
+        summary=summary,
+        in_use=in_use,
+        companies=companies,
+        colours=colours,
+        existing=existing,
+        qty=fmt_qty,
+    )
 
 
 @inventory_bp.route("/current-stock")
 @login_required
 def current_stock():
-    live_stock = calculate_live_stock()
-    return render_template("ink/current_stock.html", live_stock=live_stock)
+    from app.services.ink_stock_pdf import fmt_qty, summarize_ink_stock
+
+    summary = summarize_ink_stock(calculate_live_stock())
+    return render_template("ink/current_stock.html", summary=summary, qty=fmt_qty)
+
+
+@inventory_bp.route("/current-stock/pdf")
+@login_required
+def current_stock_pdf():
+    from app.services.ink_stock_pdf import PAKISTAN_TZ, generate_ink_stock_pdf, summarize_ink_stock
+
+    output = generate_ink_stock_pdf(summarize_ink_stock(calculate_live_stock()))
+    filename = f"ink_hall_stock_{datetime.now(PAKISTAN_TZ).strftime('%Y-%m-%d')}.pdf"
+    return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
 @inventory_bp.route("/cans-in", methods=["GET", "POST"])
@@ -134,18 +169,27 @@ def cans_in():
         .limit(20)
         .all()
     )
-    return render_template("ink/cans_in.html", inks=inks, recent=recent)
+    return render_template(
+        "ink/cans_in.html",
+        inks=inks,
+        recent=recent,
+        ink_stock=calculate_live_stock(),
+    )
 
 
 @inventory_bp.route("/cans-out", methods=["GET", "POST"])
 @login_required
 def cans_out():
     inks = list_inks()
+    from datetime import timedelta, timezone
+
+    # Pakistan has no daylight saving: "today" is always UTC+5 (the server runs on UTC).
+    pk_today = datetime.now(timezone(timedelta(hours=5))).date()
     selected_date = request.args.get("date") or request.form.get("transaction_date")
     if selected_date:
         filter_date = datetime.strptime(selected_date, "%Y-%m-%d").date()
     else:
-        filter_date = date.today()
+        filter_date = pk_today
 
     if request.method == "POST":
         require_edit_access()
@@ -233,6 +277,10 @@ def cans_out():
         selected_date=filter_date.isoformat(),
         ink_names=list_used_ink_names(),
         shade_names=list_used_ink_shades(),
+        ink_stock=calculate_live_stock(),
+        prev_date=(filter_date - timedelta(days=1)).isoformat(),
+        next_date=(filter_date + timedelta(days=1)).isoformat(),
+        today_date=pk_today.isoformat(),
     )
 
 
@@ -278,10 +326,24 @@ def used_ink_names_setup():
             flash("Could not save name.", "danger")
         return redirect(url_for("inventory.used_ink_names_setup"))
 
+    # How many Used Inks Stock entries use each name / shade (lower-case keys), so the page can
+    # show which ones are in use (those can't be deleted).
+    from app.models import UsedInkStock
+
+    ink_name_use: dict[str, int] = {}
+    shade_name_use: dict[str, int] = {}
+    for used_ink, used_shade in db.session.query(UsedInkStock.ink_name, UsedInkStock.shade_name):
+        if used_ink:
+            ink_name_use[used_ink.lower()] = ink_name_use.get(used_ink.lower(), 0) + 1
+        if used_shade:
+            shade_name_use[used_shade.lower()] = shade_name_use.get(used_shade.lower(), 0) + 1
+
     return render_template(
         "ink/used_ink_names_setup.html",
         ink_names=list_used_ink_name_records(),
         shade_names=list_used_ink_shade_records(),
+        ink_name_use=ink_name_use,
+        shade_name_use=shade_name_use,
     )
 
 
@@ -345,12 +407,18 @@ def used_inks_stock():
         return redirect(url_for("inventory.used_inks_stock", date=parsed_date.isoformat()))
 
     report_data = get_used_ink_report_data(filter_date)
+    from datetime import timedelta
+
     return render_template(
         "ink/used_inks_stock.html",
         entries=report_data["entries"],
         report_data=report_data,
         balances=report_data["balances"],
         selected_date=filter_date.isoformat(),
+        filter_date=filter_date,
+        prev_date=(filter_date - timedelta(days=1)).isoformat(),
+        next_date=(filter_date + timedelta(days=1)).isoformat(),
+        date_in_url=bool(request.args.get("date")),
         ink_names=list_used_ink_names(),
         shade_names=list_used_ink_shades(),
     )

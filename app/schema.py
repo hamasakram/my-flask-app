@@ -786,6 +786,9 @@ def ensure_schema():
 
     replace_in_hall_stock_nov_2026()
     replace_machine_hall_stock_nov_2026()
+    from app.services.ink_stock_import import replace_ink_stock_nov_2026
+
+    replace_ink_stock_nov_2026()
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)

@@ -1,69 +1,79 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "ink/_cans_macros.html" import n, kg, cans_word, ink_cell, ink_picker, stepper, per_can_hint, actions with context %}
 {% block title %}Cans Out - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Cans Out</h1>
-    <p class="page-subtitle">Record cans taken out for use — optionally link to Used Ink Stock</p>
-</div>
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_cans_styles.html" %}
+{% set can_edit = current_user.can_edit() %}
+{% set day = namespace(cans=0, kg=0) %}
+{% for txn in recent %}{% set day.cans = day.cans + (txn.quantity or 0) %}{% set day.kg = day.kg + (txn.quantity or 0) * (txn.ink_type.weight_per_can or 0) %}{% endfor %}
+{% set day_label = selected_date[8:10] ~ '-' ~ selected_date[5:7] ~ '-' ~ selected_date[0:4] %}
+<div class="ih-page cans-page">
 
-<div class="card">
-    <form method="GET" class="filter-bar">
-        <input type="date" name="date" value="{{ selected_date }}">
-        <button type="submit" class="btn btn-secondary">View Date</button>
-    </form>
-</div>
-
-<div class="stats-grid">
-    <div class="stat-card accent-orange">
-        <span class="stat-label">Added to Used Stock Today</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.daily_added_kg) }} kg</span>
+<header class="ih-header">
+    <div>
+        <span class="cans-eyebrow">Ink stock</span>
+        <h1>Cans Out</h1>
+        <p>Record cans taken out for use. Each can's KG is added to Used Inks Stock automatically.</p>
     </div>
-    <div class="stat-card accent-blue">
-        <span class="stat-label">Total Used Ink Stock</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_balance_kg) }} kg</span>
+    <div class="ih-header-actions">
+        <a href="{{ url_for('inventory.used_inks_stock') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Used Inks Stock
+        </a>
+        <a href="{{ url_for('inventory.cans_in') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>Cans In
+        </a>
     </div>
-</div>
+</header>
 
-{% if current_user.can_edit() %}
-<div class="card highlight-card">
-    <h2>Record Cans Out</h2>
+{% if can_edit %}
+<section class="card cans-form-card" aria-labelledby="cans-form-title">
+    <div class="ih-panel-head">
+        <div>
+            <h2 id="cans-form-title">Record cans out</h2>
+            <p>Pick the ink, enter the cans taken out and where they were used.</p>
+        </div>
+    </div>
     {% if not inks %}
     <p class="empty-state">Add inks first in <a href="{{ url_for('inventory.inks_list') }}">Inks</a>.</p>
     {% else %}
-    <form method="POST" class="form-grid">
-        <div class="form-group full-width">
-            <label for="ink_type_id">Ink</label>
-            <select id="ink_type_id" name="ink_type_id" required>
-                <option value="">Select ink</option>
-                {% for ink in inks %}
-                <option value="{{ ink.id }}">{{ ink.display_name }}</option>
-                {% endfor %}
-            </select>
-            <small id="current-stock-hint" class="field-note"></small>
-        </div>
-        <div class="form-group">
-            <label for="cans_out">Cans Out</label>
-            <input type="number" id="cans_out" name="cans_out" step="0.1" min="0.1" required>
-        </div>
-        <div class="form-group">
+    <form method="POST" class="ih-form" data-cans-form="out" autocomplete="off">
+        {{ ink_picker(ink_stock, 'out') }}
+
+        {{ stepper('cans_out', 'Cans out', per_can_hint(ink_stock), with_meta=True) }}
+        <div class="ih-field ih-span-2 cans-date-field">
             <label for="transaction_date">Date</label>
             <input type="date" id="transaction_date" name="transaction_date" value="{{ selected_date }}" required>
+            <span class="cans-date-note" data-cans-date-note aria-live="polite"></span>
         </div>
-        <div class="form-group full-width">
-            <label for="where_used">Where Used</label>
+
+        <div class="cans-preview" data-cans-preview aria-live="polite">
+            <span class="cans-preview-idle">Choose an ink to see its stock.</span>
+        </div>
+
+        <div class="ih-field ih-span-2">
+            <label for="where_used">Where used</label>
             <input type="text" id="where_used" name="where_used" placeholder="Machine, job, etc.">
         </div>
-        <div class="form-group full-width">
-            <label class="checkbox-label">
-                <input type="checkbox" id="link_used_ink" name="link_used_ink">
-                Add to Used Ink Stock (link to setup name)
-            </label>
+        <div class="ih-field ih-span-2">
+            <label for="notes">Notes <small>(optional)</small></label>
+            <input type="text" id="notes" name="notes" placeholder="Optional">
         </div>
-        <div class="form-group full-width" id="used-ink-link-group" hidden>
-            <div class="form-grid">
-                <div class="form-group">
-                    <label for="used_ink_name">Used Ink Name</label>
+
+        <div class="cans-link">
+            <label class="cans-link-head" for="link_used_ink">
+                <span class="cans-link-text">
+                    <span class="cans-link-title">Choose Used Ink name &amp; shade</span>
+                    <span class="cans-link-desc" data-cans-link-desc>The KG is added to Used Inks Stock as the ink colour and code. Switch on to choose a name &amp; shade.</span>
+                </span>
+                <span class="cans-switch">
+                    <input type="checkbox" id="link_used_ink" name="link_used_ink" role="switch">
+                    <span aria-hidden="true"></span>
+                </span>
+            </label>
+            <div class="cans-link-body" id="used-ink-link-group" hidden>
+                <div class="ih-field">
+                    <label for="used_ink_name">Used ink name</label>
                     {% if ink_names %}
                     <select id="used_ink_name" name="used_ink_name">
                         <option value="">Select ink name</option>
@@ -75,8 +85,8 @@
                     <p class="empty-state">No names yet. Add them in <a href="{{ url_for('inventory.used_ink_names_setup') }}">Used Ink Names &amp; Setup</a>.</p>
                     {% endif %}
                 </div>
-                <div class="form-group">
-                    <label for="used_ink_shade">Shade Name</label>
+                <div class="ih-field">
+                    <label for="used_ink_shade">Shade name</label>
                     <select id="used_ink_shade" name="used_ink_shade">
                         <option value="">No shade</option>
                         {% for name in shade_names %}
@@ -84,124 +94,170 @@
                         {% endfor %}
                     </select>
                 </div>
+                <small class="field-note">Manage names in <a href="{{ url_for('inventory.used_ink_names_setup') }}">Used Ink Names &amp; Setup</a>.</small>
             </div>
-            <small class="field-note">Manage names in <a href="{{ url_for('inventory.used_ink_names_setup') }}">Used Ink Names &amp; Setup</a>.</small>
         </div>
-        <div class="form-group full-width">
-            <label for="notes">Notes</label>
-            <input type="text" id="notes" name="notes" placeholder="Optional">
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Cans Out</button>
+
+        <p class="ih-error" data-cans-error role="alert" hidden></p>
+        <div class="ih-form-foot cans-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary cans-submit" data-cans-submit>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span data-cans-submit-text>Save Cans Out</span>
+            </button>
         </div>
     </form>
     {% endif %}
-</div>
+</section>
 {% endif %}
 
-<div class="card">
-    <h2>Cans Out — {{ selected_date }}</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Ink</th><th>Cans Out</th><th>Remaining</th><th>Where Used</th><th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for txn in recent %}
-            <tr>
-                <td>{{ txn.ink_type.display_name }}</td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ "%.1f"|format(txn.quantity_left) if txn.quantity_left is not none else '—' }}</td>
-                <td>{{ txn.where_used or '—' }}</td>
-                <td>{{ txn.notes or '—' }}</td>
-                {{ row_actions(
-                    url_for('stock_edits.edit_ink_used', txn_id=txn.id, return_to='cans_out', date=selected_date),
-                    url_for('stock_deletes.delete_ink_used', txn_id=txn.id, return_to='cans_out', date=selected_date)
-                ) }}
-            </tr>
-            {% else %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No cans out for this date</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{# ------------------------------------------------------------------ Day view #}
+<section class="card cans-day" aria-labelledby="cans-day-title">
+    <div class="cans-day-top">
+        <h2 id="cans-day-title">{% if selected_date == today_date %}Today{% else %}Day{% endif %} · <span class="ih-num">{{ day_label }}</span></h2>
+        <form method="GET" class="cans-day-nav" data-cans-day>
+            <a href="{{ url_for('inventory.cans_out', date=prev_date) }}" class="ih-btn ih-btn-quiet cans-nav-btn" aria-label="Previous day">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+            </a>
+            <label class="sr-only" for="cans-day-date">Show date</label>
+            <input type="date" id="cans-day-date" name="date" value="{{ selected_date }}">
+            <button type="submit" class="ih-btn ih-btn-quiet cans-day-go">View</button>
+            <a href="{{ url_for('inventory.cans_out', date=next_date) }}" class="ih-btn ih-btn-quiet cans-nav-btn" aria-label="Next day">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            </a>
+            {% if selected_date != today_date %}
+            <a href="{{ url_for('inventory.cans_out') }}" class="ih-btn ih-btn-quiet">Today</a>
+            {% endif %}
+        </form>
+    </div>
+    <div class="cans-stats">
+        <div class="cans-stat">
+            <span class="cans-stat-label">Cans out on this day</span>
+            <span class="cans-stat-value">{{ n(day.cans) }}<small>can{{ '' if day.cans == 1 else 's' }}</small></span>
+            <span class="cans-stat-sub ih-num">{{ kg(day.kg) }} kg · {{ recent|length }} record{{ '' if recent|length == 1 else 's' }}</span>
+        </div>
+        <div class="cans-stat">
+            <span class="cans-stat-label">Added to Used Stock</span>
+            <span class="cans-stat-value">{{ kg(report_data.daily_added_kg) }}<small>kg</small></span>
+            <span class="cans-stat-sub">on this day</span>
+        </div>
+        <div class="cans-stat">
+            <span class="cans-stat-label">Used Ink Stock total</span>
+            <span class="cans-stat-value">{{ kg(report_data.total_balance_kg) }}<small>kg</small></span>
+            <span class="cans-stat-sub">all inks, now</span>
+        </div>
+    </div>
+</section>
 
-<div class="card">
-    <h2>Current Used Ink Stock</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Ink Name</th><th>Shade Name</th><th>Added (kg)</th><th>Used (kg)</th><th>Balance (kg)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in report_data.balances %}
-            <tr>
-                <td>{{ row.ink_name }}</td>
-                <td>{{ row.shade_name }}</td>
-                <td>{{ "%.1f"|format(row.added_kg) }}</td>
-                <td>{{ "%.1f"|format(row.used_kg) }}</td>
-                <td><strong>{{ "%.1f"|format(row.balance_kg) }} kg</strong></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" class="empty">No used ink stock yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<section class="card cans-recs" aria-labelledby="cans-list-title">
+    <div class="cans-recs-head">
+        <h2 id="cans-list-title">Cans Out — <span class="ih-num">{{ day_label }}</span></h2>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table cans-table">
+            <thead>
+                <tr>
+                    <th>Ink</th>
+                    <th class="cans-r">Cans out</th>
+                    <th class="cans-r">Left after</th>
+                    <th>Where used</th>
+                    <th>Notes</th>
+                    {% if can_edit %}<th><span class="sr-only">Actions</span></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for txn in recent %}
+                {% set ink = txn.ink_type %}
+                <tr>
+                    <td data-cell="main">{{ ink_cell(ink) }}</td>
+                    <td data-cell="qty" class="cans-r">
+                        <span class="cans-q cans-q-out ih-num">−{{ cans_word(txn.quantity) }}</span>
+                        {% if ink.weight_per_can %}<span class="cans-kg-sub ih-num">{{ kg(txn.quantity * ink.weight_per_can) }} kg</span>{% endif %}
+                    </td>
+                    <td data-cell="meta" class="cans-r ih-num"><span class="cans-mobile-only">Left after: </span>{{ cans_word(txn.quantity_left) if txn.quantity_left is not none else '—' }}{% if txn.where_used %}<span class="cans-mobile-only"> · {{ txn.where_used }}</span>{% endif %}</td>
+                    <td data-cell="desk">{{ txn.where_used or '—' }}</td>
+                    <td data-cell="notes" class="cans-muted">{{ txn.notes or '' }}</td>
+                    {% if can_edit %}
+                    <td data-cell="actions">
+                        {{ actions(url_for('stock_edits.edit_ink_used', txn_id=txn.id, return_to='cans_out', date=selected_date), url_for('stock_deletes.delete_ink_used', txn_id=txn.id, return_to='cans_out', date=selected_date), 'Cans Out ' ~ ink.display_name) }}
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ 6 if can_edit else 5 }}" class="empty">No cans out on {{ day_label }}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
 
-<div class="card">
-    <h2>Daily Used Ink Entries — {{ selected_date }}</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Type</th><th>Ink Name</th><th>Shade Name</th><th>Quantity (kg)</th><th>Source</th><th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for entry in report_data.entries %}
-            <tr>
-                <td>{% if entry.entry_type == 'use' %}<span class="badge badge-orange">Used</span>{% else %}<span class="badge badge-green">Added</span>{% endif %}</td>
-                <td>{{ entry.ink_name }}</td>
-                <td>{{ entry.shade_name or '—' }}</td>
-                <td>{{ "%.2f"|format(entry.quantity_total) }} kg</td>
-                <td>{% if entry.source_transaction_id %}Cans Out{% else %}Manual{% endif %}</td>
-                <td>{{ entry.notes or '—' }}</td>
-                {% if current_user.can_edit() %}
-                {{ row_actions(
-                    url_for('stock_edits.edit_used_ink_stock', record_id=entry.id, return_to='cans_out', date=selected_date),
-                    url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id, return_to='cans_out', date=selected_date)
-                ) }}
-                {% endif %}
-            </tr>
-            {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No used ink entries for this date</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<section class="card cans-recs" aria-labelledby="cans-bal-title">
+    <div class="cans-recs-head">
+        <h2 id="cans-bal-title">Current Used Ink Stock</h2>
+        <span class="ih-num">{{ kg(report_data.total_balance_kg) }} kg in total</span>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table cans-table">
+            <thead>
+                <tr>
+                    <th>Ink name</th><th>Shade</th><th class="cans-r">Added</th><th class="cans-r">Used</th><th class="cans-r">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in report_data.balances %}
+                <tr>
+                    <td data-cell="main"><strong>{{ row.ink_name }}</strong>{% if row.shade_name %}<span class="cans-mobile-only cans-ink-co"> · {{ row.shade_name }}</span>{% endif %}</td>
+                    <td data-cell="desk">{{ row.shade_name or '—' }}</td>
+                    <td data-cell="desk" class="cans-r ih-num">{{ kg(row.added_kg) }} kg</td>
+                    <td data-cell="desk" class="cans-r ih-num">{{ kg(row.used_kg) }} kg</td>
+                    <td data-cell="meta" class="cans-m-cell ih-num">Added {{ kg(row.added_kg) }} kg · Used {{ kg(row.used_kg) }} kg</td>
+                    <td data-cell="qty" class="cans-r"><span class="cans-q ih-num">{{ kg(row.balance_kg) }} kg</span></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">No used ink stock yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card cans-recs" aria-labelledby="cans-entries-title">
+    <div class="cans-recs-head">
+        <h2 id="cans-entries-title">Used Ink entries — <span class="ih-num">{{ day_label }}</span></h2>
+    </div>
+    <div class="table-scroll">
+        <table class="data-table cans-table">
+            <thead>
+                <tr>
+                    <th>Type</th><th>Ink name</th><th>Shade</th><th class="cans-r">Quantity</th><th>Source</th><th>Notes</th>
+                    {% if can_edit %}<th><span class="sr-only">Actions</span></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in report_data.entries %}
+                {% set badge %}{% if entry.entry_type == 'use' %}<span class="badge badge-orange">Used</span>{% else %}<span class="badge badge-green">Added</span>{% endif %}{% endset %}
+                <tr>
+                    <td data-cell="desk">{{ badge }}</td>
+                    <td data-cell="main"><span class="cans-mobile-only">{{ badge }} </span><strong>{{ entry.ink_name }}</strong>{% if entry.shade_name %}<span class="cans-mobile-only cans-ink-co"> · {{ entry.shade_name }}</span>{% endif %}</td>
+                    <td data-cell="desk">{{ entry.shade_name or '—' }}</td>
+                    <td data-cell="qty" class="cans-r"><span class="cans-q ih-num">{{ '%.2f'|format(entry.quantity_total) }} kg</span></td>
+                    <td data-cell="meta">{% if entry.source_transaction_id %}From Cans Out{% else %}Manual{% endif %}</td>
+                    <td data-cell="notes" class="cans-muted">{{ entry.notes or '' }}</td>
+                    {% if can_edit %}
+                    <td data-cell="actions">
+                        {{ actions(url_for('stock_edits.edit_used_ink_stock', record_id=entry.id, return_to='cans_out', date=selected_date), url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id, return_to='cans_out', date=selected_date), 'used ink entry ' ~ entry.ink_name) }}
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="{{ 7 if can_edit else 6 }}" class="empty">No used ink entries on {{ day_label }}.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script>
-const inkSelect = document.getElementById('ink_type_id');
-const hint = document.getElementById('current-stock-hint');
-const linkCheckbox = document.getElementById('link_used_ink');
-const linkGroup = document.getElementById('used-ink-link-group');
-
-inkSelect?.addEventListener('change', async function() {
-    hint.textContent = '';
-    if (!this.value) return;
-    const res = await fetch(`/inventory/api/stock/${this.value}`);
-    const data = await res.json();
-    hint.textContent = `Current: ${data.current_cans.toFixed(1)} cans (${data.current_weight.toFixed(1)} kg)`;
-});
-
-linkCheckbox?.addEventListener('change', function() {
-    if (linkGroup) linkGroup.hidden = !this.checked;
-});
-</script>
+{% include "ink/_cans_js.html" %}
 {% endblock %}

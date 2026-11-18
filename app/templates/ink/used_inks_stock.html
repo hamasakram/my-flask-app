@@ -1,263 +1,345 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "ink/_used_macros.html" import num, icon, search_box, date_bar %}
 {% block title %}Used Inks Stock - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_used_styles.html" %}
+{% set can_edit = current_user.can_edit() %}
+{% set in_stock = balances|selectattr('balance_kg', 'gt', 0.001)|list %}
+{% set used_up_count = balances|length - in_stock|length %}
+{% set day_label = filter_date.strftime('%d %b') %}
+<div class="ih-page used-page"{% if not date_in_url %} data-pk-default-date="{{ selected_date }}"{% endif %}>
+
+<header class="ih-header">
     <div>
         <h1>Used Inks Stock</h1>
-        <p class="page-subtitle">Track opened/used inks in kg — separate from current inventory</p>
+        <p>Opened ink in use, in KG. Kept separate from the cans in Ink Hall Stock — a Cans Out marked for used ink adds its KG here.</p>
     </div>
-    <div class="header-actions">
-        <a href="{{ url_for('inventory.used_inks_stock_pdf') }}" class="btn btn-primary" target="_blank">Download Used Inks PDF</a>
+    <div class="ih-header-actions">
+        {% if can_edit %}
+        <a href="#used-add" class="ih-btn ih-btn-primary" data-used-open="used-add">{{ icon('plus') }}Add used ink</a>
+        <a href="#used-use" class="ih-btn ih-btn-quiet" data-used-open="used-use">{{ icon('drop') }}Record usage</a>
+        {% endif %}
+        <a href="{{ url_for('inventory.used_inks_stock_pdf') }}" class="ih-btn ih-btn-quiet" target="_blank">{{ icon('download') }}Download PDF</a>
     </div>
-</div>
+</header>
 
-<div class="stats-grid">
-    <div class="stat-card accent-green">
-        <span class="stat-label">Total Stock (kg)</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_balance_kg) }} kg</span>
+<section class="used-tiles" aria-label="Summary">
+    <div class="used-tile used-tone-main">
+        <span class="used-tile-label">{{ icon('drop') }}In use now</span>
+        <span class="used-tile-value">{{ num(report_data.total_balance_kg) }}<small>kg</small></span>
+        <span class="used-tile-sub">{{ num(report_data.total_added_kg) }} kg added · {{ num(report_data.total_used_kg) }} kg used</span>
     </div>
-    <div class="stat-card accent-orange">
-        <span class="stat-label">Total Added (kg)</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_added_kg) }} kg</span>
+    <div class="used-tile">
+        <span class="used-tile-label">{{ icon('list') }}Inks with stock</span>
+        <span class="used-tile-value">{{ in_stock|length }}</span>
+        <span class="used-tile-sub">{% if used_up_count %}{{ used_up_count }} used up{% else %}ink / shade rows{% endif %}</span>
     </div>
-    <div class="stat-card accent-blue">
-        <span class="stat-label">Total Used (kg)</span>
-        <span class="stat-value">{{ "%.1f"|format(report_data.total_used_kg) }} kg</span>
+    <div class="used-tile used-tone-in">
+        <span class="used-tile-label">{{ icon('plus') }}Added · {{ day_label }}</span>
+        <span class="used-tile-value">{{ num(report_data.daily_added_kg) }}<small>kg</small></span>
+        <span class="used-tile-sub">{{ entries|selectattr('entry_type', 'ne', 'use')|list|length }} entr{{ 'y' if entries|selectattr('entry_type', 'ne', 'use')|list|length == 1 else 'ies' }}</span>
     </div>
-</div>
+    <div class="used-tile used-tone-out">
+        <span class="used-tile-label">{{ icon('minus') }}Used · {{ day_label }}</span>
+        <span class="used-tile-value">{{ num(report_data.daily_used_kg) }}<small>kg</small></span>
+        <span class="used-tile-sub">{{ entries|selectattr('entry_type', 'eq', 'use')|list|length }} entr{{ 'y' if entries|selectattr('entry_type', 'eq', 'use')|list|length == 1 else 'ies' }}</span>
+    </div>
+</section>
 
-<div class="card">
-    <h2>Current Used Ink Stock</h2>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Ink Name</th>
-                <th>Shade Name</th>
-                <th>Added (kg)</th>
-                <th>Used (kg)</th>
-                <th>Balance (kg)</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in balances %}
-            <tr>
-                <td>{{ row.ink_name }}</td>
-                <td>{{ row.shade_name }}</td>
-                <td>{{ "%.1f"|format(row.added_kg) }}</td>
-                <td>{{ "%.1f"|format(row.used_kg) }}</td>
-                <td><strong>{{ "%.1f"|format(row.balance_kg) }} kg</strong></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" class="empty">No used ink stock recorded yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{% if can_edit %}
+<datalist id="ink-names-list">
+    {% for name in ink_names %}<option value="{{ name }}"></option>{% endfor %}
+</datalist>
+<datalist id="shade-names-list">
+    {% for name in shade_names %}<option value="{{ name }}"></option>{% endfor %}
+</datalist>
 
-{% if current_user.can_edit() %}
-<div class="card highlight-card">
-    <h2>Add Used Ink Stock (kg)</h2>
-    <form method="POST" class="form-grid">
+{# ------------------------------------------------------------------ Add #}
+<section class="card ih-panel" id="used-add" data-used-panel hidden aria-labelledby="used-add-title">
+    <div class="ih-panel-head">
+        <div>
+            <h2 id="used-add-title">Add used ink</h2>
+            <p>Opened or left-over ink going into used stock. The same ink and shade on the same day is added onto one entry.</p>
+        </div>
+        <button type="button" class="ih-close" data-used-close="used-add" aria-label="Close add used ink">
+            <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12"/></svg>
+        </button>
+    </div>
+    <form method="POST" class="ih-form" autocomplete="off">
         <input type="hidden" name="form_type" value="add">
-        <div class="form-group">
-            <label for="add_ink_name">Ink Name</label>
+        <div class="ih-field ih-wide-phone">
+            <label for="add_ink_name">Ink name</label>
             <input type="text" id="add_ink_name" name="ink_name" list="ink-names-list" required placeholder="Select or type ink name">
-            <datalist id="ink-names-list">
-                {% for name in ink_names %}
-                <option value="{{ name }}"></option>
-                {% endfor %}
-            </datalist>
         </div>
-        <div class="form-group">
-            <label for="add_shade_name">Shade Name</label>
-            <input type="text" id="add_shade_name" name="shade_name" list="shade-names-list" placeholder="Select or type shade">
-            <datalist id="shade-names-list">
-                {% for name in shade_names %}
-                <option value="{{ name }}"></option>
-                {% endfor %}
-            </datalist>
+        <div class="ih-field ih-wide-phone">
+            <label for="add_shade_name">Shade <small>(colour code)</small></label>
+            <input type="text" id="add_shade_name" name="shade_name" list="shade-names-list" placeholder="e.g. GLX 0049">
         </div>
-        <div class="form-group">
-            <label for="add_quantity_kg">Quantity (kg)</label>
-            <input type="number" id="add_quantity_kg" name="quantity_kg" step="0.01" min="0.01" required>
+        <div class="ih-field">
+            <label for="add_quantity_kg">Quantity (KG)</label>
+            <input type="number" id="add_quantity_kg" name="quantity_kg" step="0.01" min="0.01" inputmode="decimal" required>
         </div>
-        <div class="form-group">
+        <div class="ih-field">
             <label for="add_entry_date">Date</label>
             <input type="date" id="add_entry_date" name="entry_date" value="{{ selected_date }}" required>
         </div>
-        <div class="form-group full-width">
-            <label for="add_notes">Notes</label>
-            <input type="text" id="add_notes" name="notes" placeholder="Optional notes">
+        <div class="ih-field ih-span-all">
+            <label for="add_notes">Notes <small>(optional)</small></label>
+            <input type="text" id="add_notes" name="notes" placeholder="e.g. Opened can from hall">
         </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Add to Stock</button>
+        <div class="ih-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary">Add to stock</button>
         </div>
     </form>
-</div>
+</section>
 
-<div class="card highlight-card">
-    <h2>Use Used Ink (kg)</h2>
-    <p class="field-note">Pick from stock below or enter ink and shade — shade must match the stock row (e.g. GLX 0049).</p>
-    <form method="POST" class="form-grid" id="use-used-ink-form">
+{# ------------------------------------------------------------------ Use #}
+<section class="card ih-panel used-panel-use" id="used-use" data-used-panel hidden aria-labelledby="used-use-title">
+    <div class="ih-panel-head">
+        <div>
+            <h2 id="used-use-title">Record usage</h2>
+            <p>Takes KG off used stock. Pick from stock, or type the ink and shade — the shade must match the stock row (e.g. GLX 0049).</p>
+        </div>
+        <button type="button" class="ih-close" data-used-close="used-use" aria-label="Close record usage">
+            <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12"/></svg>
+        </button>
+    </div>
+    <form method="POST" class="ih-form" id="use-used-ink-form" autocomplete="off">
         <input type="hidden" name="form_type" value="use">
-        {% if balances %}
-        <div class="form-group full-width">
-            <label for="use_stock_pick">Pick from current stock</label>
+        {% if in_stock %}
+        <div class="ih-field ih-span-all">
+            <label for="use_stock_pick">Pick from stock</label>
             <select id="use_stock_pick">
-                <option value="">— Or type manually below —</option>
-                {% for row in balances if row.balance_kg > 0.001 %}
-                <option value="{{ row.ink_name }}|{{ row.shade_name if row.shade_name != '—' else '' }}|{{ row.balance_kg }}">
-                    {{ row.ink_name }} / {{ row.shade_name }} — {{ "%.1f"|format(row.balance_kg) }} kg available
-                </option>
+                <option value="">— Or type the ink below —</option>
+                {% for row in in_stock %}
+                <option value="{{ row.ink_name }}|{{ row.shade_name if row.shade_name != '—' else '' }}|{{ row.balance_kg }}">{{ row.ink_name }}{% if row.shade_name != '—' %} · {{ row.shade_name }}{% endif %} — {{ num(row.balance_kg) }} kg</option>
                 {% endfor %}
             </select>
         </div>
         {% endif %}
-        <div class="form-group">
-            <label for="use_ink_name">Ink Name</label>
-            <input type="text" id="use_ink_name" name="ink_name" list="use-ink-names-list" required placeholder="Select ink name">
-            <datalist id="use-ink-names-list">
-                {% for name in ink_names %}
-                <option value="{{ name }}"></option>
-                {% endfor %}
-            </datalist>
+        <div class="ih-field ih-wide-phone">
+            <label for="use_ink_name">Ink name</label>
+            <input type="text" id="use_ink_name" name="ink_name" list="ink-names-list" required placeholder="Select ink name">
         </div>
-        <div class="form-group">
-            <label for="use_shade_name">Shade Name</label>
-            <input type="text" id="use_shade_name" name="shade_name" list="use-shade-names-list" placeholder="Required if ink has multiple shades">
-            <datalist id="use-shade-names-list">
-                {% for name in shade_names %}
-                <option value="{{ name }}"></option>
-                {% endfor %}
-            </datalist>
-            <small class="field-note" id="use_available_hint"></small>
+        <div class="ih-field ih-wide-phone">
+            <label for="use_shade_name">Shade <small>(colour code)</small></label>
+            <input type="text" id="use_shade_name" name="shade_name" list="shade-names-list" placeholder="Needed if the ink has more than one">
         </div>
-        <div class="form-group">
-            <label for="use_quantity_kg">Quantity Used (kg)</label>
-            <input type="number" id="use_quantity_kg" name="quantity_kg" step="0.01" min="0.01" required>
+        <div class="ih-field">
+            <label for="use_quantity_kg">KG used</label>
+            <input type="number" id="use_quantity_kg" name="quantity_kg" step="0.01" min="0.01" inputmode="decimal" required>
         </div>
-        <div class="form-group">
+        <div class="ih-field">
             <label for="use_entry_date">Date</label>
             <input type="date" id="use_entry_date" name="entry_date" value="{{ selected_date }}" required>
         </div>
-        <div class="form-group full-width">
-            <label for="use_notes">Notes</label>
-            <input type="text" id="use_notes" name="notes" placeholder="Optional notes">
+        <div class="ih-field ih-span-all">
+            <small class="used-hint" id="use_available_hint" aria-live="polite"></small>
         </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-secondary">Record Usage</button>
+        <div class="ih-field ih-span-all">
+            <label for="use_notes">Notes <small>(optional)</small></label>
+            <input type="text" id="use_notes" name="notes" placeholder="e.g. Job number or machine">
+        </div>
+        <div class="ih-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary">Record usage</button>
         </div>
     </form>
-</div>
+</section>
 {% endif %}
 
-<div class="card">
-    <form method="GET" class="filter-bar">
-        <label>Filter daily log:</label>
-        <input type="date" name="date" value="{{ selected_date }}">
-        <button type="submit" class="btn btn-secondary">View Date</button>
-    </form>
-</div>
+{# ------------------------------------------------------------------ Stock #}
+<section class="card used-section" aria-labelledby="used-stock-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="used-stock-title">Used ink in stock</h2>
+            <p>Balance per ink and shade, from every entry so far.</p>
+        </div>
+        <span class="used-count" data-used-count-for="used-stock-list">{{ balances|length }}</span>
+    </div>
+    {% if balances %}
+    <div class="used-section-bar">
+        {{ search_box('used-stock-search', 'Search ink or shade', 'Search used ink stock', 'used-stock-list') }}
+        <div class="used-chips" role="group" aria-label="Filter">
+            <button type="button" class="ih-chip" data-used-chip-for="used-stock-list" data-used-chip="" aria-pressed="{{ 'false' if in_stock else 'true' }}">All <span>{{ balances|length }}</span></button>
+            <button type="button" class="ih-chip" data-used-chip-for="used-stock-list" data-used-chip="instock" aria-pressed="{{ 'true' if in_stock else 'false' }}">In stock <span>{{ in_stock|length }}</span></button>
+            {% if used_up_count %}<button type="button" class="ih-chip" data-used-chip-for="used-stock-list" data-used-chip="usedup" aria-pressed="false">Used up <span>{{ used_up_count }}</span></button>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+    <ul class="used-rows" id="used-stock-list">
+        {% if balances %}
+        <li class="used-row used-stock-row used-stock-head" aria-hidden="true">
+            <span>Ink · shade</span><span>Left of added</span><span class="used-r">Added</span><span class="used-r">Used</span><span class="used-r">Balance</span><span></span>
+        </li>
+        {% endif %}
+        {% for row in balances %}
+        {% set has_stock = row.balance_kg > 0.001 %}
+        {% set pct = (100 * row.balance_kg / row.added_kg) if row.added_kg > 0 else 0 %}
+        {% set shade = row.shade_name if row.shade_name != '—' else '' %}
+        <li class="used-row used-stock-row{% if not has_stock %} used-zero{% endif %}"
+            data-search="{{ (row.ink_name ~ ' ' ~ shade)|lower }}" data-state="{{ 'instock' if has_stock else 'usedup' }}">
+            <div class="used-name">
+                <strong>{{ row.ink_name }}</strong>
+                {% if shade %}<span class="used-code">{{ shade }}</span>{% endif %}
+                {% if not has_stock %}<span class="used-tag used-tag-quiet">Used up</span>{% endif %}
+            </div>
+            <div class="used-meter{% if has_stock and pct < 25 %} used-meter-low{% endif %}" role="img" aria-label="{{ num(pct, 0) }}% of added KG left">
+                {% if has_stock %}<span style="width: {{ '%.1f'|format([pct, 100]|min) }}%"></span>{% endif %}
+            </div>
+            <span class="used-fig used-fig-added">{{ num(row.added_kg) }} kg</span>
+            <span class="used-fig used-fig-used">{{ num(row.used_kg) }} kg</span>
+            <span class="used-bal"><strong>{{ num(row.balance_kg) }}</strong><small>kg</small></span>
+            <span class="used-figs-phone">Added {{ num(row.added_kg) }} · used {{ num(row.used_kg) }} kg</span>
+            <span class="used-row-act">{% if can_edit and has_stock %}<button type="button" class="ih-act used-act-use" data-use-ink="{{ row.ink_name }}" data-use-shade="{{ shade }}" aria-label="Record usage of {{ row.ink_name }}{% if shade %} {{ shade }}{% endif %}">{{ icon('drop') }}Use</button>{% endif %}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% if balances %}
+    <div class="used-empty" data-used-empty-for="used-stock-list" hidden>
+        <strong>No ink matches</strong>
+        Try another name or shade, or show all rows.
+        <div><button type="button" class="ih-btn ih-btn-quiet" data-used-reset="used-stock-list">Show all</button></div>
+    </div>
+    {% else %}
+    <div class="used-empty">
+        <strong>No used ink stock yet</strong>
+        {% if can_edit %}Add opened ink here, or mark a Cans Out for used ink.
+        <div><a href="#used-add" class="ih-btn ih-btn-primary" data-used-open="used-add">{{ icon('plus') }}Add used ink</a></div>
+        {% else %}Entries made by the team will show here.{% endif %}
+    </div>
+    {% endif %}
+</section>
 
-<div class="card">
-    <h2>Daily Log — {{ selected_date }}</h2>
-    <table class="data-table">
+{# ------------------------------------------------------------------ Daily log #}
+<section class="card used-section" aria-labelledby="used-log-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="used-log-title">Daily log</h2>
+            <div class="used-dayline">
+                <strong>{{ filter_date.strftime('%A, %d %B %Y') }}</strong>
+                <span class="used-daytag" data-used-daytag="{{ selected_date }}" hidden></span>
+            </div>
+        </div>
+        <div class="used-section-tools">
+            {{ date_bar('inventory.used_inks_stock', selected_date, prev_date, next_date, 'Log date') }}
+        </div>
+    </div>
+    <table class="used-table">
         <thead>
             <tr>
                 <th>Type</th>
-                <th>Ink Name</th>
-                <th>Shade Name</th>
-                <th>Quantity (kg)</th>
+                <th>Ink · shade</th>
+                <th class="used-r">KG</th>
                 <th>Source</th>
                 <th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                {% if can_edit %}<th class="used-r"><span class="sr-only">Actions</span></th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for entry in entries %}
+            {% set is_use = entry.entry_type == 'use' %}
             <tr>
-                <td>
-                    {% if entry.entry_type == 'use' %}
-                    <span class="badge badge-orange">Used</span>
-                    {% else %}
-                    <span class="badge badge-green">Added</span>
-                    {% endif %}
+                <td data-cell="phone-hide">{% if is_use %}<span class="used-tag used-tag-out">Used</span>{% else %}<span class="used-tag used-tag-in">Added</span>{% endif %}</td>
+                <td class="used-ink-cell">
+                    <strong>{{ entry.ink_name }}{% if entry.shade_name %} <span class="used-code">{{ entry.shade_name }}</span>{% endif %}</strong>
                 </td>
-                <td>{{ entry.ink_name }}</td>
-                <td>{{ entry.shade_name or '—' }}</td>
-                <td>{{ "%.2f"|format(entry.quantity_total) }} kg</td>
-                <td>{% if entry.source_transaction_id %}Cans Out{% else %}Manual{% endif %}</td>
-                <td>{{ entry.notes or '—' }}</td>
-                {% if current_user.can_edit() %}
-                {{ row_actions(
-                    url_for('stock_edits.edit_used_ink_stock', record_id=entry.id, return_to='used_inks_stock', date=selected_date),
-                    url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id, return_to='used_inks_stock', date=selected_date)
-                ) }}
+                <td class="used-r"><span class="{{ 'used-delta-out' if is_use else 'used-delta-in' }}">{{ '−' if is_use else '+' }}{{ num(entry.quantity_total) }} kg</span></td>
+                <td class="used-sub">{% if entry.source_transaction_id %}<span class="used-tag">From Cans Out</span>{% else %}<span class="used-muted">Manual</span>{% endif %}</td>
+                <td class="used-notes">{{ entry.notes or '' }}</td>
+                {% if can_edit %}
+                <td class="used-acts">
+                    <a href="{{ url_for('stock_edits.edit_used_ink_stock', record_id=entry.id, return_to='used_inks_stock', date=selected_date) }}" class="ih-act" aria-label="Edit {{ entry.ink_name }} entry">{{ icon('edit') }}Edit</a>
+                    <form method="POST" action="{{ url_for('stock_deletes.delete_used_ink_stock', record_id=entry.id, return_to='used_inks_stock', date=selected_date) }}" onsubmit="return confirm('Delete this record permanently?');">
+                        <button type="submit" class="ih-act ih-act-del" aria-label="Delete {{ entry.ink_name }} entry">Delete</button>
+                    </form>
+                </td>
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No entries for this date</td></tr>
+            <tr><td colspan="{{ 6 if can_edit else 5 }}" class="empty used-empty"><strong>Nothing recorded on this day</strong>Use the arrows to see another day.</td></tr>
             {% endfor %}
         </tbody>
     </table>
+    <div class="used-section-foot">
+        <span>{{ entries|length }} entr{{ 'y' if entries|length == 1 else 'ies' }} · <span class="used-delta-in">+{{ num(report_data.daily_added_kg) }} kg</span> · <span class="used-delta-out">−{{ num(report_data.daily_used_kg) }} kg</span></span>
+        <a href="{{ url_for('inventory.used_inks_stock_pdf', date=selected_date) }}" class="used-link" target="_blank">{{ icon('download') }}PDF for this day</a>
+    </div>
+</section>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
+{% include "ink/_used_js.html" %}
+{% if current_user.can_edit() %}
 <script>
 (function () {
     var stockPick = document.getElementById('use_stock_pick');
     var inkInput = document.getElementById('use_ink_name');
     var shadeInput = document.getElementById('use_shade_name');
+    var qtyInput = document.getElementById('use_quantity_kg');
     var hint = document.getElementById('use_available_hint');
     var stockRows = [
         {% for row in balances if row.balance_kg > 0.001 %}
         { ink: {{ row.ink_name|tojson }}, shade: {{ (row.shade_name if row.shade_name != '—' else '')|tojson }}, balance: {{ row.balance_kg }} },
         {% endfor %}
     ];
+    function kg(v) { return Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }); }
+    function setHint(text, tone) {
+        hint.textContent = text;
+        hint.className = 'used-hint' + (tone ? ' used-hint-' + tone : '');
+    }
 
     function updateHint() {
         if (!hint || !inkInput) return;
         var ink = (inkInput.value || '').trim().toLowerCase();
         var shade = (shadeInput && shadeInput.value || '').trim().toLowerCase();
-        var matches = stockRows.filter(function (row) {
-            return row.ink.toLowerCase() === ink;
-        });
-        if (!ink || !matches.length) {
-            hint.textContent = '';
-            return;
-        }
+        var qty = parseFloat(qtyInput && qtyInput.value);
+        var matches = stockRows.filter(function (row) { return row.ink.toLowerCase() === ink; });
+        if (!ink) { setHint('', ''); return; }
+        if (!matches.length) { setHint('No used stock for this ink.', 'warn'); return; }
+        var row = null;
         if (shade) {
-            var exact = matches.find(function (row) {
-                return (row.shade || '').toLowerCase() === shade;
-            });
-            hint.textContent = exact
-                ? 'Available: ' + exact.balance.toFixed(1) + ' kg'
-                : 'No stock for this ink/shade combination';
+            row = matches.find(function (r) { return (r.shade || '').toLowerCase() === shade; });
+            if (!row) { setHint('No stock for this ink and shade.', 'warn'); return; }
+        } else if (matches.length === 1) {
+            row = matches[0];
+        } else {
+            setHint('Pick a shade — ' + matches.map(function (r) { return (r.shade || '—') + ': ' + kg(r.balance) + ' kg'; }).join(', '), 'warn');
             return;
         }
-        if (matches.length === 1) {
-            hint.textContent = 'Available: ' + matches[0].balance.toFixed(1) + ' kg'
-                + (matches[0].shade ? ' (shade: ' + matches[0].shade + ')' : '');
-            return;
-        }
-        hint.textContent = 'Select shade — ' + matches.map(function (row) {
-            return (row.shade || '—') + ': ' + row.balance.toFixed(1) + ' kg';
-        }).join(', ');
+        var text = 'Available: ' + kg(row.balance) + ' kg' + (!shade && row.shade ? ' (shade ' + row.shade + ')' : '');
+        if (qty > row.balance + 0.001) { setHint('Only ' + kg(row.balance) + ' kg in stock' + (!shade && row.shade ? ' (shade ' + row.shade + ')' : '') + ' — you entered ' + kg(qty) + ' kg.', 'warn'); return; }
+        setHint(text, 'ok');
     }
 
     if (stockPick) {
         stockPick.addEventListener('change', function () {
             if (!stockPick.value) return;
             var parts = stockPick.value.split('|');
-            if (inkInput) inkInput.value = parts[0] || '';
-            if (shadeInput) shadeInput.value = parts[1] || '';
+            inkInput.value = parts[0] || '';
+            shadeInput.value = parts[1] || '';
             updateHint();
         });
     }
-    if (inkInput) inkInput.addEventListener('input', updateHint);
-    if (shadeInput) shadeInput.addEventListener('input', updateHint);
+    [inkInput, shadeInput, qtyInput].forEach(function (el) { if (el) el.addEventListener('input', updateHint); });
+
+    // "Use" on a stock row: open Record usage with that ink and shade filled in.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-use-ink]'), function (btn) {
+        btn.addEventListener('click', function () {
+            inkInput.value = btn.getAttribute('data-use-ink');
+            shadeInput.value = btn.getAttribute('data-use-shade') || '';
+            if (stockPick) {
+                var want = inkInput.value + '|' + shadeInput.value + '|';
+                stockPick.value = '';
+                Array.prototype.forEach.call(stockPick.options, function (o) { if (o.value.indexOf(want) === 0) stockPick.value = o.value; });
+            }
+            updateHint();
+            if (window.UsedInk) window.UsedInk.openPanel('used-use', '#use_quantity_kg');
+        });
+    });
 })();
 </script>
+{% endif %}
 {% endblock %}

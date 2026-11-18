@@ -1,0 +1,174 @@
+{# Shared bits for the Cans In / Cans Out pages. Classes: cans-* #}
+
+{# 4 -> "4", 1.5 -> "1.5", 2.25 -> "2.25" #}
+{% macro n(value, places=2) -%}
+{%- set s = ('%.' ~ places ~ 'f')|format(value or 0) -%}
+{%- set s = s.rstrip('0').rstrip('.') if '.' in s else s -%}
+{{- '0' if s in ('-0', '') else s -}}
+{%- endmacro %}
+
+{# 1250 -> "1,250", 37.5 -> "37.5" #}
+{% macro kg(value) -%}
+{%- set s = '{:,.1f}'.format(value or 0) -%}
+{{- s[:-2] if s.endswith('.0') else s -}}
+{%- endmacro %}
+
+{% macro cans_word(value) -%}{{ n(value) }} can{{ '' if (value or 0) == 1 else 's' }}{%- endmacro %}
+
+{# Colour swatch class from the colour name (Magenta, Honey Red, R-Media Black, P. Yellow...). #}
+{% macro swatch_key(colour) -%}
+{%- set c = (colour or '')|lower -%}
+{%- if 'media' in c and 'black' in c -%}media-black
+{%- elif 'media' in c -%}media
+{%- elif 'magenta' in c -%}magenta
+{%- elif 'cyan' in c or 'blue' in c -%}cyan
+{%- elif 'gold' in c -%}gold
+{%- elif 'yellow' in c -%}yellow
+{%- elif 'black' in c -%}black
+{%- elif 'white' in c -%}white
+{%- elif 'light green' in c -%}lightgreen
+{%- elif 'green' in c -%}green
+{%- elif 'honey' in c -%}honey
+{%- elif c.startswith('d.') or 'dark red' in c -%}darkred
+{%- elif 'red' in c -%}red
+{%- elif 'orange' in c -%}orange
+{%- else -%}other
+{%- endif -%}
+{%- endmacro %}
+
+{% macro swatch(colour, size='') -%}
+<span class="cans-sw cans-sw-{{ swatch_key(colour) }}{% if size %} cans-sw-{{ size }}{% endif %}" aria-hidden="true"></span>
+{%- endmacro %}
+
+{# Ink cell used in the recent lists: swatch, code + colour, company underneath. #}
+{% macro ink_cell(ink) -%}
+<span class="cans-ink">
+    {{ swatch(ink.name) }}
+    <span class="cans-ink-text">
+        <span class="cans-ink-main">{% if ink.color_code %}<span class="cans-code">{{ ink.color_code }}</span> {% endif %}{{ ink.name }}</span>
+        <span class="cans-ink-co">{{ ink.ink_company }}</span>
+    </span>
+</span>
+{%- endmacro %}
+
+{#
+  Searchable ink picker. The native <select name="ink_type_id"> stays in the form and holds the
+  value (it is what the server reads); with JS it is hidden and the list below drives it.
+  mode: "in" or "out". In "out" mode inks with no cans left can't be picked.
+#}
+{% macro ink_picker(ink_stock, mode) -%}
+{%- set groups = ink_stock|groupby('ink.ink_company') -%}
+<div class="ih-field ih-span-all cans-pick-field">
+    <label class="ih-label" for="ink_type_id" id="cans-pick-label">Ink</label>
+    <select id="ink_type_id" name="ink_type_id" required class="cans-native">
+        <option value="">Select ink</option>
+        {% for group in groups %}
+        <optgroup label="{{ group.grouper or 'Other' }}">
+            {% for row in group.list %}
+            <option value="{{ row.ink.id }}">{{ row.ink.color_code or '' }} · {{ row.ink.name }} — {{ cans_word(row.current_cans) }}</option>
+            {% endfor %}
+        </optgroup>
+        {% endfor %}
+    </select>
+
+    <div class="cans-picker" data-cans-picker hidden>
+        <button type="button" class="cans-trigger" data-cans-trigger aria-haspopup="listbox" aria-expanded="false" aria-labelledby="cans-pick-label cans-trigger-text">
+            <span class="cans-trigger-empty" data-cans-trigger-empty>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                <span id="cans-trigger-text">Choose ink<small class="cans-desk-only"> — search colour, code or company</small></span>
+            </span>
+            <span class="cans-trigger-sel" data-cans-trigger-sel hidden></span>
+            <svg class="cans-chev" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4"/></svg>
+        </button>
+
+        <div class="cans-pop" data-cans-pop hidden>
+            <div class="cans-pop-search ih-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                <input type="search" data-cans-search placeholder="Magenta, ANZ, 3140…" aria-label="Search inks" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" role="combobox" aria-expanded="true" aria-controls="cans-list" aria-autocomplete="list">
+            </div>
+            <div class="cans-list" id="cans-list" role="listbox" aria-labelledby="cans-pick-label" data-cans-list>
+                {% for group in groups %}
+                <div class="cans-grp" data-cans-grp role="group" aria-label="{{ group.grouper or 'Other' }}">
+                    <div class="cans-grp-head" aria-hidden="true">
+                        <span>{{ group.grouper or 'Other' }}</span>
+                        <span class="cans-grp-count" data-cans-grp-count>{{ group.list|length }} ink{{ '' if group.list|length == 1 else 's' }}</span>
+                    </div>
+                    {% for row in group.list %}
+                    {% set ink = row.ink %}
+                    {% set empty = row.current_cans <= 0.0001 %}
+                    {% set code = ink.color_code or '' %}
+                    <div class="cans-opt{% if empty %} cans-opt-empty{% endif %}" role="option" id="cans-opt-{{ ink.id }}" tabindex="-1"
+                         aria-selected="false"{% if empty and mode == 'out' %} aria-disabled="true"{% endif %}
+                         data-id="{{ ink.id }}" data-company="{{ ink.ink_company }}" data-code="{{ code }}" data-colour="{{ ink.name }}"
+                         data-cans="{{ row.current_cans }}" data-per-can="{{ ink.weight_per_can or 0 }}" data-sw="{{ swatch_key(ink.name) }}"
+                         data-search="{{ (ink.ink_company ~ ' ' ~ code ~ ' ' ~ code|replace(' ', '') ~ ' ' ~ ink.name ~ ' ' ~ ink.name|replace('.', '')|replace('-', ' '))|lower }}">
+                        {{ swatch(ink.name) }}
+                        <span class="cans-opt-text">
+                            <span class="cans-opt-main">{% if code %}<span class="cans-code">{{ code }}</span>{% endif %}<span class="cans-opt-colour">{{ ink.name }}</span></span>
+                        </span>
+                        <span class="cans-opt-stock ih-num">
+                            {% if empty %}<span class="cans-none">{{ 'None left' if mode == 'out' else '0 cans' }}</span>
+                            {% else %}<strong>{{ n(row.current_cans) }}</strong> can{{ '' if row.current_cans == 1 else 's' }}<small>{{ kg(row.current_weight) }} kg</small>{% endif %}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+                <div class="cans-nomatch" data-cans-nomatch hidden>
+                    <strong>No ink matches</strong>
+                    Try a colour (Magenta), a code (ANZ 3140, 3115) or a company (RL).
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="cans-card" data-cans-card hidden aria-live="polite">
+        <span class="cans-sw cans-sw-lg" data-cans-card-sw aria-hidden="true"></span>
+        <span class="cans-card-text">
+            <span class="cans-card-name" data-cans-card-name></span>
+            <span class="cans-card-co" data-cans-card-co></span>
+        </span>
+        <span class="cans-card-stock">
+            <span class="cans-card-label">{{ 'Available' if mode == 'out' else 'In stock now' }}</span>
+            <span class="cans-card-num ih-num" data-cans-card-num></span>
+            <span class="cans-card-kg ih-num" data-cans-card-kg></span>
+        </span>
+        <button type="button" class="cans-card-change ih-link" data-cans-change>Change</button>
+    </div>
+</div>
+{%- endmacro %}
+
+{# Cans stepper: − [number] + #}
+{% macro per_can_hint(ink_stock) -%}
+{%- set weights = ink_stock|map(attribute='ink.weight_per_can')|unique|list -%}
+{%- if weights|length == 1 and weights[0] -%}(1 can = {{ n(weights[0]) }} kg){%- endif -%}
+{%- endmacro %}
+
+{% macro stepper(name, label, hint='', with_meta=False) -%}
+<div class="ih-field ih-span-2 cans-qty-field">
+    <label class="ih-label" for="{{ name }}">{{ label }}{% if hint %} <small>{{ hint }}</small>{% endif %}</label>
+    <div class="cans-step" data-cans-step>
+        <button type="button" class="cans-step-btn" data-cans-dec aria-label="One can less">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg>
+        </button>
+        <input type="number" id="{{ name }}" name="{{ name }}" step="any" min="0.01" inputmode="decimal" required placeholder="0" class="ih-num" data-cans-qty>
+        <span class="cans-step-unit" data-cans-unit aria-hidden="true">cans</span>
+        <button type="button" class="cans-step-btn" data-cans-inc aria-label="One can more">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+    </div>
+    {% if with_meta %}<div class="cans-qty-meta" data-cans-meta aria-live="polite" hidden></div>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Edit / Delete buttons for a record row (same URLs as shared/macros.html row_actions). #}
+{% macro actions(edit_url, delete_url, what) -%}
+<div class="cans-acts">
+    <a href="{{ edit_url }}" class="ih-act" aria-label="Edit {{ what }}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>Edit
+    </a>
+    <form method="POST" action="{{ delete_url }}" class="inline-action-form" onsubmit="return confirm('Delete this record permanently?');">
+        <button type="submit" class="ih-act ih-act-del" aria-label="Delete {{ what }}">Delete</button>
+    </form>
+</div>
+{%- endmacro %}

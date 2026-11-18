@@ -1,83 +1,90 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "ink/_used_macros.html" import icon, search_box %}
 {% block title %}Used Ink Names & Setup - RN COLOUR{% endblock %}
+
+{% macro name_list(kind, title, items, use_counts, edit_endpoint, delete_endpoint, field, placeholder, intro) %}
+{% set can_edit = current_user.can_edit() %}
+{% set list_id = 'used-' ~ kind ~ '-list' %}
+<section class="card used-section" aria-labelledby="{{ list_id }}-title">
+    <div class="used-section-head">
+        <div>
+            <h2 id="{{ list_id }}-title">{{ title }}</h2>
+            <p>{{ intro }}</p>
+        </div>
+        <span class="used-count" data-used-count-for="{{ list_id }}">{{ items|length }}</span>
+    </div>
+    {% if can_edit %}
+    <form method="POST" class="used-addline" autocomplete="off">
+        <input type="hidden" name="form_type" value="{{ field }}">
+        <label for="{{ field }}" class="sr-only">New {{ title|lower|replace('names', 'name') }}</label>
+        <input type="text" id="{{ field }}" name="{{ field }}" required placeholder="{{ placeholder }}">
+        <button type="submit" class="ih-btn ih-btn-primary">{{ icon('plus') }}Save</button>
+    </form>
+    {% endif %}
+    {% if items|length > 6 %}
+    <div class="used-section-bar">
+        {{ search_box(list_id ~ '-search', 'Search ' ~ title|lower, 'Search ' ~ title|lower, list_id) }}
+    </div>
+    {% endif %}
+    <ul class="used-rows used-scroll" id="{{ list_id }}">
+        {% for item in items %}
+        {% set uses = use_counts.get(item.name|lower, 0) %}
+        <li class="used-row used-name-row" data-search="{{ item.name|lower }}">
+            <span class="used-name-text">{{ item.name }}</span>
+            {% if uses %}<span class="used-tag used-tag-quiet" title="Used in {{ uses }} Used Inks Stock entr{{ 'y' if uses == 1 else 'ies' }}">In use · {{ uses }}</span>{% endif %}
+            {% if can_edit %}
+            <span class="ih-actions">
+                <a href="{{ url_for(edit_endpoint, record_id=item.id) }}" class="ih-act" aria-label="Edit {{ item.name }}">{{ icon('edit') }}Edit</a>
+                <form method="POST" action="{{ url_for(delete_endpoint, record_id=item.id) }}" onsubmit="return confirm('Delete this record permanently?');">
+                    {% if uses %}
+                    <button type="submit" class="ih-act ih-act-del" disabled title="In use in Used Inks Stock — can't be deleted" aria-label="{{ item.name }} is in use and can't be deleted">Delete</button>
+                    {% else %}
+                    <button type="submit" class="ih-act ih-act-del" aria-label="Delete {{ item.name }}">Delete</button>
+                    {% endif %}
+                </form>
+            </span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% if items %}
+    <div class="used-empty" data-used-empty-for="{{ list_id }}" hidden>
+        <strong>No match</strong>
+        <button type="button" class="ih-link" data-used-reset="{{ list_id }}">Show all</button>
+    </div>
+    {% else %}
+    <div class="used-empty">
+        <strong>No {{ title|lower }} yet</strong>
+        {% if can_edit %}Type one above and press Save.{% else %}Names added by the team will show here.{% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endmacro %}
+
 {% block content %}
-<div class="page-header">
-    <h1>Used Ink Names &amp; Setup</h1>
-    <p class="page-subtitle">Manage ink names and shades for Used Ink Stock</p>
-</div>
+{% include "materials/_ih_styles.html" %}
+{% include "ink/_used_styles.html" %}
+<div class="ih-page used-page">
 
-{% if current_user.can_edit() %}
-<div class="card highlight-card">
-    <h2>Add Ink Name</h2>
-    <form method="POST" class="form-grid">
-        <input type="hidden" name="form_type" value="ink_name">
-        <div class="form-group">
-            <label for="ink_name">Ink Name</label>
-            <input type="text" id="ink_name" name="ink_name" required placeholder="e.g. Process Cyan">
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Ink Name</button>
-        </div>
-    </form>
-</div>
+<header class="ih-header">
+    <div>
+        <h1>Used Ink Names &amp; Setup</h1>
+        <p>The ink names and shades offered when entering Used Inks Stock and Cans Out. Names are also saved here automatically when a new one is typed there.</p>
+    </div>
+    <div class="ih-header-actions">
+        <a href="{{ url_for('inventory.used_inks_stock') }}" class="ih-btn ih-btn-quiet">{{ icon('drop') }}Used Inks Stock</a>
+    </div>
+</header>
 
-<div class="card highlight-card">
-    <h2>Add Shade Name</h2>
-    <form method="POST" class="form-grid">
-        <input type="hidden" name="form_type" value="shade_name">
-        <div class="form-group">
-            <label for="shade_name">Shade Name</label>
-            <input type="text" id="shade_name" name="shade_name" required placeholder="e.g. Light Blue">
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Shade Name</button>
-        </div>
-    </form>
+<div class="used-cols">
+    {{ name_list('ink', 'Ink names', ink_names, ink_name_use, 'stock_edits.edit_used_ink_name', 'stock_deletes.delete_used_ink_name', 'ink_name', 'Add ink name, e.g. Cyan', 'Colour names such as Cyan, White or R-Media.') }}
+    {{ name_list('shade', 'Shade names', shade_names, shade_name_use, 'stock_edits.edit_used_ink_shade', 'stock_deletes.delete_used_ink_shade', 'shade_name', 'Add shade, e.g. GLX 0049', 'Colour codes such as GLX 0049 or ANZ 5113.') }}
 </div>
-{% endif %}
+<p class="field-note used-setup-note">Names marked “In use” have Used Inks Stock entries, so they can't be deleted. Editing a name renames it on those entries too.</p>
 
-<div class="card">
-    <h2>Ink Names</h2>
-    <table class="data-table">
-        <thead>
-            <tr><th>Name</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr>
-        </thead>
-        <tbody>
-            {% for item in ink_names %}
-            <tr>
-                <td>{{ item.name }}</td>
-                {{ row_actions(
-                    url_for('stock_edits.edit_used_ink_name', record_id=item.id),
-                    url_for('stock_deletes.delete_used_ink_name', record_id=item.id)
-                ) }}
-            </tr>
-            {% else %}
-            <tr><td colspan="{{ 2 if current_user.can_edit() else 1 }}" class="empty">No ink names yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
 </div>
+{% endblock %}
 
-<div class="card">
-    <h2>Shade Names</h2>
-    <table class="data-table">
-        <thead>
-            <tr><th>Name</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr>
-        </thead>
-        <tbody>
-            {% for item in shade_names %}
-            <tr>
-                <td>{{ item.name }}</td>
-                {{ row_actions(
-                    url_for('stock_edits.edit_used_ink_shade', record_id=item.id),
-                    url_for('stock_deletes.delete_used_ink_shade', record_id=item.id)
-                ) }}
-            </tr>
-            {% else %}
-            <tr><td colspan="{{ 2 if current_user.can_edit() else 1 }}" class="empty">No shade names yet</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+{% block scripts %}
+{% include "ink/_used_js.html" %}
 {% endblock %}
