@@ -1,3 +1,4 @@
+import logging
 from sqlalchemy import inspect, text
 
 from app import db
@@ -784,11 +785,19 @@ def ensure_schema():
         replace_machine_hall_stock_nov_2026,
     )
 
-    replace_in_hall_stock_nov_2026()
-    replace_machine_hall_stock_nov_2026()
     from app.services.ink_stock_import import replace_ink_stock_nov_2026
 
-    replace_ink_stock_nov_2026()
+    # One-time stock replacements: a failure here must never stop the app from starting.
+    for one_time in (
+        replace_in_hall_stock_nov_2026,
+        replace_machine_hall_stock_nov_2026,
+        replace_ink_stock_nov_2026,
+    ):
+        try:
+            one_time()
+        except Exception:  # noqa: BLE001 - logged, app keeps booting
+            db.session.rollback()
+            logging.getLogger(__name__).exception("One-time data step %s failed", one_time.__name__)
 
     blob_type = "BYTEA" if db.engine.dialect.name == "postgresql" else "BLOB"
     _add_column_if_missing("sh_payment_screenshots", "screenshot_data", blob_type)
