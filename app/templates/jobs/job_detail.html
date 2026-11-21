@@ -2,6 +2,8 @@
 {% import "jobs/_macros.html" as jm with context %}
 {% block title %}{{ job.job_number }} {{ job.job_name }} - RN COLOUR{% endblock %}
 {% block content %}
+{% include "materials/_glass_kit.html" %}
+{% include "jobs/_glass_jobs.html" %}
 <div class="page-header">
     <div>
         <h1>{{ job.job_number }} · {{ job.job_name }}</h1>
@@ -70,7 +72,7 @@
         {% if check.materials_ok %}<span class="badge badge-green">All in stock</span>{% else %}<span class="badge badge-red">Needs attention</span>{% endif %}
     </div>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table gl-stack">
             <thead>
                 <tr>
                     <th>#</th>
@@ -84,14 +86,14 @@
             </thead>
             <tbody>
                 {% for m in check.materials %}
-                <tr{% if m.status != 'ok' %} class="job-row-short"{% endif %}>
-                    <td>{{ m.position }}</td>
-                    <td><strong>{{ m.label }}</strong></td>
-                    <td class="job-nowrap">{{ jm.kg(m.required_kg) }}</td>
-                    <td class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg{% if m.in_hall_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.in_hall_rolls) }} roll{{ '' if m.in_hall_rolls == 1 else 's' }}</span>{% endif %}</td>
-                    <td class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg{% if m.machine_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.machine_rolls) }} roll{{ '' if m.machine_rolls == 1 else 's' }}</span>{% endif %}</td>
-                    <td class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
-                    <td class="job-status-cell">{{ jm.line_badge(m) }}{{ jm.now_badge(m, job) }}<div>{{ jm.shortfall_note(m) }}</div></td>
+                <tr{% if m.status != 'ok' %} class="job-row-short gjob-line-{{ m.status }}"{% endif %}>
+                    <td class="gl-hide-phone">{{ m.position }}</td>
+                    <td class="gl-title gl-wrap"><strong>{{ m.label }}</strong></td>
+                    <td data-label="Required KG" class="job-nowrap">{{ jm.kg(m.required_kg) }}</td>
+                    <td data-label="In Hall" class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg{% if m.in_hall_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.in_hall_rolls) }} roll{{ '' if m.in_hall_rolls == 1 else 's' }}</span>{% endif %}</td>
+                    <td data-label="Machine Hall" class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg{% if m.machine_rolls %}<span class="job-stock-sub">{{ "{:,.0f}".format(m.machine_rolls) }} roll{{ '' if m.machine_rolls == 1 else 's' }}</span>{% endif %}</td>
+                    <td data-label="Total Available" class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
+                    <td data-label="Status" class="job-status-cell gl-full">{{ jm.line_badge(m) }}{{ jm.now_badge(m, job) }}<div>{{ jm.shortfall_note(m) }}</div></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No materials on this job</td></tr>

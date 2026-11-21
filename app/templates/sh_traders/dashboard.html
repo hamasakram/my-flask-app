@@ -7,65 +7,69 @@
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if current_user.can_view_sensitive() %}
-<div class="stats-grid">
-    <div class="stat-card accent-green">
+<div class="stats-grid sh-stats">
+    <div class="stat-card {{ 'accent-green' if stats.month_net >= 0 else 'accent-red' }}">
         <span class="stat-label">Net Profit / Loss ({{ stats.month_label }})</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.month_net) }}</span>
-        <small class="field-note">Profit ₨ {{ "{:,.2f}".format(stats.month_profit) }} · Loss ₨ {{ "{:,.2f}".format(stats.month_loss) }} · {{ stats.month_count }} record(s)</small>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.month_net) }}</span>
+        <dl class="sh-kv">
+            <div><dt>Profit</dt><dd class="text-success"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.month_profit) }}</dd></div>
+            <div><dt>Loss</dt><dd class="text-danger"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.month_loss) }}</dd></div>
+            <div><dt>Records</dt><dd>{{ stats.month_count }}</dd></div>
+        </dl>
     </div>
-    <div class="stat-card">
+    <div class="stat-card accent-blue">
         <span class="stat-label">All-Time Net</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_net) }}</span>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.total_net) }}</span>
         <small class="field-note">{{ stats.record_count }} total record(s)</small>
     </div>
     {% for key, bucket in stats.broker_summaries.items() %}
-    <div class="stat-card accent-orange">
+    <div class="stat-card {{ 'accent-orange' if bucket.profit - bucket.loss >= 0 else 'accent-red' }}">
         <span class="stat-label">{{ bucket.label }}</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(bucket.profit - bucket.loss) }}</span>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bucket.profit - bucket.loss) }}</span>
         <small class="field-note">{{ bucket.count }} record(s)</small>
     </div>
     {% endfor %}
 </div>
 {% else %}
-<div class="stats-grid">
-    <div class="stat-card">
+<div class="stats-grid sh-stats">
+    <div class="stat-card accent-blue">
         <span class="stat-label">Records ({{ stats.month_label }})</span>
         <span class="stat-value">{{ stats.month_count }}</span>
     </div>
 </div>
-<div class="flash flash-info">View-only access — amounts are hidden.</div>
+<div class="callout callout-blue sh-note">View-only access — amounts are hidden.</div>
 {% endif %}
 
 {% if stats.latest_record %}
 <div class="card highlight-card">
     <h2>Latest Record</h2>
-    <table class="data-table compact">
+    <table class="data-table compact sh-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Material</th>
                 <th>Size</th>
                 {% if current_user.can_view_sensitive() %}
-                <th>Purchase Total</th>
-                <th>Sold Total</th>
-                <th>Profit</th>
-                <th>Loss</th>
+                <th class="num">Purchase Total</th>
+                <th class="num">Sold Total</th>
+                <th class="num">Profit</th>
+                <th class="num">Loss</th>
                 {% endif %}
                 <th>Broker</th>
             </tr>
         </thead>
         <tbody>
             <tr>
-                <td>{{ stats.latest_record.record_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ stats.latest_record.material_name }}</td>
+                <td class="nowrap">{{ stats.latest_record.record_date.strftime('%d-%m-%Y') }}</td>
+                <td><strong>{{ stats.latest_record.material_name }}</strong></td>
                 <td>{{ stats.latest_record.size or '—' }}</td>
                 {% if current_user.can_view_sensitive() %}
-                <td>₨ {{ "{:,.2f}".format(stats.latest_record.purchase_total) }}</td>
-                <td>₨ {{ "{:,.2f}".format(stats.latest_record.sold_total) }}</td>
-                <td class="text-success">{% if stats.latest_record.profit_amount %}₨ {{ "{:,.2f}".format(stats.latest_record.profit_amount) }}{% else %}—{% endif %}</td>
-                <td class="text-danger">{% if stats.latest_record.loss_amount %}₨ {{ "{:,.2f}".format(stats.latest_record.loss_amount) }}{% else %}—{% endif %}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.latest_record.purchase_total) }}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.latest_record.sold_total) }}</td>
+                <td class="num text-success">{% if stats.latest_record.profit_amount %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.latest_record.profit_amount) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                <td class="num text-danger">{% if stats.latest_record.loss_amount %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(stats.latest_record.loss_amount) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
                 {% endif %}
-                <td>{{ stats.latest_record.broker_label }}</td>
+                <td><span class="chip {{ 'chip-blue' if stats.latest_record.broker == 'hamas' else 'chip-violet' }}">{{ stats.latest_record.broker_label }}</span></td>
             </tr>
         </tbody>
     </table>
@@ -74,14 +78,14 @@
 
 <div class="card">
     <h2>Recent Records</h2>
-    <table class="data-table">
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Material</th>
                 {% if current_user.can_view_sensitive() %}
-                <th>Profit</th>
-                <th>Loss</th>
+                <th class="num">Profit</th>
+                <th class="num">Loss</th>
                 {% endif %}
                 <th>Broker</th>
             </tr>
@@ -89,13 +93,13 @@
         <tbody>
             {% for r in stats.recent_records %}
             <tr>
-                <td>{{ r.record_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ r.material_name }}</td>
+                <td class="nowrap">{{ r.record_date.strftime('%d-%m-%Y') }}</td>
+                <td><strong>{{ r.material_name }}</strong></td>
                 {% if current_user.can_view_sensitive() %}
-                <td class="text-success">{% if r.profit_amount %}₨ {{ "{:,.2f}".format(r.profit_amount) }}{% else %}—{% endif %}</td>
-                <td class="text-danger">{% if r.loss_amount %}₨ {{ "{:,.2f}".format(r.loss_amount) }}{% else %}—{% endif %}</td>
+                <td class="num text-success">{% if r.profit_amount %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.profit_amount) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                <td class="num text-danger">{% if r.loss_amount %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.loss_amount) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
                 {% endif %}
-                <td>{{ r.broker_label }}</td>
+                <td><span class="chip {{ 'chip-blue' if r.broker == 'hamas' else 'chip-violet' }}">{{ r.broker_label }}</span></td>
             </tr>
             {% else %}
             <tr><td colspan="{{ 5 if current_user.can_view_sensitive() else 3 }}" class="empty">No records yet</td></tr>
@@ -105,7 +109,7 @@
 </div>
 
 {% if current_user.can_edit() %}
-<div class="quick-actions">
+<div class="quick-actions sh-no-print">
     <a href="{{ url_for('sh_main.profit_loss') }}" class="btn btn-primary">+ Profit / Loss Record</a>
     <a href="{{ url_for('sh_main.profit_loss_report_pdf') }}" class="btn btn-secondary">Download PDF Report</a>
 </div>

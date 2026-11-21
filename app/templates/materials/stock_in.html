@@ -2,6 +2,7 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}Stock In - RN COLOUR{% endblock %}
 {% block content %}
+{% include "materials/_glass_kit.html" %}
 <div class="page-header">
     <h1>Stock In</h1>
     <p class="page-subtitle">Record material received into stock</p>
@@ -44,13 +45,13 @@
 {% endif %}
 
 <div class="card">
-    <h2>Recent Stock In</h2>
-    <table class="data-table">
+    <div class="gl-head"><h2>Recent Stock In</h2></div>
+    <table class="data-table gl-stack">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Material</th>
-                <th>Qty (KG)</th>
+                <th class="num">Qty (KG)</th>
                 <th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -58,10 +59,10 @@
         <tbody>
             {% for txn in recent %}
             <tr>
-                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ txn.material.display_name }}</td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ txn.notes or '—' }}</td>
+                <td data-label="Date" class="nowrap">{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td class="gl-title gl-wrap">{{ txn.material.display_name }}</td>
+                <td data-label="Qty (KG)" class="num"><span class="gl-kg chip chip-green">+ {{ "%.1f"|format(txn.quantity) }}<small>kg</small></span></td>
+                <td data-label="Notes" class="gl-wrap gl-full">{{ txn.notes or '—' }}</td>
                 {{ row_actions(
                     url_for('stock_edits.edit_materials_received', txn_id=txn.id),
                     url_for('stock_deletes.delete_materials_received', txn_id=txn.id)

@@ -7,22 +7,22 @@
 {{ sh_page_header('Investor Stock Records', 'Track purchases, sales, and payments per investor — does not affect ledgers') }}
 {{ sh_bank_selector(banks, current_bank) }}
 
-<p class="field-note balance-note">
-    For your internal investor records only. Bank ledger, client ledger, supplier ledger, and sale invoices are <strong>not</strong> changed here.
-    Add investors under <a href="{{ url_for('sh_main.partners') }}">Partners</a> first.
+<p class="callout callout-blue sh-note">
+    <span>For your internal investor records only. Bank ledger, client ledger, supplier ledger, and sale invoices are <strong>not</strong> changed here.
+    Add investors under <a href="{{ url_for('sh_main.partners') }}">Partners</a> first.</span>
 </p>
 
 {% if partner_summaries %}
-<div class="stats-grid">
+<div class="stats-grid sh-stats">
     {% for s in partner_summaries %}
-    <div class="stat-card">
-        <span class="stat-label">{{ s.partner.name }}</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(s.outstanding) }}</span>
-        <small class="field-note">
-            Invested ₨ {{ "{:,.2f}".format(s.invested) }} ·
-            Billed ₨ {{ "{:,.2f}".format(s.billed) }} ·
-            Collected ₨ {{ "{:,.2f}".format(s.collected) }}
-        </small>
+    <div class="stat-card {{ 'accent-orange' if s.outstanding > 0.01 else 'accent-green' }}">
+        <span class="stat-label">{{ s.partner.name }} · Outstanding</span>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(s.outstanding) }}</span>
+        <dl class="sh-kv">
+            <div><dt>Invested</dt><dd><span class="sh-cur">₨</span>{{ "{:,.2f}".format(s.invested) }}</dd></div>
+            <div><dt>Billed</dt><dd><span class="sh-cur">₨</span>{{ "{:,.2f}".format(s.billed) }}</dd></div>
+            <div><dt>Collected</dt><dd><span class="sh-cur">₨</span>{{ "{:,.2f}".format(s.collected) }}</dd></div>
+        </dl>
     </div>
     {% endfor %}
 </div>
@@ -30,12 +30,12 @@
 
 {% if current_user.can_edit() %}
 {% if not partners %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.partners') }}">investors (partners)</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.partners') }}">investors (partners)</a> first.</div>
 {% elif not clients %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> for sale records.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> for sale records.</div>
 {% else %}
 
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Record Stock Purchase (Investor Investment)</h2>
     <form method="POST" class="form-grid" id="purchase-form">
         <input type="hidden" name="action" value="record_purchase">
@@ -70,7 +70,7 @@
         </div>
         <div class="form-group">
             <label for="purchase_total_display">Purchase Total (auto)</label>
-            <input type="text" id="purchase_total_display" readonly class="readonly-field" value="0.00">
+            <input type="text" id="purchase_total_display" readonly class="readonly-field sh-readout" value="0.00">
         </div>
         <div class="form-group">
             <label for="investment_amount">Investor Paid</label>
@@ -91,7 +91,7 @@
     </form>
 </div>
 
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Record Sale (Investor Stock Sold)</h2>
     <form method="POST" class="form-grid" id="sale-form">
         <input type="hidden" name="action" value="record_sale">
@@ -146,7 +146,7 @@
         </div>
         <div class="form-group">
             <label for="sale_total_display">Bill Total (auto)</label>
-            <input type="text" id="sale_total_display" readonly class="readonly-field" value="0.00">
+            <input type="text" id="sale_total_display" readonly class="readonly-field sh-readout" value="0.00">
         </div>
         <div class="form-group full-width">
             <label for="sale_notes">Notes</label>
@@ -158,7 +158,7 @@
     </form>
 </div>
 
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Record Payment Received</h2>
     <p class="field-note">Apply a party payment to a whole investor sale invoice — balance will reduce on that invoice.</p>
     <form method="POST" class="form-grid" id="payment-form">
@@ -209,39 +209,39 @@
 {% endif %}
 
 <div class="card">
-    <h2>Purchase Records</h2>
+    <h2>Purchase Records<span class="sh-count">{{ purchase_rows|length }}</span></h2>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table sh-table">
             <thead>
                 <tr>
                     <th>Date</th>
                     <th>Investor</th>
                     <th>Material</th>
                     <th>Size</th>
-                    <th>KG</th>
-                    <th>Rate</th>
-                    <th>Total</th>
-                    <th>Investor Paid</th>
-                    <th>Sold KG</th>
-                    <th>Left KG</th>
+                    <th class="num">KG</th>
+                    <th class="num">Rate</th>
+                    <th class="num">Total</th>
+                    <th class="num">Investor Paid</th>
+                    <th class="num">Sold KG</th>
+                    <th class="num">Left KG</th>
                     <th>Supplier</th>
-                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                    {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for row in purchase_rows %}
                 {% set p = row.purchase %}
                 <tr>
-                    <td>{{ p.purchase_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="nowrap">{{ p.purchase_date.strftime('%d-%m-%Y') }}</td>
                     <td><strong>{{ p.partner.name }}</strong></td>
                     <td>{{ p.material_name }}</td>
                     <td>{{ p.size or '—' }}</td>
-                    <td>{{ "{:,.3f}".format(p.quantity_kg) }}</td>
-                    <td>{{ "{:,.2f}".format(p.rate_per_kg) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(p.total_amount) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(p.investment_amount) }}</td>
-                    <td>{{ "{:,.3f}".format(row.sold_kg) }}</td>
-                    <td>{{ "{:,.3f}".format(row.remaining_kg) }}</td>
+                    <td class="num">{{ "{:,.3f}".format(p.quantity_kg) }}</td>
+                    <td class="num">{{ "{:,.2f}".format(p.rate_per_kg) }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(p.total_amount) }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(p.investment_amount) }}</td>
+                    <td class="num">{{ "{:,.3f}".format(row.sold_kg) }}</td>
+                    <td class="num">{{ "{:,.3f}".format(row.remaining_kg) }}</td>
                     <td>{{ p.supplier_name or '—' }}</td>
                     {% if current_user.can_edit() %}
                     {{ row_actions(
@@ -259,9 +259,9 @@
 </div>
 
 <div class="card">
-    <h2>Sale Records (Investor Invoices)</h2>
+    <h2>Sale Records (Investor Invoices)<span class="sh-count">{{ sale_rows|length }}</span></h2>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table sh-table">
             <thead>
                 <tr>
                     <th>Invoice #</th>
@@ -269,30 +269,30 @@
                     <th>Investor</th>
                     <th>Party</th>
                     <th>Material</th>
-                    <th>KG</th>
-                    <th>Bill Total</th>
-                    <th>Paid</th>
-                    <th>Remaining</th>
-                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                    <th class="num">KG</th>
+                    <th class="num">Bill Total</th>
+                    <th class="num">Paid</th>
+                    <th class="num">Remaining</th>
+                    {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for row in sale_rows %}
                 {% set s = row.sale %}
                 <tr>
-                    <td><strong>{{ s.invoice_number }}</strong></td>
-                    <td>{{ s.sale_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="sh-ref">{{ s.invoice_number }}</td>
+                    <td class="nowrap">{{ s.sale_date.strftime('%d-%m-%Y') }}</td>
                     <td>{{ s.partner.name }}</td>
                     <td>{{ s.client.name }}</td>
                     <td>{{ s.material_name }}{% if s.size %} ({{ s.size }}){% endif %}</td>
-                    <td>{{ "{:,.3f}".format(s.quantity_kg) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(s.total_amount) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(row.paid) }}</td>
-                    <td>
+                    <td class="num">{{ "{:,.3f}".format(s.quantity_kg) }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(s.total_amount) }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.paid) }}</td>
+                    <td class="num">
                         {% if row.remaining <= 0.01 %}
-                        <span class="badge badge-gray">Paid</span>
+                        <span class="chip chip-green">Paid</span>
                         {% else %}
-                        <strong>₨ {{ "{:,.2f}".format(row.remaining) }}</strong>
+                        <strong class="sh-dr"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.remaining) }}</strong>
                         {% endif %}
                     </td>
                     {% if current_user.can_edit() %}
@@ -311,29 +311,29 @@
 </div>
 
 <div class="card">
-    <h2>Payment Records</h2>
+    <h2>Payment Records<span class="sh-count">{{ payments|length }}</span></h2>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table sh-table">
             <thead>
                 <tr>
                     <th>Date</th>
                     <th>Investor</th>
                     <th>Party</th>
                     <th>Invoice #</th>
-                    <th>Amount</th>
+                    <th class="num">Amount</th>
                     <th>Notes</th>
-                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                    {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for pay in payments %}
                 <tr>
-                    <td>{{ pay.payment_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="nowrap">{{ pay.payment_date.strftime('%d-%m-%Y') }}</td>
                     <td>{{ pay.partner.name }}</td>
                     <td>{{ pay.client.name }}</td>
-                    <td>{{ pay.sale.invoice_number }}</td>
-                    <td>₨ {{ "{:,.2f}".format(pay.amount_received) }}</td>
-                    <td>{{ pay.notes or '—' }}</td>
+                    <td class="sh-ref">{{ pay.sale.invoice_number }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(pay.amount_received) }}</td>
+                    <td class="wrap">{{ pay.notes or '—' }}</td>
                     {% if current_user.can_edit() %}
                     {{ row_actions(
                         url_for('stock_edits.edit_sh_investor_payment', payment_id=pay.id),

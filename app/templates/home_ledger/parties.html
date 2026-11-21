@@ -2,13 +2,17 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}Parties - Home Ledger{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Parties</h1>
-    <p class="page-subtitle">Add names and opening totals — each party gets its own ledger</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-home">Home Ledger</span>
+        <h1>Parties</h1>
+        <p class="page-subtitle">Add names and opening totals — each party gets its own ledger</p>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <h2>Add Party</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -39,15 +43,18 @@
 {% endif %}
 
 <div class="card">
-    <h2>Saved Parties</h2>
+    <div class="gk-card-head">
+        <h2>Saved Parties <span class="gk-count">{{ parties|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead>
             <tr>
                 <th>Party</th>
                 <th>Type</th>
-                <th>Opening</th>
-                <th>Balance</th>
-                <th>Entries</th>
+                <th class="num">Opening</th>
+                <th class="num">Balance</th>
+                <th class="num">Entries</th>
                 <th>Ledger</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -55,11 +62,11 @@
         <tbody>
             {% for item in parties %}
             <tr>
-                <td><strong>{{ item.party.name }}</strong></td>
-                <td>{{ item.party.kind_label }}</td>
-                <td>₨ {{ "{:,.2f}".format(item.party.opening_amount) }}</td>
-                <td class="{% if item.balance > 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(item.balance) }}</td>
-                <td>{{ item.entry_count }}</td>
+                <td class="gk-strong">{{ item.party.name }}</td>
+                <td><span class="chip chip-{{ 'red' if item.party.balance_kind == 'to_pay' else 'green' }}">{{ item.party.kind_label }}</span></td>
+                <td class="num">₨ {{ "{:,.2f}".format(item.party.opening_amount) }}</td>
+                <td class="num {% if item.balance > 0 %}{{ 'gk-neg' if item.party.balance_kind == 'to_pay' else 'gk-pos' }}{% endif %}"><strong>₨ {{ "{:,.2f}".format(item.balance) }}</strong></td>
+                <td class="num">{{ item.entry_count }}</td>
                 <td>
                     <a href="{{ url_for('home_ledger.party_ledger', party_id=item.party.id) }}" class="btn btn-sm btn-primary">Ledger</a>
                 </td>
@@ -71,9 +78,10 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No parties yet</td></tr>
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty"><div class="gk-empty"><strong>No parties yet</strong><span>Saved parties appear here with their balance.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}

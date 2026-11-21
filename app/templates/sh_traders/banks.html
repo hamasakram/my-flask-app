@@ -7,7 +7,7 @@
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Add Bank</h2>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="add">
@@ -26,7 +26,7 @@
 </div>
 
 {% if current_bank %}
-<div class="card">
+<div class="card sh-no-print">
     <h2>Update Opening Balance — {{ current_bank.name }}</h2>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="opening">
@@ -43,12 +43,12 @@
 {% endif %}
 
 <div class="card">
-    <h2>Registered Banks</h2>
-    <table class="data-table">
+    <h2>Registered Banks<span class="sh-count">{{ banks|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Bank</th>
-                <th>Opening Balance</th>
+                <th class="num">Opening Balance</th>
                 <th>Default</th>
             </tr>
         </thead>
@@ -56,8 +56,8 @@
             {% for bank in banks %}
             <tr>
                 <td><strong>{{ bank.name }}</strong></td>
-                <td>₨ {{ "{:,.2f}".format(bank.opening_balance) }}</td>
-                <td>{% if bank.is_default %}Yes{% else %}—{% endif %}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bank.opening_balance) }}</td>
+                <td>{% if bank.is_default %}<span class="chip chip-green">Default</span>{% else %}<span class="sh-nil">—</span>{% endif %}</td>
             </tr>
             {% else %}
             <tr><td colspan="3" class="empty">No banks yet — add Askari Bank or another bank above.</td></tr>

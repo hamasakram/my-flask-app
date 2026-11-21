@@ -1,52 +1,66 @@
 {% extends "base.html" %}
 {% block title %}Home Ledger Dashboard{% endblock %}
 {% block content %}
-<div class="page-header">
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
     <div>
+        <span class="gk-eyebrow gk-home">Home Ledger</span>
         <h1>Home Ledger</h1>
         <p class="page-subtitle">Personal party payments — balances update automatically</p>
     </div>
+    {% if current_user.can_edit() %}
+    <div class="header-actions">
+        <a href="{{ url_for('home_ledger.parties') }}" class="btn btn-primary">+ Add Party</a>
+    </div>
+    {% endif %}
 </div>
 
 {% if current_user.can_view_sensitive() %}
-<div class="stats-grid">
-    <div class="stat-card">
+<div class="stats-grid gk-tiles-3">
+    <div class="stat-card accent-violet">
         <span class="stat-label">Parties</span>
         <span class="stat-value">{{ stats.party_count }}</span>
+        <span class="stat-note">Each party has its own ledger</span>
     </div>
     <div class="stat-card accent-red">
         <span class="stat-label">Total To Pay</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_to_pay) }}</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(stats.total_to_pay) }}</span></span>
+        <span class="stat-note">We owe these parties</span>
     </div>
     <div class="stat-card accent-green">
         <span class="stat-label">Total To Receive</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(stats.total_to_receive) }}</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(stats.total_to_receive) }}</span></span>
+        <span class="stat-note">These parties owe us</span>
     </div>
 </div>
 
 <div class="card">
-    <h2>All Parties</h2>
+    <div class="gk-card-head">
+        <h2>All Parties <span class="gk-count">{{ stats.parties|length }}</span></h2>
+        <a href="{{ url_for('home_ledger.parties') }}" class="btn btn-sm btn-secondary">Manage Parties</a>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead>
             <tr>
                 <th>Party</th>
                 <th>Type</th>
-                <th>Opening</th>
-                <th>Current Balance</th>
+                <th class="num">Opening</th>
+                <th class="num">Current Balance</th>
                 <th>Ledger</th>
             </tr>
         </thead>
         <tbody>
             {% for item in stats.parties %}
             <tr>
-                <td><strong>{{ item.party.name }}</strong></td>
+                <td class="gk-strong">{{ item.party.name }}</td>
                 <td>
-                    <span class="badge badge-{{ 'orange' if item.party.balance_kind == 'to_pay' else 'green' }}">
+                    <span class="chip chip-{{ 'red' if item.party.balance_kind == 'to_pay' else 'green' }}">
                         {{ item.party.kind_label }}
                     </span>
                 </td>
-                <td>₨ {{ "{:,.2f}".format(item.party.opening_amount) }}</td>
-                <td class="{% if item.balance > 0 %}text-danger{% elif item.balance == 0 %}text-success{% endif %}">
+                <td class="num">₨ {{ "{:,.2f}".format(item.party.opening_amount) }}</td>
+                <td class="num {% if item.balance > 0 %}{{ 'gk-neg' if item.party.balance_kind == 'to_pay' else 'gk-pos' }}{% elif item.balance == 0 %}gk-pos{% endif %}">
                     <strong>₨ {{ "{:,.2f}".format(item.balance) }}</strong>
                 </td>
                 <td>
@@ -54,24 +68,19 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="empty">No parties yet — add your first party</td></tr>
+            <tr><td colspan="5" class="empty"><div class="gk-empty"><strong>No parties yet</strong><span>Add your first party to start a ledger.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% else %}
-<div class="stats-grid">
-    <div class="stat-card">
+<div class="stats-grid gk-tiles-3">
+    <div class="stat-card accent-violet">
         <span class="stat-label">Parties</span>
         <span class="stat-value">{{ stats.party_count }}</span>
     </div>
 </div>
-<div class="flash flash-info">View-only access — party balances and payment details are hidden.</div>
-{% endif %}
-
-{% if current_user.can_edit() %}
-<div class="quick-actions">
-    <a href="{{ url_for('home_ledger.parties') }}" class="btn btn-primary">+ Add Party</a>
-</div>
+<p class="callout callout-blue">View-only access — party balances and payment details are hidden.</p>
 {% endif %}
 {% endblock %}

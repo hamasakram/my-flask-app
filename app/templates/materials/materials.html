@@ -2,6 +2,7 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}Materials - RN COLOUR{% endblock %}
 {% block content %}
+{% include "materials/_glass_kit.html" %}
 <div class="page-header">
     <h1>Materials</h1>
     <p class="page-subtitle">Add and list all printing materials</p>
@@ -40,26 +41,26 @@
 {% endif %}
 
 <div class="card">
-    <h2>All Materials</h2>
-    <table class="data-table">
+    <div class="gl-head"><h2>All Materials<span class="gl-count">{{ materials|length }}</span></h2></div>
+    <table class="data-table gl-stack">
         <thead>
             <tr>
                 <th>Category</th>
                 <th>Material Name</th>
                 <th>Size</th>
                 <th>Micron</th>
-                <th>Left (KG)</th>
+                <th class="num">Left (KG)</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for material in materials %}
             <tr>
-                <td>{{ material.category }}</td>
-                <td>{{ material.name }}</td>
-                <td>{{ material.size or '—' }}</td>
-                <td>{{ material.micron or '—' }}</td>
-                <td><strong>{{ "%.1f"|format(live_stock.get(material.id, material.initial_kg)) }}</strong></td>
+                <td data-label="Category"><span class="chip chip-gray">{{ material.category }}</span></td>
+                <td class="gl-title gl-wrap"><strong>{{ material.name }}</strong></td>
+                <td data-label="Size">{{ material.size or '—' }}</td>
+                <td data-label="Micron">{{ material.micron or '—' }}</td>
+                <td data-label="Left (KG)" class="num"><span class="gl-kg">{{ "%.1f"|format(live_stock.get(material.id, material.initial_kg)) }}</span></td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
                     url_for('stock_edits.edit_materials_catalog', material_id=material.id),

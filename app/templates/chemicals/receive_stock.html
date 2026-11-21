@@ -3,13 +3,20 @@
 {% from "shared/manual_weight_fields.html" import manual_weight_fields %}
 {% block title %}Stock Received - Chemicals{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Stock Received</h1>
-    <p class="page-subtitle">Record chemicals stock received</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-chem">Chemicals</span>
+        <h1>Stock Received</h1>
+        <p class="page-subtitle">Record chemicals stock received</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('chemicals.live_inventory') }}" class="btn btn-secondary">Live Inventory</a>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <h2>Record Stock Received</h2>
     <form method="POST" class="form-grid" id="receive-form">
         <div class="form-group">
@@ -44,41 +51,45 @@
             <button type="submit" class="btn btn-primary">Save Receipt</button>
         </div>
     </form>
-    <p class="field-note">Add companies and items first. <a href="{{ url_for('chemicals.companies') }}">Companies</a> · <a href="{{ url_for('chemicals.catalog') }}">Items to Add</a></p>
+    <p class="field-note gk-links">Add companies and items first. <a href="{{ url_for('chemicals.companies') }}">Companies</a> · <a href="{{ url_for('chemicals.catalog') }}">Items to Add</a></p>
 </div>
 {% endif %}
 
 <div class="card">
-    <h2>Recent Stock Received</h2>
+    <div class="gk-card-head">
+        <h2>Recent Stock Received <span class="gk-count">{{ recent_received|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table compact">
         <thead>
             <tr>
-                <th>Date</th><th>Company</th><th>Item</th><th>Qty</th><th>Wt/Qty</th><th>Gross</th><th>TW</th><th>Net</th><th>Notes</th>
+                <th>Date</th><th>Company</th><th>Item</th><th class="num">Qty</th><th class="num">Wt/Qty</th><th class="num">Gross</th><th class="num">TW</th><th class="num">Net</th><th>Notes</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for txn in recent_received %}
             <tr>
-                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td class="gk-date">{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
                 <td>{{ txn.company.name }}</td>
-                <td>{{ txn.item.display_name }}</td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ "%.2f"|format(txn.weight_per_quantity) if txn.weight_per_quantity is not none else '—' }}</td>
-                <td>{{ "%.2f"|format(txn.gross_weight) if txn.gross_weight is not none else '—' }}</td>
-                <td>{{ "%.2f"|format(txn.tw) if txn.tw is not none else '—' }}</td>
-                <td>{{ "%.2f"|format(txn.net_weight) if txn.net_weight is not none else '—' }}</td>
-                <td>{{ txn.notes or '—' }}</td>
+                <td class="gk-strong gk-item">{{ txn.item.display_name }}</td>
+                <td class="num gk-in">{{ "%.1f"|format(txn.quantity) }}</td>
+                <td class="num">{{ "%.2f"|format(txn.weight_per_quantity) if txn.weight_per_quantity is not none else '—' }}</td>
+                <td class="num">{{ "%.2f"|format(txn.gross_weight) if txn.gross_weight is not none else '—' }}</td>
+                <td class="num">{{ "%.2f"|format(txn.tw) if txn.tw is not none else '—' }}</td>
+                <td class="num"><strong>{{ "%.2f"|format(txn.net_weight) if txn.net_weight is not none else '—' }}</strong></td>
+                <td class="gk-text">{{ txn.notes or '—' }}</td>
                 {{ row_actions(
                     url_for('stock_edits.edit_chemicals_received', txn_id=txn.id),
                     url_for('stock_deletes.delete_chemicals_received', txn_id=txn.id)
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No receipts yet</td></tr>
+            <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty"><div class="gk-empty"><strong>No receipts yet</strong><span>Saved receipts are listed here.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}
 
@@ -86,7 +97,6 @@
 <script>
 const companySelect = document.getElementById('company_id');
 const itemSelect = document.getElementById('item_id');
-
 companySelect?.addEventListener('change', async function() {
     itemSelect.innerHTML = '<option value="">Loading...</option>';
     itemSelect.disabled = true;

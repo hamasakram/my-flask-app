@@ -1,13 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Edit Issue Record{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Edit Issue from Storage</h1>
-    <p class="page-subtitle">{{ txn.company.name }} — {{ txn.ink_type.name }}</p>
+{% include "shared/_glass_kit.html" %}
+<div class="gk-edit">
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-mod-{{ active_module }}">{{ module_label or 'Edit' }}</span>
+        <h1>Edit Issue from Storage</h1>
+        <p class="page-subtitle">{{ txn.company.name }} — {{ txn.ink_type.name }}</p>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card">
+<div class="card highlight-card gk-form-card">
     <form method="POST" class="form-grid">
         <div class="form-group">
             <label for="company_id">Company</label>
@@ -42,6 +47,7 @@
     </form>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}

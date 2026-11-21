@@ -1,0 +1,208 @@
+{#- Liquid-glass page kit: small page-level helpers shared by the Glue, Chemicals,
+    Home Ledger, Bank Ledger, Admin and shared edit pages. Builds on style.css tokens
+    (no new blur: everything here is either a container class from style.css or a
+    plain translucent fill). Include once per page: {% include "shared/_glass_kit.html" %} -#}
+<style>
+/* ---- Page header: module eyebrow + title block left, actions right ---- */
+.gk-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 0 0.5rem;
+    padding: 0.2rem 0.7rem 0.2rem 0.55rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.7rem;
+    font-weight: 750;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--gk-ink, var(--primary-dark));
+    background: var(--gk-wash, var(--tint-brand));
+    box-shadow: inset 0 0 0 1px var(--gk-ring, rgba(178, 30, 34, 0.24)), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.gk-eyebrow::before {
+    content: "";
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 50%;
+    background: var(--gk-dot, var(--primary));
+    box-shadow: 0 0 0 3px var(--gk-wash, var(--tint-brand));
+}
+.gk-mod-ink { --gk-ink: #2b2f3a; --gk-wash: rgba(43, 47, 58, 0.10); --gk-ring: rgba(43, 47, 58, 0.24); --gk-dot: #2b2f3a; }
+.gk-mod-sh_traders { --gk-ink: var(--tint-blue-text); --gk-wash: var(--tint-blue); --gk-ring: var(--tint-blue-border); --gk-dot: var(--blue); }
+.gk-mod-jobs { --gk-ink: #0d6b63; --gk-wash: rgba(20, 184, 166, 0.15); --gk-ring: rgba(13, 148, 136, 0.30); --gk-dot: #0d9488; }
+.gk-glue, .gk-mod-glue { --gk-ink: var(--tint-amber-text); --gk-wash: var(--tint-amber); --gk-ring: var(--tint-amber-border); --gk-dot: var(--orange); }
+.gk-chem, .gk-mod-chemicals { --gk-ink: var(--tint-green-text); --gk-wash: var(--tint-green); --gk-ring: var(--tint-green-border); --gk-dot: var(--green); }
+.gk-home, .gk-mod-home_ledger { --gk-ink: var(--tint-violet-text); --gk-wash: var(--tint-violet); --gk-ring: var(--tint-violet-border); --gk-dot: var(--violet); }
+.gk-bank, .gk-mod-bank_ledger { --gk-ink: #035b88; --gk-wash: rgba(14, 165, 233, 0.14); --gk-ring: rgba(2, 132, 199, 0.30); --gk-dot: #0284c7; }
+.gk-admin { --gk-ink: var(--tint-gray-text); --gk-wash: var(--tint-gray); --gk-ring: var(--tint-gray-border); --gk-dot: #64748b; }
+
+@media (min-width: 861px) {
+    .page-header.gk-head { align-items: flex-end; }
+    .gk-head > div:first-child { min-width: 0; flex: 1 1 22rem; }
+}
+.gk-head .page-subtitle { max-width: 46rem; }
+.gk-head .header-actions { flex: 0 1 auto; justify-content: flex-end; }
+
+/* ---- Card heads: title (+ count chip) left, small actions right ---- */
+.gk-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.9rem;
+}
+.gk-card-head h2 { margin: 0; display: inline-flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.gk-card-head .section-title { margin: 0 0 0.2rem; }
+.gk-card-head .field-note { margin: 0.25rem 0 0; }
+.gk-intro { margin: -0.35rem 0 1rem; max-width: 52rem; }
+.gk-count {
+    display: inline-flex;
+    align-items: center;
+    min-width: 1.6rem;
+    justify-content: center;
+    padding: 0.1rem 0.55rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.74rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--tint-gray-text);
+    background: var(--tint-gray);
+    box-shadow: inset 0 0 0 1px var(--tint-gray-border);
+}
+
+/* ---- Money / stat tiles ---- */
+.stat-value.gk-money { font-size: 1.5rem; }
+.gk-cur { font-size: 0.62em; font-weight: 650; color: var(--muted); margin-right: 0.18em; letter-spacing: 0; }
+.gk-amt { white-space: nowrap; }
+.stat-note { display: block; margin-top: 0.4rem; font-size: 0.78rem; color: var(--muted); line-height: 1.35; }
+.stat-note .chip { vertical-align: middle; }
+.gk-tiles-3 { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+
+/* ---- Tables ---- */
+/* style.css: `.data-table td { text-align: left }` comes after `td.num { text-align: right }`
+   with equal specificity, so numeric cells were left-aligned. Re-assert here. */
+.data-table td.num, .data-table th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gk-table { margin: 0 -0.35rem; padding: 0 0.35rem; }
+.data-table td.gk-item { min-width: 8rem; }
+.gk-table .data-table th, .gk-table .data-table td { padding-left: 0.5rem; padding-right: 0.5rem; }
+.gk-table .data-table.compact th, .gk-table .data-table.compact td { padding-left: 0.45rem; padding-right: 0.45rem; }
+.gk-table td.table-actions .btn-sm { padding-left: 0.7rem; padding-right: 0.7rem; }
+.gk-table td.table-actions > * + * { margin-left: 0.25rem; }
+.data-table td.gk-text.gk-bankcell { min-width: 7.5rem; max-width: 12rem; }
+.data-table td.gk-text-sm { white-space: normal; min-width: 6rem; max-width: 16rem; line-height: 1.4; overflow-wrap: anywhere; }
+.gk-table .data-table { min-width: 100%; }
+.data-table td.gk-date { white-space: nowrap; color: var(--muted); font-weight: 500; font-variant-numeric: normal; }
+.data-table td.gk-strong { font-weight: 650; }
+.data-table td.wrap, .data-table td.gk-text { white-space: normal; min-width: 9rem; max-width: 22rem; line-height: 1.4; overflow-wrap: anywhere; }
+.data-table td.gk-text .muted { font-size: 0.82rem; }
+.gk-bank-name { display: block; font-weight: 650; color: var(--text); }
+.gk-bank-acct { display: block; margin-top: 0.1rem; font-size: 0.74rem; font-weight: 500; color: var(--muted); letter-spacing: 0.01em; overflow-wrap: anywhere; }
+.gk-bank-title .gk-bank-name { font-weight: inherit; }
+.gk-bank-title .gk-bank-acct { margin-top: 0.35rem; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.04em; }
+a:has(.gk-bank-name) { text-decoration: none; }
+a .gk-bank-name { color: inherit; text-decoration: underline; text-decoration-color: rgba(23, 30, 48, 0.25); text-underline-offset: 2px; }
+.gk-in { color: var(--tint-green-text); font-weight: 650; }
+.gk-out { color: var(--tint-red-text); font-weight: 650; }
+.gk-dash { color: #98a1b3; }
+.data-table td.num strong, .data-table td.num .gk-bal { font-weight: 700; }
+.gk-neg { color: var(--tint-red-text); }
+.gk-pos { color: var(--tint-green-text); }
+.data-table tbody tr.row-total td,
+.data-table tfoot td {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.5));
+    border-top: 1px solid var(--line-strong);
+    border-bottom: none;
+    font-weight: 700;
+}
+.data-table tbody tr.row-opening td { color: var(--tint-green-text); }
+.data-table tbody tr.row-opening td.num { color: var(--text); }
+.data-table td a:not(.btn) { color: var(--text); font-weight: 650; text-decoration-color: rgba(23, 30, 48, 0.25); }
+.data-table td a:not(.btn):hover { color: var(--primary); }
+.data-table .chip { font-size: 0.74rem; padding: 0.16rem 0.6rem; }
+
+/* Empty rows / blocks */
+.gk-empty { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; padding: 0.6rem 0; color: var(--muted); white-space: normal; }
+.gk-empty strong { color: var(--text); font-weight: 650; font-size: 0.92rem; }
+.gk-empty span { font-size: 0.82rem; }
+.gk-empty::before {
+    content: "";
+    width: 2.3rem;
+    height: 2.3rem;
+    margin-bottom: 0.3rem;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95) 0 22%, transparent 23%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(236, 232, 242, 0.85));
+    box-shadow: inset 0 1px 0 #fff, 0 0 0 1px var(--line-strong), 0 6px 14px -8px rgba(40, 30, 60, 0.35);
+}
+.gk-empty-block { text-align: center; padding: 1.25rem 0.5rem; }
+
+/* ---- Filter toolbars ---- */
+.gk-filter { gap: 0.55rem; }
+.gk-filter :where(input, select) { min-height: 2.5rem; }
+.gk-filter select { flex: 1 1 12rem; max-width: 18rem; }
+.gk-filter input[type="text"] { flex: 2 1 12rem; max-width: 22rem; }
+.gk-filter-label { display: inline-flex; align-items: center; gap: 0.55rem; font-weight: 650; color: var(--text); font-size: 0.86rem; margin: 0; }
+.gk-filter-label input, .gk-filter-label select { font-weight: 500; }
+.gk-filter .toolbar-spacer { flex: 1; }
+.gk-filter select.gk-month { flex: 0 0 6.5rem; }
+.gk-filter input.gk-year { flex: 0 0 7.5rem; width: 7.5rem; }
+.gk-filter input[type="date"] { flex: 0 0 auto; }
+
+/* ---- Edit pages ---- */
+.gk-edit { max-width: 920px; }
+.gk-edit .card { padding: 1.4rem 1.5rem 1.5rem; }
+.gk-edit .form-actions { padding-top: 0.35rem; margin-top: 0.15rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+
+/* ---- Form cards ---- */
+.form-group[hidden] { display: none; }   /* .form-group's display:flex was overriding the hidden attribute */
+.gk-form-card .form-actions { margin-top: 0.2rem; }
+.gk-form-card > .field-note:last-child { margin: 1rem 0 0; }
+.gk-links a { font-weight: 650; }
+
+/* PDF builder column picker (classes were never defined in style.css) */
+.checkbox-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0.4rem 0.9rem 0.4rem 0.7rem;
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+    font-size: 0.86rem;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 1px var(--line-strong);
+    cursor: pointer;
+    transition: background var(--t-fast) ease, box-shadow var(--t-fast) ease;
+}
+.checkbox-label:has(input:checked) { background: var(--tint-brand); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1px rgba(178, 30, 34, 0.32); color: var(--primary-dark); }
+
+/* ---- Responsive ---- */
+@media (max-width: 1100px) and (min-width: 861px) {
+    .stat-value.gk-money { font-size: 1.25rem; }
+}
+@media (max-width: 860px) {
+    .gk-head .header-actions { justify-content: flex-start; width: 100%; }
+    .gk-head .header-actions .btn { flex: 1 1 auto; }
+    .quick-actions .btn { flex: 1 1 auto; }
+    .stat-value.gk-money { font-size: 1.12rem; }
+    .gk-cur { font-size: 0.7em; }
+    .gk-tiles-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .gk-tiles-3 > .gk-wide { grid-column: 1 / -1; }
+    .data-table td.wrap, .data-table td.gk-text { min-width: 13rem; }
+    .data-table td.gk-text.gk-bankcell { min-width: 9rem; }
+    .data-table td.gk-text-sm { white-space: normal; min-width: 10rem; }
+    .gk-filter { padding: 0.55rem; }
+    .gk-filter select, .gk-filter input[type="text"] { flex: 1 1 100%; max-width: none; }
+    .gk-filter .btn { flex: 1 1 0; }
+    .gk-filter-label { flex: 0 0 auto; }
+    .gk-filter input[type="date"], .gk-filter select.gk-month, .gk-filter input.gk-year { flex: 1 1 0; min-width: 0; width: auto; }
+    .gk-filter label ~ button.btn { flex: 1 1 100%; }
+    .gk-filter .toolbar-spacer { display: none; }
+    .gk-edit .card { padding: 1.1rem 1rem 1.15rem; }
+    .gk-edit .form-actions .btn { flex: 1 1 0; }
+}
+</style>

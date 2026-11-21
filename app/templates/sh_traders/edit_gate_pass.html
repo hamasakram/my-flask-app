@@ -4,7 +4,7 @@
 {% block title %}Edit Gate Pass - SH Traders{% endblock %}
 {% block content %}
 {{ sh_page_header('Edit Gate Pass', gate_pass.gate_pass_number) }}
-<div class="card">
+<div class="card sh-edit-card">
     <form method="POST" class="form-grid" id="gate-pass-form">
         <div class="form-group">
             <label>Gate Pass #</label>
@@ -56,7 +56,7 @@
         </div>
         <div class="form-group">
             <label for="total_amount_display">Total Amount (auto)</label>
-            <input type="text" id="total_amount_display" readonly class="readonly-field" value="{{ '{:,.2f}'.format(gate_pass.total_amount) }}">
+            <input type="text" id="total_amount_display" readonly class="readonly-field sh-readout" value="{{ '{:,.2f}'.format(gate_pass.total_amount) }}">
         </div>
         <div class="form-group full-width">
             <label for="notes">Notes</label>

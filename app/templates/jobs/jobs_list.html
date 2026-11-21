@@ -2,6 +2,8 @@
 {% import "jobs/_macros.html" as jm with context %}
 {% block title %}New Jobs Added - RN COLOUR{% endblock %}
 {% block content %}
+{% include "materials/_glass_kit.html" %}
+{% include "jobs/_glass_jobs.html" %}
 <div class="page-header">
     <div>
         <h1>New Jobs Added</h1>
@@ -49,17 +51,14 @@
     </p>
 
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table gl-stack">
             <thead>
                 <tr>
                     <th>Job No</th>
-                    <th>Date</th>
-                    <th>Job Name</th>
-                    <th>Customer / Party</th>
+                    <th>Job · Customer</th>
                     <th>To Produce</th>
                     <th>Materials</th>
-                    <th>Status</th>
-                    <th>Stock</th>
+                    <th>Status · Stock</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -67,19 +66,16 @@
                 {% for row in rows %}
                 {% set job = row.job %}
                 <tr{% if job.is_open and not row.ready %} class="job-row-short"{% endif %}>
-                    <td class="job-nowrap"><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link"><strong>{{ job.job_number }}</strong></a></td>
-                    <td class="job-nowrap">{{ job.job_date.strftime('%d-%m-%Y') }}</td>
-                    <td><strong>{{ job.job_name }}</strong></td>
-                    <td>{{ job.customer_name or '—' }}</td>
-                    <td class="job-produce-cell">{{ jm.produce(job) }}</td>
-                    <td class="job-cell-lines">
+                    <td data-label="Job No · Date" class="job-nowrap"><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link gjob-no">{{ job.job_number }}</a><span class="gl-sub">{{ job.job_date.strftime('%d-%m-%Y') }}</span></td>
+                    <td class="gl-title gl-wrap gjob-name-cell"><strong>{{ job.job_name }}</strong><span class="gl-sub">{% if job.customer_name %}{{ job.customer_name }}{% else %}No customer / party{% endif %}</span></td>
+                    <td data-label="To Produce" class="job-produce-cell">{{ jm.produce(job) }}</td>
+                    <td data-label="Materials" class="job-cell-lines gl-full">
                         {% for m in row.materials %}
                         <div class="job-mini-line">{% if job.is_open %}{{ jm.line_dot(m) }}{% endif %}<span>{{ m.label }}{% if job.is_open and m.status in ('out', 'unlisted') %} <strong class="job-mini-out">Not in Stock</strong>{% elif job.is_open and m.status == 'short' %} <strong class="job-mini-short">Short</strong>{% elif job.is_open and m.became_available %} <strong class="job-mini-new" title="Was {{ jm.SAVE_STATUS_WORDS.get(m.status_at_save, 'Not in Stock') }} when the job was saved">Now available</strong>{% endif %}</span></div>
                         {% else %}—{% endfor %}
                     </td>
-                    <td>{{ jm.status_badge(job) }}</td>
-                    <td class="job-nowrap">{{ jm.verdict_badge(row) }}</td>
-                    <td>
+                    <td data-label="Status · Stock" class="gjob-verdict gjob-status-stock">{{ jm.status_badge(job) }}{% if job.is_open %}<div class="gjob-stock-line">{{ jm.verdict_badge(row) }}</div>{% endif %}</td>
+                    <td class="gl-full gjob-actions-cell">
                         <div class="table-actions">
                             <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a>
                             <a href="{{ url_for('jobs.job_pdf', job_id=job.id) }}" class="btn btn-sm btn-secondary" target="_blank">PDF</a>
@@ -91,7 +87,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="empty">
+                <tr><td colspan="6" class="empty">
                     {% if status or search %}No jobs match this filter.{% else %}No jobs added yet.{% endif %}
                     {% if current_user.can_edit() %}<a href="{{ url_for('jobs.new_job') }}">Add a new job</a>.{% endif %}
                 </td></tr>

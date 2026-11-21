@@ -2,9 +2,16 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}Opening Stock - Chemicals{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Opening Stock</h1>
-    <p class="page-subtitle">Set opening stock after purchase/usage records from 1 June are entered</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-chem">Chemicals</span>
+        <h1>Opening Stock</h1>
+        <p class="page-subtitle">Set opening stock after purchase/usage records from 1 June are entered</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('chemicals.live_inventory') }}" class="btn btn-secondary">Live Inventory</a>
+    </div>
 </div>
 
 <div class="card workflow-card">
@@ -14,11 +21,11 @@
         <li>Then add opening stock here with the correct <strong>As of Date</strong>.</li>
         <li>Live stock updates automatically: <strong>Opening + Received − Used</strong>.</li>
     </ol>
-    <p class="field-note">While opening stock is not set, live stock counts as <strong>0 + Received − Used</strong>.</p>
+    <p class="field-note workflow-note">While opening stock is not set, live stock counts as <strong>0 + Received − Used</strong>.</p>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card">
+<div class="card highlight-card gk-form-card">
     <h2>Set Opening Stock</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -52,32 +59,36 @@
             <button type="submit" class="btn btn-primary">Save Opening Stock</button>
         </div>
     </form>
-    <p class="field-note">Add companies in <a href="{{ url_for('chemicals.companies') }}">Companies</a> and items in <a href="{{ url_for('chemicals.catalog') }}">Items to Add</a>.</p>
+    <p class="field-note gk-links">Add companies in <a href="{{ url_for('chemicals.companies') }}">Companies</a> and items in <a href="{{ url_for('chemicals.catalog') }}">Items to Add</a>.</p>
 </div>
 {% endif %}
 
 <div class="card">
-    <h2>Current Opening Stock Records</h2>
+    <div class="gk-card-head">
+        <h2>Current Opening Stock Records <span class="gk-count">{{ records|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
-        <thead><tr><th>Company</th><th>Item</th><th>Quantity</th><th>As of Date</th><th>Notes</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
+        <thead><tr><th>Company</th><th>Item</th><th class="num">Quantity</th><th>As of Date</th><th>Notes</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for record in records %}
             <tr>
                 <td>{{ record.company.name }}</td>
-                <td>{{ record.item.display_name }}</td>
-                <td>{{ "%.1f"|format(record.quantity) }}</td>
-                <td>{{ record.as_of_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ record.notes or '—' }}</td>
+                <td class="gk-strong">{{ record.item.display_name }}</td>
+                <td class="num">{{ "%.1f"|format(record.quantity) }}</td>
+                <td class="gk-date">{{ record.as_of_date.strftime('%d-%m-%Y') }}</td>
+                <td class="gk-text">{{ record.notes or '—' }}</td>
                 {{ row_actions(
                     url_for('stock_edits.edit_chemicals_opening', record_id=record.id),
                     url_for('stock_deletes.delete_chemicals_opening', record_id=record.id)
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty">No opening stock set</td></tr>
+            <tr><td colspan="{{ 6 if current_user.can_edit() else 5 }}" class="empty"><div class="gk-empty"><strong>No opening stock set</strong><span>Live stock counts Received − Used until you add it.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}
 

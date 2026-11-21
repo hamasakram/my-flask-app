@@ -2,13 +2,20 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}Items to Add - Glue{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Items to Add</h1>
-    <p class="page-subtitle">Register glue items and unit types for later use in stock entries</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-glue">Glue</span>
+        <h1>Items to Add</h1>
+        <p class="page-subtitle">Register glue items and unit types for later use in stock entries</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('glue.companies') }}" class="btn btn-secondary">Companies</a>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <h2>Add New Item</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -39,30 +46,34 @@
             <button type="submit" class="btn btn-primary">Save Item</button>
         </div>
     </form>
-    <p class="field-note">Add companies first in <a href="{{ url_for('glue.companies') }}">Companies</a>.</p>
+    <p class="field-note gk-links">Add companies first in <a href="{{ url_for('glue.companies') }}">Companies</a>.</p>
 </div>
 {% endif %}
 
 <div class="card">
-    <h2>Saved Items</h2>
+    <div class="gk-card-head">
+        <h2>Saved Items <span class="gk-count">{{ items|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead><tr><th>Company</th><th>Item</th><th>Unit</th><th>Added</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for item in items %}
             <tr>
                 <td>{{ item.company.name }}</td>
-                <td>{{ item.name }}</td>
-                <td>{{ item.unit_type }}</td>
-                <td>{{ item.created_at.strftime('%d-%m-%Y') }}</td>
+                <td class="gk-strong">{{ item.name }}</td>
+                <td><span class="chip chip-gray">{{ item.unit_type }}</span></td>
+                <td class="gk-date">{{ item.created_at.strftime('%d-%m-%Y') }}</td>
                 {{ row_actions(
                     url_for('stock_edits.edit_glue_catalog', item_id=item.id),
                     url_for('stock_deletes.delete_glue_catalog', item_id=item.id)
                 ) }}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 5 if current_user.can_edit() else 4 }}" class="empty">No items saved yet — add your first item above</td></tr>
+            <tr><td colspan="{{ 5 if current_user.can_edit() else 4 }}" class="empty"><div class="gk-empty"><strong>No items saved yet</strong><span>Add your first item above.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}

@@ -9,9 +9,9 @@
 
 {% if current_user.can_edit() %}
 {% if not clients %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Record Payment Received</h2>
     <p class="field-note">Create a confirmation receipt showing amount received today, total received, and total still due.</p>
     <form method="POST" class="form-grid" id="payment-receipt-form">
@@ -65,33 +65,33 @@
 {% endif %}
 
 <div class="card">
-    <h2>Payment Receipt Records</h2>
-    <table class="data-table">
+    <h2>Payment Receipt Records<span class="sh-count">{{ receipts|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Receipt #</th>
                 <th>Date</th>
                 <th>Client</th>
-                <th>Received Today</th>
-                <th>Total Received</th>
-                <th>Total Due</th>
+                <th class="num">Received Today</th>
+                <th class="num">Total Received</th>
+                <th class="num">Total Due</th>
                 <th>Invoice Ref</th>
-                <th>PDF</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                <th class="sh-col-pdf">PDF</th>
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for receipt in receipts %}
             <tr>
-                <td><strong>{{ receipt.receipt_number }}</strong></td>
-                <td>{{ receipt.receipt_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ receipt.client.name }}</td>
-                <td>₨ {{ "{:,.2f}".format(receipt.amount_received) }}</td>
-                <td>₨ {{ "{:,.2f}".format(receipt.total_received) }}</td>
-                <td>₨ {{ "{:,.2f}".format(receipt.total_due) }}</td>
-                <td>{{ receipt.sale_invoice.invoice_number if receipt.sale_invoice else '—' }}</td>
-                <td>
-                    <a href="{{ url_for('sh_main.payment_receipt_pdf', receipt_id=receipt.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                <td class="sh-ref">{{ receipt.receipt_number }}</td>
+                <td class="nowrap">{{ receipt.receipt_date.strftime('%d-%m-%Y') }}</td>
+                <td class="sh-party"><strong>{{ receipt.client.name }}</strong></td>
+                <td class="num sh-cr"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(receipt.amount_received) }}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(receipt.total_received) }}</td>
+                <td class="num sh-bal"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(receipt.total_due) }}</td>
+                <td>{% if receipt.sale_invoice %}<span class="chip chip-blue">{{ receipt.sale_invoice.invoice_number }}</span>{% else %}<span class="chip chip-gray">General</span>{% endif %}</td>
+                <td class="sh-col-pdf">
+                    <a href="{{ url_for('sh_main.payment_receipt_pdf', receipt_id=receipt.id) }}" target="_blank" class="btn btn-sm btn-secondary">Print PDF</a>
                 </td>
                 {{ row_actions(delete_url=url_for('stock_deletes.delete_sh_payment_receipt', receipt_id=receipt.id)) }}
             </tr>

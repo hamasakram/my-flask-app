@@ -1,57 +1,86 @@
 {% extends "base.html" %}
 {% block title %}Settings - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Settings</h1>
-    <p class="page-subtitle">Configure low stock alert thresholds</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-admin">Admin</span>
+        <h1>Settings</h1>
+        <p class="page-subtitle">Configure low stock alert thresholds</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">Users</a>
+    </div>
 </div>
 
-<div class="card">
-    <h2>Default Low Stock Threshold</h2>
-    <form method="POST" class="form-inline">
-        <input type="number" name="default_low_stock_threshold" value="{{ default_threshold }}" min="0" required>
+<div class="card highlight-card gk-form-card">
+    <div class="gk-card-head">
+        <div>
+            <h2>Default Low Stock Threshold</h2>
+            <p class="field-note">Used for every ink without its own override below.</p>
+        </div>
+    </div>
+    <form method="POST" class="form-inline gk-threshold">
+        <input type="number" name="default_low_stock_threshold" value="{{ default_threshold }}" min="0" required aria-label="Default low stock threshold">
         <button type="submit" class="btn btn-primary">Save Default</button>
     </form>
 </div>
 
 <div class="card">
-    <h2>Per-Ink Threshold Overrides</h2>
+    <div class="gk-card-head">
+        <h2>Per-Ink Threshold Overrides <span class="gk-count">{{ ink_thresholds|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead><tr><th>Company</th><th>Ink</th><th>Threshold</th><th>Action</th></tr></thead>
         <tbody>
             {% for ink in ink_thresholds %}
             <tr>
                 <td>{{ ink.company.name }}</td>
-                <td>{{ ink.name }}</td>
+                <td class="gk-strong">{{ ink.name }}</td>
                 <td>
-                    <form method="POST" action="{{ url_for('admin.update_ink_threshold', ink_id=ink.id) }}" class="form-inline">
-                        <input type="number" name="threshold" value="{{ ink.low_stock_threshold if ink.low_stock_threshold is not none else '' }}" placeholder="Default" min="0">
+                    <form method="POST" action="{{ url_for('admin.update_ink_threshold', ink_id=ink.id) }}" class="form-inline gk-threshold gk-threshold-sm">
+                        <input type="number" name="threshold" value="{{ ink.low_stock_threshold if ink.low_stock_threshold is not none else '' }}" placeholder="Default" min="0" aria-label="Threshold for {{ ink.name }}">
                         <button type="submit" class="btn btn-secondary btn-sm">Update</button>
                     </form>
                 </td>
-                <td>{% if ink.low_stock_threshold is not none %}Custom{% else %}Using default{% endif %}</td>
+                <td>{% if ink.low_stock_threshold is not none %}<span class="chip chip-blue">Custom</span>{% else %}<span class="chip chip-gray">Using default</span>{% endif %}</td>
             </tr>
             {% else %}
-            <tr><td colspan="4" class="empty">No ink types yet — add stock received entries to create inks</td></tr>
+            <tr><td colspan="4" class="empty"><div class="gk-empty"><strong>No ink types yet</strong><span>Add stock received entries to create inks.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 
 <div class="card danger-card">
-    <h2>Reset Stock Data (Fresh Start)</h2>
-    <p class="field-note">Clears opening stock, transactions, purchase receipts, and all saved inks/materials. Companies are kept. Use before entering official opening stock.</p>
+    <div class="gk-card-head">
+        <div>
+            <h2>Reset Stock Data (Fresh Start)</h2>
+            <p class="field-note">Clears opening stock, transactions, purchase receipts, and all saved inks/materials. Companies are kept. Use before entering official opening stock.</p>
+        </div>
+        <span class="chip chip-red">Cannot be undone</span>
+    </div>
     <div class="form-grid">
-        <form method="POST" action="{{ url_for('admin.reset_ink_stock') }}" class="form-group">
+        <form method="POST" action="{{ url_for('admin.reset_ink_stock') }}" class="form-group glass-soft gk-reset">
             <label for="confirm_ink">Reset Ink Stock</label>
             <input type="text" id="confirm_ink" name="confirm" placeholder='Type RESET INK to confirm'>
-            <button type="submit" class="btn btn-danger btn-sm" style="margin-top:0.5rem">Clear Ink Stock Data</button>
+            <button type="submit" class="btn btn-danger btn-sm">Clear Ink Stock Data</button>
         </form>
-        <form method="POST" action="{{ url_for('admin.reset_materials_stock') }}" class="form-group">
+        <form method="POST" action="{{ url_for('admin.reset_materials_stock') }}" class="form-group glass-soft gk-reset">
             <label for="confirm_materials">Reset Materials Stock</label>
             <input type="text" id="confirm_materials" name="confirm" placeholder='Type RESET MATERIALS to confirm'>
-            <button type="submit" class="btn btn-danger btn-sm" style="margin-top:0.5rem">Clear Materials Stock Data</button>
+            <button type="submit" class="btn btn-danger btn-sm">Clear Materials Stock Data</button>
         </form>
     </div>
 </div>
+
+<style>
+.gk-threshold input { width: 9rem; }
+.gk-threshold-sm input { width: 7rem; min-height: 2.2rem; padding-top: 0.35rem; padding-bottom: 0.35rem; }
+.gk-threshold-sm { flex-wrap: nowrap; }
+.gk-reset { padding: 1rem; gap: 0.5rem; }
+.gk-reset .btn { align-self: flex-start; margin-top: 0.25rem; }
+</style>
 {% endblock %}

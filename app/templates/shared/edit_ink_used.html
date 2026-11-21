@@ -1,13 +1,18 @@
 {% extends "base.html" %}
 {% block title %}Edit Cans Out - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Edit Cans Out</h1>
-    <p class="page-subtitle">{{ txn.ink_type.display_name }}</p>
+{% include "shared/_glass_kit.html" %}
+<div class="gk-edit">
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-mod-{{ active_module }}">{{ module_label or 'Edit' }}</span>
+        <h1>Edit Cans Out</h1>
+        <p class="page-subtitle">{{ txn.ink_type.display_name }}</p>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <form method="POST" class="form-grid">
         <input type="hidden" name="return_to" value="{{ return_to }}">
         <input type="hidden" name="return_date" value="{{ return_date }}">
@@ -66,6 +71,7 @@
     </form>
 </div>
 {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}

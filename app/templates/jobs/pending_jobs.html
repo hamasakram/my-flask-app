@@ -2,6 +2,8 @@
 {% import "jobs/_macros.html" as jm with context %}
 {% block title %}Pending Jobs - RN COLOUR{% endblock %}
 {% block content %}
+{% include "materials/_glass_kit.html" %}
+{% include "jobs/_glass_jobs.html" %}
 <div class="page-header">
     <div>
         <h1>Pending Jobs</h1>
@@ -59,18 +61,18 @@
     <div class="job-card-body">
         <h3 class="job-subhead">Materials</h3>
         <div class="table-scroll">
-        <table class="data-table compact">
+        <table class="data-table compact gl-stack">
             <thead><tr><th>#</th><th>Material</th><th>Required</th><th>In Hall</th><th>Machine Hall</th><th>Total Available</th><th>Status</th></tr></thead>
             <tbody>
                 {% for m in row.materials %}
-                <tr{% if m.status != 'ok' %} class="job-row-short"{% endif %}>
-                    <td>{{ m.position }}</td>
-                    <td>{{ m.label }}</td>
-                    <td class="job-nowrap">{% if m.required_kg %}{{ jm.kg(m.required_kg) }} kg{% else %}—{% endif %}</td>
-                    <td class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg</td>
-                    <td class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg</td>
-                    <td class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
-                    <td class="job-status-cell">{{ jm.line_badge(m) }}{{ jm.now_badge(m, job) }} {{ jm.shortfall_note(m) }}</td>
+                <tr{% if m.status != 'ok' %} class="job-row-short gjob-line-{{ m.status }}"{% endif %}>
+                    <td class="gl-hide-phone">{{ m.position }}</td>
+                    <td class="gl-title gl-wrap">{{ m.label }}</td>
+                    <td data-label="Required" class="job-nowrap">{% if m.required_kg %}{{ jm.kg(m.required_kg) }} kg{% else %}—{% endif %}</td>
+                    <td data-label="In Hall" class="job-nowrap">{{ jm.kg(m.in_hall_kg) }} kg</td>
+                    <td data-label="Machine Hall" class="job-nowrap">{{ jm.kg(m.machine_kg) }} kg</td>
+                    <td data-label="Total Available" class="job-nowrap"><strong>{{ jm.kg(m.total_kg) }} kg</strong></td>
+                    <td data-label="Status" class="job-status-cell gl-full">{{ jm.line_badge(m) }}{{ jm.now_badge(m, job) }} {{ jm.shortfall_note(m) }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No materials</td></tr>

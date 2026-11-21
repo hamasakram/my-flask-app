@@ -1,34 +1,44 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "shared/macros.html" import row_actions, bank_name with context %}
 {% block title %}{{ bank.display_name }} - Bank Ledger{% endblock %}
 {% block content %}
-<div class="page-header">
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
     <div>
-        <h1>{{ bank.display_name }}</h1>
+        <span class="gk-eyebrow gk-bank">Bank Account Ledger</span>
+        <h1 class="gk-bank-title">{{ bank_name(bank.display_name) }}</h1>
         <p class="page-subtitle">
             {% if bank.account_title %}{{ bank.account_title }}{% endif %}
             {% if bank.branch %} · {{ bank.branch }}{% endif %}
             · Opening: ₨ {{ "{:,.2f}".format(bank.opening_balance) }}
         </p>
     </div>
-    <div class="page-header-actions">
+    <div class="page-header-actions header-actions">
         <a href="{{ url_for('bank_ledger.transfers') }}" class="btn btn-secondary">Transfers</a>
         <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">All Banks</a>
     </div>
 </div>
 
-<div class="stats-grid">
-    <div class="stat-card accent-green">
+<div class="stats-grid gk-tiles-3">
+    <div class="stat-card gk-wide {% if current_balance < 0 %}accent-red{% else %}accent-green{% endif %}">
         <span class="stat-label">Current Balance</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
-        <small class="field-note">Includes deposits, withdrawals, and cross-bank transfers</small>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(current_balance) }}</span></span>
+        <small class="stat-note">Includes deposits, withdrawals, and cross-bank transfers</small>
+    </div>
+    <div class="stat-card accent-blue">
+        <span class="stat-label">Opening Balance</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(bank.opening_balance) }}</span></span>
+    </div>
+    <div class="stat-card accent-violet">
+        <span class="stat-label">Ledger Rows</span>
+        <span class="stat-value">{{ (ledger_rows|rejectattr('type', 'equalto', 'opening')|list)|length }}</span>
     </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <h2>Add Ledger Entry</h2>
-    <p class="field-note">Record a <strong>Deposit</strong> when money comes in, or a <strong>Withdrawal</strong> when money goes out.</p>
+    <p class="field-note gk-intro">Record a <strong>Deposit</strong> when money comes in, or a <strong>Withdrawal</strong> when money goes out.</p>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="entry">
         <div class="form-group">
@@ -62,9 +72,9 @@
 </div>
 
 {% if other_banks %}
-<div class="card highlight-card transfer-card">
+<div class="card highlight-card transfer-card gk-form-card">
     <h2>Transfer to Another Bank</h2>
-    <p class="field-note">Send money from <strong>{{ bank.display_name }}</strong> to another account. This bank is debited and the destination bank is credited automatically.</p>
+    <p class="field-note gk-intro">Send money from <strong>{{ bank.display_name }}</strong> to another account. This bank is debited and the destination bank is credited automatically.</p>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="transfer">
         <div class="form-group">
@@ -101,16 +111,19 @@
 {% endif %}
 
 <div class="card">
-    <h2>Bank Ledger — {{ bank.display_name }}</h2>
+    <div class="gk-card-head">
+        <h2>Bank Ledger — {{ bank.display_name }}</h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Category</th>
                 <th>Type</th>
-                <th>Deposit</th>
-                <th>Withdrawal</th>
-                <th>Balance</th>
+                <th class="num">Deposit</th>
+                <th class="num">Withdrawal</th>
+                <th class="num">Balance</th>
                 <th>Details</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -119,32 +132,32 @@
             {% for row in ledger_rows %}
             {% if row.type == 'opening' %}
             <tr class="row-opening">
+                <td class="gk-date">—</td>
                 <td>—</td>
-                <td>—</td>
-                <td>Opening</td>
-                <td>—</td>
-                <td>—</td>
-                <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
-                <td>Opening balance{% if bank.notes %} — {{ bank.notes }}{% endif %}</td>
+                <td><span class="chip chip-green">Opening</span></td>
+                <td class="num">—</td>
+                <td class="num">—</td>
+                <td class="num"><strong>₨ {{ "{:,.2f}".format(row.balance) }}</strong></td>
+                <td class="gk-text">Opening balance{% if bank.notes %} — {{ bank.notes }}{% endif %}</td>
                 {% if current_user.can_edit() %}<td>—</td>{% endif %}
             </tr>
             {% else %}
             <tr>
-                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ row.entry.expense_category_label }}</td>
+                <td class="gk-date">{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td class="gk-text-sm">{{ row.entry.expense_category_label }}</td>
                 <td>
                     {% if row.entry.entry_type == 'transfer_in' %}
-                    <span class="badge badge-green">Transfer In</span>
+                    <span class="chip chip-green">Transfer In</span>
                     {% elif row.entry.entry_type == 'transfer_out' %}
-                    <span class="badge badge-orange">Transfer Out</span>
+                    <span class="chip chip-amber">Transfer Out</span>
                     {% else %}
-                    <span class="badge badge-gray">Standard</span>
+                    <span class="chip chip-gray">Standard</span>
                     {% endif %}
                 </td>
-                <td>{% if row.entry.deposit %}₨ {{ "{:,.2f}".format(row.entry.deposit) }}{% else %}—{% endif %}</td>
-                <td>{% if row.entry.withdrawal %}₨ {{ "{:,.2f}".format(row.entry.withdrawal) }}{% else %}—{% endif %}</td>
-                <td><strong>₨ {{ "{:,.2f}".format(row.balance) }}</strong></td>
-                <td>
+                <td class="num">{% if row.entry.deposit %}<span class="gk-in">₨ {{ "{:,.2f}".format(row.entry.deposit) }}</span>{% else %}<span class="gk-dash">—</span>{% endif %}</td>
+                <td class="num">{% if row.entry.withdrawal %}<span class="gk-out">₨ {{ "{:,.2f}".format(row.entry.withdrawal) }}</span>{% else %}<span class="gk-dash">—</span>{% endif %}</td>
+                <td class="num"><strong class="{% if row.balance < 0 %}gk-neg{% endif %}">₨ {{ "{:,.2f}".format(row.balance) }}</strong></td>
+                <td class="gk-text">
                     {{ row.entry.notes or '—' }}
                     {% if row.entry.counterparty_bank %}
                     · <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=row.entry.counterparty_bank.id) }}">{{ row.entry.counterparty_bank.display_name }}</a>
@@ -166,10 +179,11 @@
             </tr>
             {% endif %}
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No entries yet</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty"><div class="gk-empty"><strong>No entries yet</strong><span>Deposits, withdrawals and transfers appear here.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}
 

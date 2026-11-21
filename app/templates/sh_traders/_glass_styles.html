@@ -1,0 +1,315 @@
+{# SH Traders — Liquid Glass page layer.
+   Included once per page by sh_page_header (sh_traders/macros.html), so every SH page
+   (and the SH "Generate PDF" builder) gets it. Uses only style.css tokens; all rules are
+   scoped to sh-* classes or to SH markup, so nothing leaks into other modules.
+   Blur stays on containers only (bank bar, cards, tiles) — never on rows, chips or buttons. #}
+<style>
+/* ---------- Bank bar (sh_traders/bank_selector.html) ---------- */
+.sh-bank-bar {
+    gap: 0.55rem 0.75rem;
+    padding: 0.5rem 0.55rem 0.5rem 0.95rem;
+    border-radius: var(--radius-pill);
+}
+.sh-bank-form { display: inline-flex; align-items: center; gap: 0.6rem; margin: 0; min-width: 0; }
+.sh-bank-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 750;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.sh-bank-label svg { width: 1.05rem; height: 1.05rem; fill: none; stroke: var(--primary); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+select.sh-bank-select {
+    min-height: 2.3rem;
+    padding: 0.35rem 2.2rem 0.35rem 0.95rem;
+    border-radius: var(--radius-pill);
+    font-weight: 650;
+    font-size: 0.9rem;
+    min-width: 12rem;
+}
+.sh-bank-opening { font-variant-numeric: tabular-nums; }
+.sh-bank-opening .sh-chip-key { font-weight: 600; opacity: 0.8; }
+
+/* ---------- Money ---------- */
+.sh-cur { font-size: 0.82em; font-weight: 600; color: var(--muted); margin-right: 0.22em; }
+.stat-value .sh-cur { font-size: 0.55em; font-weight: 650; letter-spacing: 0; vertical-align: 0.18em; margin-right: 0.18em; }
+.text-success .sh-cur, .text-danger .sh-cur, .sh-dr .sh-cur, .sh-cr .sh-cur { color: inherit; opacity: 0.75; }
+.sh-dr { color: var(--tint-red-text); font-weight: 600; }
+.sh-cr { color: var(--tint-green-text); font-weight: 600; }
+.sh-bal { font-weight: 700; color: var(--text); }
+.sh-nil { color: #8a93a5; }
+
+/* DR / CR marker after balances */
+.sh-drcr {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.66rem;
+    font-weight: 750;
+    letter-spacing: 0.05em;
+    vertical-align: 0.1em;
+    background: var(--tint-gray);
+    color: var(--tint-gray-text);
+    box-shadow: inset 0 0 0 1px var(--tint-gray-border);
+}
+.sh-drcr-dr { background: var(--tint-amber); color: var(--tint-amber-text); box-shadow: inset 0 0 0 1px var(--tint-amber-border); }
+.sh-drcr-cr { background: var(--tint-green); color: var(--tint-green-text); box-shadow: inset 0 0 0 1px var(--tint-green-border); }
+
+/* ---------- KPI tiles ---------- */
+.sh-stats .stat-card { container-type: inline-size; display: flex; flex-direction: column; }
+.sh-stats .stat-value { font-size: clamp(1.08rem, 11.5cqi, 1.85rem); }
+.sh-stats .stat-card .field-note { display: block; margin-top: 0.3rem; line-height: 1.4; }
+.sh-stats .stat-card .field-note a { font-weight: 600; }
+.sh-kv { margin: 0.6rem 0 0; padding-top: 0.5rem; border-top: 1px solid var(--line); display: grid; gap: 0.2rem; font-size: 0.8rem; }
+.sh-kv > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 0.75rem; }
+.sh-kv dt { color: var(--muted); }
+.sh-kv dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sh-tile-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+.sh-tile-meta .chip { font-size: 0.72rem; padding: 0.14rem 0.55rem; }
+
+/* ---------- Cards, headings, notes ---------- */
+.sh-card-title { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.sh-card-title .chip { font-size: 0.72rem; }
+.card h2 .sh-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 1.6rem; height: 1.35rem; padding: 0 0.45rem; margin-left: 0.45rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.72rem; font-weight: 700; vertical-align: 0.15em;
+    background: var(--tint-gray); color: var(--tint-gray-text);
+    box-shadow: inset 0 0 0 1px var(--tint-gray-border);
+}
+.sh-note {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    margin: 0 0 1.15rem;
+    padding: 0.7rem 1rem;
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+.sh-note::before {
+    content: "i";
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.25rem; height: 1.25rem; margin-top: 0.05rem;
+    border-radius: 50%;
+    font: 700 0.75rem/1 Georgia, serif;
+    color: #fff;
+    background: var(--blue);
+    box-shadow: 0 0 0 3px var(--tint-blue);
+}
+.card .field-note + .form-grid,
+.card > p.field-note { margin-top: 0; }
+.card > h2 + p.field-note { margin: -0.5rem 0 1rem; line-height: 1.5; }
+
+/* Section headings inside long forms (Purchase / Sale / Line Items) */
+.form-grid .form-group.full-width > h3,
+.sh-form-section {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.35rem 0 0.15rem;
+    font-size: 0.76rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--primary);
+}
+.form-grid .form-group.full-width > h3::after,
+.sh-form-section::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+/* Invoice / ledger line items */
+#invoice-lines-container { display: flex; flex-direction: column; gap: 0.7rem; margin: 0.35rem 0 0.75rem; }
+#invoice-lines-container .invoice-line-row { margin-bottom: 0; }
+.invoice-line-row .line-label { font-weight: 700; color: var(--text); }
+.invoice-line-row.form-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.85rem 1rem; }
+.invoice-line-row.form-grid > .form-group:last-child { grid-column: span 2; }
+@media (max-width: 1100px) { .invoice-line-row.form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .invoice-line-row.form-grid > .form-group:last-child { grid-column: span 1; } }
+.invoice-line-row .line-total-display,
+#invoice_total_display {
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    border-style: solid;
+    background-color: rgba(255, 255, 255, 0.55);
+}
+#invoice_total_display { font-size: 1.05rem; background-color: var(--tint-blue); border-color: var(--tint-blue-border); color: var(--tint-blue-text); }
+
+/* Auto-calculated money readouts */
+.form-grid input[readonly]:not(.readonly-field) { background-color: rgba(241, 243, 247, 0.6); font-weight: 650; font-variant-numeric: tabular-nums; }
+input.readonly-field.sh-readout { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); border-style: solid; }
+.highlight-totals {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+    gap: 0.75rem 1.1rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-soft);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line);
+}
+input#profit_display, input#loss_display { font-weight: 750; font-size: 1.02rem; border-style: solid; font-variant-numeric: tabular-nums; }
+input#profit_display { background-color: var(--tint-green); border-color: var(--tint-green-border); color: var(--tint-green-text); }
+input#loss_display { background-color: var(--tint-red); border-color: var(--tint-red-border); color: var(--tint-red-text); }
+
+/* style.css gives .form-group "display:flex", which beats the browser's [hidden] rule, so
+   JS-toggled blocks (e.g. #partnership-fields) never hid. Restore the hidden state. */
+.form-group[hidden], .sh-scroll-x[hidden] { display: none !important; }
+
+/* Partnership lines table inside forms */
+#partnership-fields .data-table input,
+#partnership-fields .data-table select { min-width: 8.5rem; width: 100%; }
+#partnership-fields .data-table td { vertical-align: top; }
+.sh-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 0.75rem; border-radius: var(--radius-md); }
+
+/* Header rows with buttons */
+.card-header-row .quick-actions,
+.card-header-row .header-actions { margin: 0; }
+.inline-form { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0; }
+
+/* ---------- Financial tables ---------- */
+/* style.css: ".data-table th/td { text-align: left }" comes after "th.num/td.num" with equal
+   specificity, so numeric cells were left-aligned. Re-assert right alignment here. */
+.data-table th.num, .data-table td.num { text-align: right; white-space: nowrap; }
+.sh-table { font-size: 0.87rem; }
+.sh-table td.wrap, .sh-table td[data-cell="notes"] { white-space: normal; min-width: 10rem; max-width: 24rem; line-height: 1.4; }
+.sh-table td.sh-party { white-space: normal; min-width: 8.5rem; line-height: 1.4; }
+@media (min-width: 861px) { .sh-table th, .sh-table td { padding-left: 0.55rem; padding-right: 0.55rem; } }
+.sh-table td.sh-party .chip { font-size: 0.68rem; padding: 0.1rem 0.5rem; margin-right: 0.35rem; vertical-align: 0.08em; }
+.sh-table td.nowrap, .sh-table th.nowrap { white-space: nowrap; }
+.sh-table td.num strong, .sh-table td.num.sh-bal { font-weight: 750; }
+.sh-table tbody td:first-child { color: var(--text); }
+.sh-table .sh-ref { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sh-table td.sh-col-pdf, .sh-table th.sh-col-pdf { white-space: nowrap; }
+.sh-table tbody tr.row-opening td { background: rgba(59, 130, 246, 0.07); }
+.sh-table tbody tr.row-opening td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
+
+/* Ledger report (client / supplier "complete") */
+.ledger-report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--line);
+}
+.ledger-report-header h2 { margin: 0; letter-spacing: 0.01em; }
+.ledger-report-header .field-note { margin: 0.25rem 0 0; }
+@media (min-width: 861px) { .ledger-report-table td.wrap { min-width: 14rem; } }
+.ledger-report-header .chip { font-variant-numeric: tabular-nums; }
+.ledger-report-table tbody tr.ledger-opening-row td { background: rgba(59, 130, 246, 0.07); font-style: italic; }
+.ledger-report-table tbody tr.ledger-opening-row td:first-child { box-shadow: inset 3px 0 0 var(--blue); }
+.supplier-payment-row td { background: rgba(16, 185, 129, 0.06); }
+.supplier-payment-row td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.data-table tfoot tr.ledger-totals-row td { background: rgba(255, 255, 255, 0.7); border-top: 1px solid var(--line-strong); white-space: nowrap; }
+.ledger-report-table tbody tr:hover td { background: rgba(255, 255, 255, 0.6); }
+.sh-type-pill { font-size: 0.7rem; }
+
+.sh-foot-note { margin: 0.85rem 0 0; }
+
+/* Party blocks (client / supplier ledger) */
+.sh-party-stats { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.sh-party-stats .chip { font-variant-numeric: tabular-nums; font-size: 0.78rem; }
+.sh-party-stats .chip strong { margin-left: 0.15rem; }
+.report-party-block .report-party-header { padding-bottom: 0.75rem; border-bottom: 1px solid var(--line); margin-bottom: 0.5rem; }
+
+/* Aging buckets */
+.sh-aging-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+    padding: 0.8rem 1.1rem;
+    border-radius: var(--radius-md);
+    background: var(--tint-brand);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1px rgba(178, 30, 34, 0.18);
+}
+.sh-aging-total span { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--primary-dark); }
+.sh-aging-total strong { font-size: 1.35rem; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.sh-aging-buckets {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+.sh-aging-bucket {
+    padding: 0.7rem 0.85rem;
+    border-radius: var(--radius-md);
+    background: var(--glass-bg-soft);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line);
+}
+.sh-aging-bucket span { display: block; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.sh-aging-bucket strong { display: block; margin-top: 0.2rem; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.sh-aging-bucket.is-due { background: var(--tint-amber); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 0 0 1px var(--tint-amber-border); }
+.sh-aging-bucket.is-due strong { color: var(--tint-amber-text); }
+
+/* File pickers (payment / gate-pass screenshots) */
+.form-grid input[type="file"] { cursor: pointer; }
+.form-grid input[type="file"]::file-selector-button {
+    margin-right: 0.75rem;
+    padding: 0.4rem 0.95rem;
+    border: none;
+    border-radius: var(--radius-pill);
+    font: 600 0.84rem/1.2 var(--font);
+    color: var(--text);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.6) 100%);
+    box-shadow: inset 0 1px 0 #fff, 0 0 0 1px var(--line-strong), 0 2px 6px -2px rgba(40, 30, 60, 0.12);
+    cursor: pointer;
+}
+
+/* Edit pages: a tidy form card with a subtle accent */
+.sh-edit-card { box-shadow: var(--glass-highlight), inset 4px 0 0 rgba(178, 30, 34, 0.7), var(--glass-shadow); }
+.sh-edit-card .form-actions { padding-top: 0.35rem; }
+.sh-current-file { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+
+/* ---------- Phones ---------- */
+@media (max-width: 860px) {
+    .sh-bank-bar { border-radius: var(--radius-lg); padding: 0.6rem 0.7rem; }
+    .sh-bank-form { flex: 1 1 100%; }
+    select.sh-bank-select { flex: 1; min-width: 0; width: 100%; }
+    .sh-bank-bar .toolbar-spacer { display: none; }
+    .sh-bank-bar .btn { margin-left: auto; }
+    .sh-table td.wrap, .sh-table td[data-cell="notes"] { min-width: 13rem; }
+    .sh-table td.sh-party { min-width: 9.5rem; }
+    .ledger-report-table td.wrap { min-width: 17rem; }
+    .report-party-header { gap: 0.6rem; }
+    .report-party-header > .btn { align-self: flex-start; }
+    .card-header-row .header-actions, .card-header-row .quick-actions { width: 100%; }
+    .card-header-row .header-actions .btn, .card-header-row .quick-actions .btn { flex: 1 1 auto; }
+    .sh-aging-total strong { font-size: 1.15rem; }
+    .sh-aging-buckets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .highlight-totals { padding: 0.75rem; }
+    .invoice-line-row.form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem 0.65rem; padding: 0.8rem; }
+    .invoice-line-row.form-grid > .form-group:last-child { grid-column: 1 / -1; }
+}
+
+/* ---------- Print: plain paper ---------- */
+@media print {
+    .sh-no-print, .sh-bank-bar, .flash-container, .quick-actions, .header-actions,
+    td.table-actions, .sh-col-actions, .sh-col-pdf, .report-party-header > .btn { display: none !important; }
+    .sh-module-logo { box-shadow: none !important; background: none !important; }
+    .stats-grid { grid-template-columns: repeat(4, 1fr) !important; }
+    .stat-card { break-inside: avoid; }
+    .card { break-inside: auto; padding: 0.6rem 0 !important; border: none !important; }
+    .table-scroll, .sh-scroll-x, .card:has(> .data-table), .card:has(> table) { overflow: visible !important; }
+    .data-table { font-size: 10pt; }
+    .data-table th, .data-table td { white-space: normal !important; padding: 0.3rem 0.4rem; color: #000; }
+    .data-table td.num, .data-table th.num, .data-table td.nowrap, .data-table td.sh-ref { white-space: nowrap !important; }
+    .data-table tr { break-inside: avoid; }
+    .data-table tbody tr:nth-child(even), .data-table tbody tr td { background: none !important; box-shadow: none !important; }
+    .data-table tfoot td { background: #f3f3f3 !important; }
+    .chip, .badge, .sh-drcr { box-shadow: none !important; border: 1px solid #999; background: none !important; color: #000 !important; }
+    .sh-cur { color: #000; }
+    .sh-aging-total, .sh-aging-bucket, .highlight-totals { background: none !important; box-shadow: none !important; border: 1px solid #bbb; }
+    a { color: #000; text-decoration: none; }
+}
+</style>

@@ -3,9 +3,9 @@
 {% from "sh_traders/bank_selector.html" import sh_bank_selector with context %}
 {% block title %}Supplier Ledger Complete - SH Traders{% endblock %}
 
-{% macro money(v) -%}₨ {{ "{:,.2f}".format(v or 0) }}{%- endmacro %}
+{% macro money(v) -%}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(v or 0) }}{%- endmacro %}
 {% macro bal(amount, kind) -%}
-{%- if kind == 'CR' -%}(₨ {{ "{:,.2f}".format(amount or 0) }}){%- else -%}₨ {{ "{:,.2f}".format(amount or 0) }}{%- endif -%}
+{%- if kind == 'CR' -%}(<span class="sh-cur">₨</span>{{ "{:,.2f}".format(amount or 0) }}){%- else -%}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(amount or 0) }}{%- endif -%}
 {%- endmacro %}
 
 {% block content %}
@@ -13,9 +13,9 @@
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if not suppliers %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Generate Supplier Ledger</h2>
     <p class="field-note">Purchases from the supplier increase what you owe (CREDIT). Payments to the supplier reduce it (DEBIT). A balance in brackets means you have paid in advance.</p>
     <form method="GET" class="form-grid" id="supplier-ledger-report-form">
@@ -48,8 +48,8 @@
 </div>
 
 {% if preview %}
-<div class="stats-grid">
-    <div class="stat-card">
+<div class="stats-grid sh-stats">
+    <div class="stat-card accent-blue">
         <span class="stat-label">Total Purchased</span>
         <span class="stat-value">{{ money(preview.total_credit) }}</span>
         <span class="field-note">{{ preview.purchase_count }} purchase(s)</span>
@@ -60,13 +60,13 @@
         <span class="field-note">{{ preview.payment_count }} payment(s)</span>
     </div>
     {% if preview.date_from or preview.date_to %}
-    <div class="stat-card">
+    <div class="stat-card accent-violet">
         <span class="stat-label">Opening Balance</span>
         <span class="stat-value">{{ bal(preview.opening_balance, preview.opening_type) }}</span>
         <span class="field-note">before this period</span>
     </div>
     {% else %}
-    <div class="stat-card">
+    <div class="stat-card accent-violet">
         <span class="stat-label">Payments With Proof</span>
         <span class="stat-value">{{ preview.proof_count }} of {{ preview.payment_count }}</span>
         <span class="field-note">payment screenshots on file</span>
@@ -81,6 +81,7 @@
 
 <div class="card">
     <div class="ledger-report-header">
+        <div>
         <h2>SUPPLIER LEDGER — {{ preview.supplier.name }}</h2>
         <p class="field-note">
             {% if preview.date_from and preview.date_to %}
@@ -92,11 +93,12 @@
             {% else %}
             Complete ledger from start
             {% endif %}
-            · {{ 'Advance paid' if preview.closing_type == 'CR' else 'Payable' }}: {{ bal(preview.closing_balance, preview.closing_type) }}
         </p>
+        </div>
+        <span class="chip {{ 'chip-green' if preview.closing_type == 'CR' else 'chip-amber' }}">{{ 'Advance paid' if preview.closing_type == 'CR' else 'Payable' }}&nbsp;<strong>{{ bal(preview.closing_balance, preview.closing_type) }}</strong></span>
     </div>
     <div class="table-scroll">
-        <table class="data-table ledger-report-table">
+        <table class="data-table ledger-report-table sh-table">
             <thead>
                 <tr>
                     <th>Date</th>
@@ -112,19 +114,19 @@
             <tbody>
                 {% for row in preview.rows %}
                 <tr class="{% if row.is_opening %}ledger-opening-row{% elif row.is_payment %}supplier-payment-row{% endif %}">
-                    <td>{{ row.date.strftime('%d-%b-%y') }}</td>
-                    <td>{{ row.type or '—' }}</td>
-                    <td>{{ row.number or '—' }}</td>
-                    <td>{{ row.extra or '—' }}</td>
-                    <td>
+                    <td class="nowrap">{{ row.date.strftime('%d-%b-%y') }}</td>
+                    <td>{% if row.type %}<span class="chip chip-gray sh-type-pill">{{ row.type }}</span>{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                    <td class="sh-ref">{{ row.number or '—' }}</td>
+                    <td class="nowrap">{{ row.extra or '—' }}</td>
+                    <td class="wrap">
                         {{ row.narration }}
                         {% if row.payment and row.payment.proof %}
                         · <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=row.payment.proof.id) }}" target="_blank">View proof</a>
                         {% endif %}
                     </td>
-                    <td class="num">{% if row.debit %}{{ money(row.debit) }}{% endif %}</td>
-                    <td class="num">{% if row.credit %}{{ money(row.credit) }}{% endif %}</td>
-                    <td class="num">{{ bal(row.balance, row.balance_type) }}</td>
+                    <td class="num sh-cr">{% if row.debit %}{{ money(row.debit) }}{% endif %}</td>
+                    <td class="num sh-dr">{% if row.credit %}{{ money(row.credit) }}{% endif %}</td>
+                    <td class="num sh-bal">{{ bal(row.balance, row.balance_type) }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="8" class="empty">No ledger entries for this supplier in the selected range</td></tr>
@@ -147,7 +149,7 @@
 <div class="card">
     <h2>Payment Details ({{ preview.payment_count }})</h2>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table sh-table">
             <thead>
                 <tr>
                     <th>#</th>
@@ -164,19 +166,19 @@
                 {% for row in preview.payments %}
                 <tr>
                     <td>{{ loop.index }}</td>
-                    <td>{{ row.date.strftime('%d-%b-%y') }}</td>
-                    <td><strong>{{ row.number }}</strong>{% if row.payment.reference %}<br><small class="field-note">{{ row.payment.reference }}</small>{% endif %}</td>
+                    <td class="nowrap">{{ row.date.strftime('%d-%b-%y') }}</td>
+                    <td class="nowrap"><strong class="sh-ref">{{ row.number }}</strong>{% if row.payment.reference %}<br><small class="field-note">{{ row.payment.reference }}</small>{% endif %}</td>
                     <td>{{ row.payment.bank_name or row.payment.method }}</td>
-                    <td>{{ row.payment.note or '—' }}</td>
+                    <td class="wrap">{{ row.payment.note or '—' }}</td>
                     <td>
                         {% if row.payment.proof %}
-                        <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=row.payment.proof.id) }}" target="_blank" class="badge badge-green">Screenshot ✓</a>
+                        <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=row.payment.proof.id) }}" target="_blank" class="chip chip-green">Screenshot ✓</a>
                         {% else %}
-                        <span class="badge badge-gray">Not uploaded</span>
+                        <span class="chip chip-gray">Not uploaded</span>
                         {% endif %}
                     </td>
-                    <td class="num"><strong>{{ money(row.debit) }}</strong></td>
-                    <td class="num">{{ bal(row.balance, row.balance_type) }}</td>
+                    <td class="num sh-cr"><strong>{{ money(row.debit) }}</strong></td>
+                    <td class="num sh-bal">{{ bal(row.balance, row.balance_type) }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="8" class="empty">No payments to this supplier in the selected range</td></tr>
@@ -193,12 +195,8 @@
             {% endif %}
         </table>
     </div>
-    <p class="field-note">Payments come from the Bank Payments Ledger (entries tagged with this supplier) and manual supplier-ledger payment entries. A screenshot counts as proof when it is for the same supplier, date and amount.</p>
+    <p class="field-note sh-foot-note">Payments come from the Bank Payments Ledger (entries tagged with this supplier) and manual supplier-ledger payment entries. A screenshot counts as proof when it is for the same supplier, date and amount.</p>
 </div>
-<style>
-    .supplier-payment-row td { background: #f0fdf4; }
-    .stats-grid .stat-card .field-note { display: block; margin-top: 0.15rem; }
-</style>
 {% endif %}
 {% endif %}
 {% endblock %}

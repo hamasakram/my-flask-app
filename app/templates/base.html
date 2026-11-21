@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#f6eff1">
+    <meta name="color-scheme" content="light">
     <title>{% block title %}RN COLOUR Stock Management System{% endblock %}</title>
     {% if active_module == 'sh_traders' %}
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/sh-traders-logo.png') }}">
@@ -11,19 +13,32 @@
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/rn-colour-logo.png') }}">
     {% endif %}
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=glass2">
     <script src="{{ url_for('static', filename='js/safe-submit.js') }}" defer></script>
 </head>
 <body>
     {% if current_user.is_authenticated and active_module %}
-    <nav class="sidebar">
+    <header class="mobile-topbar">
+        <button type="button" class="menu-toggle" aria-controls="app-sidebar" aria-expanded="false" aria-label="Open menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div class="mobile-brand">
+            <img src="{{ url_for('static', filename='images/' ~ ('sh-traders-logo-glass.png' if active_module == 'sh_traders' else 'rn-colour-logo-glass.png')) }}" alt="">
+            <span>{{ module_label }}</span>
+        </div>
+    </header>
+    <div class="nav-scrim" data-nav-close></div>
+    <nav class="sidebar" id="app-sidebar" aria-label="Main navigation">
         <div class="brand">
             <img
-                src="{{ url_for('static', filename='images/' ~ ('sh-traders-logo.png' if active_module == 'sh_traders' else 'rn-colour-logo.png')) }}"
+                src="{{ url_for('static', filename='images/' ~ ('sh-traders-logo-glass.png' if active_module == 'sh_traders' else 'rn-colour-logo-glass.png')) }}"
                 alt="{{ 'Sami Hamas Traders' if active_module == 'sh_traders' else 'RN COLOUR' }}"
                 class="brand-logo{% if active_module == 'sh_traders' %} brand-logo-sh{% endif %}"
             >
             <small class="brand-tagline">{{ module_label }}</small>
+            <button type="button" class="sidebar-close" data-nav-close aria-label="Close menu">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
         </div>
         <ul class="nav-links">
             {% if active_module == 'ink' %}
@@ -135,11 +150,22 @@
         </ul>
         <div class="sidebar-footer">
             <div class="user-badge">
-                <strong>{{ current_user.username }}</strong>
-                <span class="role-tag">{{ current_user.role }}</span>
+                <span class="user-avatar" aria-hidden="true">{{ current_user.username[:1] }}</span>
+                <span class="user-meta">
+                    <strong>{{ current_user.username }}</strong>
+                    <span class="role-tag">{{ current_user.role }}</span>
+                </span>
             </div>
-            <a href="{{ url_for('auth.choose_module') }}" class="logout-link">Change Module</a>
-            <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
+            <div class="sidebar-actions">
+                <a href="{{ url_for('auth.choose_module') }}" class="logout-link">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+                    Change Module
+                </a>
+                <a href="{{ url_for('auth.logout') }}" class="logout-link logout-link-danger">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l5-5-5-5M15 12H3"/></svg>
+                    Logout
+                </a>
+            </div>
         </div>
     </nav>
     {% endif %}
@@ -148,7 +174,7 @@
         {% if current_user.is_authenticated and active_module and request.endpoint != 'auth.choose_module' %}
         <div class="module-switcher">
             <span class="module-switcher-label">{{ module_label }}</span>
-            <select class="module-switch-select" onchange="if(this.value) window.location.href=this.value">
+            <select class="module-switch-select" aria-label="Switch module" onchange="if(this.value) window.location.href=this.value">
                 {% for mod in all_modules %}
                 <option value="{{ mod.url }}" {% if mod.active %}selected{% endif %}>{{ mod.label }}</option>
                 {% endfor %}
@@ -172,6 +198,72 @@
         {% block content %}{% endblock %}
     </main>
 
+    {% if current_user.is_authenticated and active_module %}
+    <script>
+    /* Liquid Glass shell: highlight the current nav link; phone menu drawer. UI only. */
+    (function () {
+        var side = document.getElementById('app-sidebar');
+        if (!side) return;
+        var btn = document.querySelector('.menu-toggle');
+        var scrim = document.querySelector('.nav-scrim');
+        var phone = window.matchMedia('(max-width: 860px)');
+        var links = side.querySelectorAll('.nav-links a');
+
+        // Current page: keep server-set .active, otherwise match the URL path.
+        var current = side.querySelector('.nav-links a.active');
+        if (!current) {
+            var here = window.location.pathname.replace(/\/+$/, '') || '/';
+            for (var i = 0; i < links.length; i++) {
+                var p = links[i].pathname.replace(/\/+$/, '') || '/';
+                if (p === here) { current = links[i]; current.classList.add('active'); break; }
+            }
+        }
+        if (current) {
+            current.setAttribute('aria-current', 'page');
+            var list = side.querySelector('.nav-links');
+            var lr = list.getBoundingClientRect(), cr = current.getBoundingClientRect();
+            if (cr.bottom > lr.bottom - 8) list.scrollTop += (cr.top - lr.top) - lr.height / 2;
+        }
+
+        if (!btn) return;
+        function isOpen() { return side.classList.contains('is-open'); }
+        function setOpen(open, restoreFocus) {
+            side.classList.toggle('is-open', open);
+            if (scrim) scrim.classList.toggle('is-visible', open);
+            document.documentElement.classList.toggle('nav-open', open);
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+            if (open) {
+                var target = side.querySelector('.nav-links a.active') || side.querySelector('.nav-links a');
+                setTimeout(function () { if (target) target.focus({ preventScroll: true }); }, 60);
+            } else if (restoreFocus) {
+                btn.focus({ preventScroll: true });
+            }
+        }
+        btn.addEventListener('click', function () { setOpen(!isOpen(), true); });
+        document.querySelectorAll('[data-nav-close]').forEach(function (el) {
+            el.addEventListener('click', function () { setOpen(false, true); });
+        });
+        side.addEventListener('click', function (e) {
+            if (phone.matches && e.target.closest && e.target.closest('a')) setOpen(false, false);
+        });
+        document.addEventListener('keydown', function (e) {
+            if (!isOpen()) return;
+            if (e.key === 'Escape' || e.key === 'Esc') { setOpen(false, true); return; }
+            if (e.key === 'Tab' && phone.matches) {
+                var f = side.querySelectorAll('a[href], button');
+                if (!f.length) return;
+                var first = f[0], last = f[f.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            }
+        });
+        var onChange = function () { if (!phone.matches && isOpen()) setOpen(false, false); };
+        if (phone.addEventListener) phone.addEventListener('change', onChange); else if (phone.addListener) phone.addListener(onChange);
+        window.addEventListener('pageshow', function () { if (isOpen()) setOpen(false, false); });
+    })();
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -1,51 +1,49 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "shared/macros.html" import row_actions, bank_name with context %}
 {% block title %}Daily Rokar Roznamcha - Bank Ledger{% endblock %}
 {% block content %}
-<div class="page-header">
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
     <div>
+        <span class="gk-eyebrow gk-bank">Bank Ledger</span>
         <h1>Daily Rokar Roznamcha</h1>
         <p class="page-subtitle">Day-to-day bank charges, transfers, and closing balances across all accounts</p>
     </div>
-    <div class="page-header-actions">
+    <div class="page-header-actions header-actions">
         <a href="{{ url_for('bank_ledger.rokar_pdf', date=selected_date.isoformat()) }}" class="btn btn-primary" target="_blank">Print Daily PDF</a>
         <a href="{{ url_for('bank_ledger.rokar_monthly') }}" class="btn btn-secondary">Monthly Rokar</a>
         <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">Bank Accounts</a>
     </div>
 </div>
 
-<form method="GET" class="card filter-bar">
-    <div class="form-grid">
-        <div class="form-group">
-            <label for="date">Rokar Date</label>
-            <input type="date" id="date" name="date" value="{{ selected_date.isoformat() }}" required>
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-secondary">View Date</button>
-        </div>
-    </div>
+<form method="GET" class="toolbar gk-filter">
+    <label for="date" class="gk-filter-label">Rokar Date</label>
+    <input type="date" id="date" name="date" value="{{ selected_date.isoformat() }}" required>
+    <button type="submit" class="btn btn-secondary">View Date</button>
+    <span class="toolbar-spacer"></span>
+    <span class="chip chip-blue">{{ selected_date.strftime('%A, %d %B %Y') }}</span>
 </form>
 
 <div class="stats-grid">
     {% if current_user.can_view_sensitive() %}
-    <div class="stat-card">
+    <div class="stat-card accent-blue">
         <span class="stat-label">Opening (Start of Day)</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_opening_today) }}</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(rokar.total_opening_today) }}</span></span>
     </div>
     <div class="stat-card accent-green">
         <span class="stat-label">Total Deposits</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_deposits) }}</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(rokar.total_deposits) }}</span></span>
     </div>
-    <div class="stat-card">
+    <div class="stat-card accent-red">
         <span class="stat-label">Total Withdrawals</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_withdrawals) }}</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(rokar.total_withdrawals) }}</span></span>
     </div>
-    <div class="stat-card accent-green">
+    <div class="stat-card accent-violet">
         <span class="stat-label">Closing (All Accounts)</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(rokar.total_closing) }}</span>
+        <span class="stat-value gk-money"><span class="gk-cur">₨</span><span class="gk-amt">{{ "{:,.2f}".format(rokar.total_closing) }}</span></span>
     </div>
     {% else %}
-    <div class="stat-card">
+    <div class="stat-card accent-blue">
         <span class="stat-label">Transactions Today</span>
         <span class="stat-value">{{ rokar.transaction_count }}</span>
     </div>
@@ -60,9 +58,9 @@
     <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-primary">+ Add Bank Account</a>
 </div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <h2>Add Daily Entry</h2>
-    <p class="field-note">Record money received (deposit) or paid out (withdrawal). Use <strong>Sent To / Particulars</strong> for where the payment went.</p>
+    <p class="field-note gk-intro">Record money received (deposit) or paid out (withdrawal). Use <strong>Sent To / Particulars</strong> for where the payment went.</p>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="entry">
         <div class="form-group">
@@ -105,9 +103,9 @@
 </div>
 
 {% if banks|length >= 2 %}
-<div class="card highlight-card transfer-card">
+<div class="card highlight-card transfer-card gk-form-card">
     <h2>Cross-Bank Transfer</h2>
-    <p class="field-note">Move money between accounts — both bank balances update automatically.</p>
+    <p class="field-note gk-intro">Move money between accounts — both bank balances update automatically.</p>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="transfer">
         <div class="form-group">
@@ -154,48 +152,51 @@
 {% endif %}
 
 <div class="card">
-    <h2>Daily Transactions — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
-    <table class="data-table">
+    <div class="gk-card-head">
+        <h2>Daily Transactions — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
+    </div>
+    <div class="table-scroll gk-table">
+    <table class="data-table compact">
         <thead>
             <tr>
-                <th>#</th>
+                <th class="num">#</th>
                 <th>Bank</th>
                 <th>Category</th>
                 <th>Type</th>
                 <th>Sent To / Particulars</th>
-                <th>Deposit</th>
-                <th>Withdrawal</th>
+                <th class="num">Deposit</th>
+                <th class="num">Withdrawal</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for row in rokar.transactions %}
             <tr>
-                <td>{{ loop.index }}</td>
-                <td><strong>{{ row.bank.display_name }}</strong></td>
+                <td class="num muted">{{ loop.index }}</td>
+                <td class="gk-text gk-bankcell">{{ bank_name(row.bank.display_name) }}</td>
                 <td>
                     {% if row.expense_category == 'bilty' %}
-                    <span class="badge badge-orange">Bilty</span>
+                    <span class="chip chip-amber">Bilty</span>
                     {% elif row.expense_category == 'extra_expenses' %}
-                    <span class="badge badge-red">Extra Expenses</span>
+                    <span class="chip chip-red">Extra Expenses</span>
                     {% elif row.expense_category == 'loading_kharcha' %}
-                    <span class="badge badge-blue">Loading Kharcha</span>
+                    <span class="chip chip-blue">Loading Kharcha</span>
                     {% else %}
-                    <span class="badge badge-gray">General</span>
+                    <span class="chip chip-gray">General</span>
                     {% endif %}
                 </td>
                 <td>
                     {% if row.entry.entry_type == 'transfer_in' %}
-                    <span class="badge badge-green">Transfer In</span>
+                    <span class="chip chip-green">Transfer In</span>
                     {% elif row.entry.entry_type == 'transfer_out' %}
-                    <span class="badge badge-orange">Transfer Out</span>
+                    <span class="chip chip-amber">Transfer Out</span>
                     {% else %}
-                    <span class="badge badge-gray">Standard</span>
+                    <span class="chip chip-gray">Standard</span>
                     {% endif %}
                 </td>
-                <td>{{ row.particulars }}</td>
-                <td>{% if row.deposit %}₨ {{ "{:,.2f}".format(row.deposit) }}{% else %}—{% endif %}</td>
-                <td>{% if row.withdrawal %}₨ {{ "{:,.2f}".format(row.withdrawal) }}{% else %}—{% endif %}</td>
+                <td class="gk-text">{{ row.particulars }}</td>
+                <td class="num">{% if row.deposit %}<span class="gk-in">₨ {{ "{:,.2f}".format(row.deposit) }}</span>{% else %}<span class="gk-dash">—</span>{% endif %}</td>
+                <td class="num">{% if row.withdrawal %}<span class="gk-out">₨ {{ "{:,.2f}".format(row.withdrawal) }}</span>{% else %}<span class="gk-dash">—</span>{% endif %}</td>
                 {% if current_user.can_edit() %}
                 {% if row.entry.is_transfer %}
                 {{ row_actions(
@@ -211,85 +212,94 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No transactions on this date</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty"><div class="gk-empty"><strong>No transactions on this date</strong></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 
 {% for key, section in rokar.category_sections.items() %}
 {% if section.transactions %}
 <div class="card">
-    <h2>{{ section.label }} — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
-    <p class="field-note">
-        Deposits: ₨ {{ "{:,.2f}".format(section.total_deposits) }} ·
-        Withdrawals: ₨ {{ "{:,.2f}".format(section.total_withdrawals) }}
-    </p>
+    <div class="gk-card-head">
+        <h2>{{ section.label }} — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
+        <div class="cluster">
+            <span class="chip chip-green">In ₨ {{ "{:,.2f}".format(section.total_deposits) }}</span>
+            <span class="chip chip-red">Out ₨ {{ "{:,.2f}".format(section.total_withdrawals) }}</span>
+        </div>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table compact">
         <thead>
             <tr>
                 <th>Bank</th>
                 <th>Particulars</th>
-                <th>Deposit</th>
-                <th>Withdrawal</th>
+                <th class="num">Deposit</th>
+                <th class="num">Withdrawal</th>
             </tr>
         </thead>
         <tbody>
             {% for row in section.transactions %}
             <tr>
-                <td>{{ row.bank.display_name }}</td>
-                <td>{{ row.particulars }}</td>
-                <td>{% if row.deposit %}₨ {{ "{:,.2f}".format(row.deposit) }}{% else %}—{% endif %}</td>
-                <td>{% if row.withdrawal %}₨ {{ "{:,.2f}".format(row.withdrawal) }}{% else %}—{% endif %}</td>
+                <td class="gk-text gk-bankcell">{{ bank_name(row.bank.display_name) }}</td>
+                <td class="gk-text">{{ row.particulars }}</td>
+                <td class="num">{% if row.deposit %}<span class="gk-in">₨ {{ "{:,.2f}".format(row.deposit) }}</span>{% else %}<span class="gk-dash">—</span>{% endif %}</td>
+                <td class="num">{% if row.withdrawal %}<span class="gk-out">₨ {{ "{:,.2f}".format(row.withdrawal) }}</span>{% else %}<span class="gk-dash">—</span>{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endif %}
 {% endfor %}
 
 <div class="card">
-    <h2>Bank Account Balances — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
+    <div class="gk-card-head">
+        <h2>Bank Account Balances — {{ selected_date.strftime('%d-%m-%Y') }}</h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead>
             <tr>
                 <th>Bank Account</th>
                 <th>Account Title</th>
-                <th>Opening Today</th>
-                <th>Deposits</th>
-                <th>Withdrawals</th>
-                <th>Closing Balance</th>
+                <th class="num">Opening Today</th>
+                <th class="num">Deposits</th>
+                <th class="num">Withdrawals</th>
+                <th class="num">Closing Balance</th>
                 <th>Ledger</th>
             </tr>
         </thead>
         <tbody>
             {% for item in rokar.bank_balances %}
             <tr>
-                <td><strong>{{ item.bank.display_name }}</strong></td>
+                <td class="gk-text gk-bankcell">{{ bank_name(item.bank.display_name) }}</td>
                 <td>{{ item.bank.account_title or '—' }}</td>
-                <td>₨ {{ "{:,.2f}".format(item.opening_today) }}</td>
-                <td>₨ {{ "{:,.2f}".format(item.day_deposits) }}</td>
-                <td>₨ {{ "{:,.2f}".format(item.day_withdrawals) }}</td>
-                <td class="{% if item.closing_balance < 0 %}text-danger{% elif item.closing_balance > 0 %}text-success{% endif %}">
+                <td class="num">₨ {{ "{:,.2f}".format(item.opening_today) }}</td>
+                <td class="num">₨ {{ "{:,.2f}".format(item.day_deposits) }}</td>
+                <td class="num">₨ {{ "{:,.2f}".format(item.day_withdrawals) }}</td>
+                <td class="num {% if item.closing_balance < 0 %}gk-neg{% elif item.closing_balance > 0 %}gk-pos{% endif %}">
                     <strong>₨ {{ "{:,.2f}".format(item.closing_balance) }}</strong>
                 </td>
                 <td><a href="{{ url_for('bank_ledger.bank_ledger', bank_id=item.bank.id) }}" class="btn btn-sm btn-secondary">Open</a></td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty">No bank accounts — add accounts with opening balances first</td></tr>
+            <tr><td colspan="7" class="empty"><div class="gk-empty"><strong>No bank accounts — add accounts with opening balances first</strong></div></td></tr>
             {% endfor %}
             {% if rokar.bank_balances %}
             <tr class="row-total">
-                <td colspan="2"><strong>Grand Total (All Accounts)</strong></td>
-                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_opening_today) }}</strong></td>
-                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_deposits) }}</strong></td>
-                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_withdrawals) }}</strong></td>
-                <td><strong>₨ {{ "{:,.2f}".format(rokar.total_closing) }}</strong></td>
+                <td colspan="2" class="nowrap"><strong>Grand Total (All Accounts)</strong></td>
+                <td class="num"><strong>₨ {{ "{:,.2f}".format(rokar.total_opening_today) }}</strong></td>
+                <td class="num"><strong>₨ {{ "{:,.2f}".format(rokar.total_deposits) }}</strong></td>
+                <td class="num"><strong>₨ {{ "{:,.2f}".format(rokar.total_withdrawals) }}</strong></td>
+                <td class="num"><strong>₨ {{ "{:,.2f}".format(rokar.total_closing) }}</strong></td>
                 <td>—</td>
             </tr>
             {% endif %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}

@@ -1,9 +1,12 @@
 {% macro sh_bank_selector(banks, current_bank) %}
 {% if banks %}
-<div class="sh-bank-bar card compact-card">
-    <form method="POST" action="{{ url_for('sh_main.select_bank') }}" class="inline-form">
-        <label for="sh_bank_select"><strong>Bank:</strong></label>
-        <select id="sh_bank_select" name="bank_id" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
+<div class="sh-bank-bar toolbar">
+    <form method="POST" action="{{ url_for('sh_main.select_bank') }}" class="inline-form sh-bank-form">
+        <label for="sh_bank_select" class="sh-bank-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18M12 3l9 5H3l9-5z"/></svg>
+            Bank
+        </label>
+        <select id="sh_bank_select" name="bank_id" class="sh-bank-select" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()">
             {% for bank in banks %}
             <option value="{{ bank.id }}" {% if current_bank and bank.id == current_bank.id %}selected{% endif %}>
                 {{ bank.name }}{% if bank.is_default %} (default){% endif %}
@@ -13,8 +16,9 @@
         <noscript><button type="submit" class="btn btn-sm btn-secondary">Switch</button></noscript>
     </form>
     {% if current_bank and current_user.can_view_sensitive() %}
-    <span class="field-note">Opening balance: ₨ {{ "{:,.2f}".format(current_bank.opening_balance) }}</span>
+    <span class="chip chip-blue sh-bank-opening"><span class="sh-chip-key">Opening</span> ₨&nbsp;{{ "{:,.2f}".format(current_bank.opening_balance) }}</span>
     {% endif %}
+    <span class="toolbar-spacer"></span>
     {% if current_user.can_edit() %}
     <a href="{{ url_for('sh_main.banks') }}" class="btn btn-sm btn-secondary">Manage Banks</a>
     {% endif %}

@@ -7,9 +7,9 @@
 
 {% if current_user.can_edit() %}
 {% if not suppliers %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Upload Payment Screenshot</h2>
     <form method="POST" enctype="multipart/form-data" class="form-grid">
         <div class="form-group">
@@ -56,30 +56,30 @@
 {% endif %}
 
 <div class="card">
-    <h2>Uploaded Payment Proofs</h2>
-    <table class="data-table">
+    <h2>Uploaded Payment Proofs<span class="sh-count">{{ records|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Supplier</th>
-                <th>Amount</th>
+                <th class="num">Amount</th>
                 <th>Purchase</th>
                 <th>File</th>
                 <th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for r in records %}
             <tr>
-                <td>{{ r.payment_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ r.supplier.name }}</td>
-                <td>{% if r.amount_paid %}₨ {{ "{:,.2f}".format(r.amount_paid) }}{% else %}—{% endif %}</td>
-                <td>{% if r.purchase %}#{{ r.purchase.id }} — {{ r.purchase.material_name }}{% else %}—{% endif %}</td>
+                <td class="nowrap">{{ r.payment_date.strftime('%d-%m-%Y') }}</td>
+                <td class="sh-party"><strong>{{ r.supplier.name }}</strong></td>
+                <td class="num sh-dr">{% if r.amount_paid %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.amount_paid) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                <td>{% if r.purchase %}#{{ r.purchase.id }} — {{ r.purchase.material_name }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
                 <td>
                     <a href="{{ url_for('sh_main.view_payment_screenshot', record_id=r.id) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
                 </td>
-                <td>{{ r.notes or '—' }}</td>
+                <td class="wrap">{{ r.notes or '—' }}</td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_payment_screenshot', record_id=r.id),

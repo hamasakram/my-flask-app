@@ -7,18 +7,18 @@
 {{ sh_page_header('Bank Payments Ledger', 'All incoming and outgoing payments for ' ~ (bank.name if bank else 'selected bank')) }}
 {{ sh_bank_selector(banks, current_bank) }}
 
-<div class="stats-grid">
-    <div class="stat-card accent-green">
+<div class="stats-grid sh-stats">
+    <div class="stat-card {{ 'accent-green' if current_balance >= 0 else 'accent-red' }}">
         <span class="stat-label">Current Ledger Balance</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(current_balance) }}</span>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(current_balance) }}</span>
         {% if bank %}
         <small class="field-note">{{ bank.name }}</small>
         {% endif %}
     </div>
     {% if bank and current_user.can_view_sensitive() %}
-    <div class="stat-card">
+    <div class="stat-card accent-blue">
         <span class="stat-label">Opening Balance</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(bank.opening_balance) }}</span>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bank.opening_balance) }}</span>
         {% if current_user.can_edit() %}
         <small class="field-note"><a href="{{ url_for('sh_main.banks') }}">Edit on Banks page</a></small>
         {% endif %}
@@ -27,7 +27,7 @@
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Add Ledger Entry</h2>
     <p class="field-note">Record money in (credit) or money out (debit). When payment is <strong>received from a client</strong>, select the client and enter credit — it updates the Client Ledger automatically. When payment is <strong>sent to a supplier</strong>, select the supplier and enter debit — it updates the Supplier Ledger automatically.</p>
     <form method="POST" class="form-grid">
@@ -82,44 +82,44 @@
 {% endif %}
 
 <div class="card">
-    <h2>Payment Ledger</h2>
-    <table class="data-table">
+    <h2>Payment Ledger{% if ledger_rows %}<span class="sh-count">{{ ledger_rows|length }}</span>{% endif %}</h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Date</th>
-                <th>Debit</th>
-                <th>Credit</th>
+                <th class="num">Debit (out)</th>
+                <th class="num">Credit (in)</th>
                 <th>Party</th>
-                <th>Balance</th>
+                <th class="num">Balance</th>
                 <th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% if bank %}
             <tr class="row-opening">
-                <td>{{ bank.created_at.strftime('%d-%m-%Y') if bank.created_at else '—' }}</td>
-                <td>—</td>
-                <td>₨ {{ "{:,.2f}".format(bank.opening_balance) }}</td>
-                <td>Opening balance</td>
-                <td>₨ {{ "{:,.2f}".format(bank.opening_balance) }}</td>
-                <td>{{ bank.name }} starting balance</td>
-                {% if current_user.can_edit() %}<td>—</td>{% endif %}
+                <td class="nowrap">{{ bank.created_at.strftime('%d-%m-%Y') if bank.created_at else '—' }}</td>
+                <td class="num"><span class="sh-nil">—</span></td>
+                <td class="num sh-cr"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bank.opening_balance) }}</td>
+                <td class="sh-party"><span class="chip chip-blue">Opening</span>balance</td>
+                <td class="num sh-bal"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bank.opening_balance) }}</td>
+                <td class="wrap">{{ bank.name }} starting balance</td>
+                {% if current_user.can_edit() %}<td class="sh-col-actions"><span class="sh-nil">—</span></td>{% endif %}
             </tr>
             {% endif %}
             {% for row in ledger_rows %}
             <tr>
-                <td>{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
-                <td>{% if row.entry.debit %}₨ {{ "{:,.2f}".format(row.entry.debit) }}{% else %}—{% endif %}</td>
-                <td>{% if row.entry.credit %}₨ {{ "{:,.2f}".format(row.entry.credit) }}{% else %}—{% endif %}</td>
-                <td>
-                    {% if row.entry.supplier %}Supplier: {{ row.entry.supplier.name }}
-                    {% elif row.entry.client %}Client: {{ row.entry.client.name }}
-                    {% elif row.entry.partner %}Partner: {{ row.entry.partner.name }}
-                    {% else %}—{% endif %}
+                <td class="nowrap">{{ row.entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td class="num {% if row.entry.debit %}sh-dr{% endif %}">{% if row.entry.debit %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.entry.debit) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                <td class="num {% if row.entry.credit %}sh-cr{% endif %}">{% if row.entry.credit %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.entry.credit) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                <td class="sh-party">
+                    {% if row.entry.supplier %}<span class="chip chip-amber">Supplier</span>{{ row.entry.supplier.name }}
+                    {% elif row.entry.client %}<span class="chip chip-green">Client</span>{{ row.entry.client.name }}
+                    {% elif row.entry.partner %}<span class="chip chip-violet">Partner</span>{{ row.entry.partner.name }}
+                    {% else %}<span class="sh-nil">—</span>{% endif %}
                 </td>
-                <td>₨ {{ "{:,.2f}".format(row.balance) }}</td>
-                <td>{{ row.entry.notes or '—' }}</td>
+                <td class="num sh-bal"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.balance) }}</td>
+                <td class="wrap">{{ row.entry.notes or '—' }}</td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_ledger', entry_id=row.entry.id),

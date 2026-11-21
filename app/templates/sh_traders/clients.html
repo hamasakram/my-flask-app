@@ -6,7 +6,7 @@
 {{ sh_page_header('Client Companies', 'Purchased For — companies you buy material on behalf of') }}
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Add Client</h2>
     <form method="POST" class="form-grid">
         <div class="form-group full-width">
@@ -21,14 +21,14 @@
 {% endif %}
 
 <div class="card">
-    <h2>Saved Clients</h2>
-    <table class="data-table">
-        <thead><tr><th>Company Name</th><th>Added On</th>{% if current_user.can_edit() %}<th>Actions</th>{% endif %}</tr></thead>
+    <h2>Saved Clients<span class="sh-count">{{ companies|length }}</span></h2>
+    <table class="data-table sh-table">
+        <thead><tr><th>Company Name</th><th>Added On</th>{% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}</tr></thead>
         <tbody>
             {% for company in companies %}
             <tr>
-                <td>{{ company.name }}</td>
-                <td>{{ company.created_at.strftime('%d-%m-%Y') }}</td>
+                <td><strong>{{ company.name }}</strong></td>
+                <td class="nowrap muted">{{ company.created_at.strftime('%d-%m-%Y') }}</td>
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_client', company_id=company.id),
                     url_for('stock_deletes.delete_sh_client', company_id=company.id)

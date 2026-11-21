@@ -1,0 +1,53 @@
+{# Liquid Glass extras for the Job Planning pages (use with materials/_glass_kit.html). Classes: gjob-* #}
+<style>
+.gjob-no { display: inline-block; font-weight: 750; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text); }
+a.gjob-no { text-decoration: none; }
+a.gjob-no:hover { color: var(--primary); text-decoration: underline; }
+.gjob-verdict .badge + .badge { margin-left: 0.25rem; }
+.gjob-name-cell { min-width: 11rem; }
+.gjob-status-stock { white-space: nowrap; }
+.gjob-stock-line { margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.gjob-stock-line .badge + .badge { margin-left: 0; }
+@media (min-width: 721px) {
+    .gjob-actions-cell .table-actions { display: grid; grid-template-columns: repeat(2, auto); gap: 0.35rem; justify-content: start; }
+    .gjob-actions-cell .table-actions .inline-action-form { margin: 0; }
+    .gjob-actions-cell .table-actions .btn { width: 100%; }
+}
+.gjob-name-cell .gl-sub { font-weight: 500; }
+
+/* Stock-short rows: one light amber wash (style.css tints both the tr and its tds, which doubles it) + a stripe */
+.data-table tbody tr.job-row-short td { background: transparent; }
+.data-table tbody tr.job-row-short { background: rgba(245, 158, 11, 0.075); }
+.data-table tbody tr.job-row-short:hover { background: rgba(245, 158, 11, 0.13); }
+.data-table tbody tr.job-row-short td:first-child { box-shadow: inset 3px 0 0 var(--orange, #f59e0b); }
+
+/* Material lines that are not in stock at all: red instead of amber */
+.data-table tbody tr.gjob-line-out, .data-table tbody tr.gjob-line-unlisted { background: rgba(239, 68, 68, 0.06); }
+.data-table tbody tr.gjob-line-out:hover, .data-table tbody tr.gjob-line-unlisted:hover { background: rgba(239, 68, 68, 0.11); }
+.data-table tbody tr.gjob-line-out td:first-child, .data-table tbody tr.gjob-line-unlisted td:first-child { box-shadow: inset 3px 0 0 var(--red, #ef4444); }
+
+/* Material lines in the jobs list: dot stays beside the first line when the text wraps */
+.job-mini-line { align-items: flex-start; }
+.job-mini-line .job-dot { margin-top: 0.42em; }
+
+/* Actions row on the job page / job cards */
+.job-card-actions .inline-action-form { margin: 0; display: inline-flex; }
+
+@media (max-width: 720px) {
+    .data-table.gl-stack tbody tr.job-row-short { background: linear-gradient(90deg, rgba(245, 158, 11, 0.10), rgba(245, 158, 11, 0.03)), var(--glass-bg-soft, rgba(255, 255, 255, 0.42)); box-shadow: inset 4px 0 0 var(--orange, #f59e0b), inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--tint-amber-border, rgba(217, 119, 6, 0.3)); }
+    .data-table.gl-stack tbody tr.job-row-short td, .data-table.gl-stack tbody tr.job-row-short td:first-child { background: transparent; box-shadow: none; }
+    .data-table.gl-stack td.gjob-verdict { white-space: normal; }
+    .data-table.gl-stack tbody tr.gjob-line-out, .data-table.gl-stack tbody tr.gjob-line-unlisted { background: linear-gradient(90deg, rgba(239, 68, 68, 0.09), rgba(239, 68, 68, 0.02)), var(--glass-bg-soft, rgba(255, 255, 255, 0.42)); box-shadow: inset 4px 0 0 var(--red, #ef4444), inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--tint-red-border, rgba(220, 38, 38, 0.28)); }
+    .job-details { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.85rem 1rem; }
+    .job-details > .job-details-produce, .job-details > .job-details-wide { grid-column: 1 / -1; }
+    .job-actions-divider { display: none; }
+    .data-table.gl-stack td.gjob-actions-cell { padding-top: 0.55rem; border-top: 1px solid var(--line, rgba(23, 30, 48, 0.08)); }
+    .data-table.gl-stack td.gjob-actions-cell .btn { min-height: 2.5rem; }
+    .data-table.gl-stack td.gjob-actions-cell .inline-action-form { margin-left: auto; }
+    .job-card-actions { gap: 0.45rem; }
+    .job-card-actions .btn { min-height: 2.6rem; }
+    .job-card-head { gap: 0.6rem; }
+    .job-filter-bar .form-group { min-width: 0; width: 100%; flex: 1 1 100%; }
+    .job-filter-bar .job-label-spacer { display: none; }
+}
+</style>

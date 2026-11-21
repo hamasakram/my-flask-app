@@ -8,9 +8,9 @@
 
 {% if current_user.can_edit() %}
 {% if not clients %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Create Sale Invoice</h2>
     <form method="POST" class="form-grid" id="sale-invoice-form">
         <div class="form-group">
@@ -94,42 +94,42 @@
 {% endif %}
 
 <div class="card">
-    <h2>Sale Invoice Records</h2>
-    <table class="data-table">
+    <h2>Sale Invoice Records<span class="sh-count">{{ invoice_rows|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Invoice #</th>
                 <th>Date</th>
                 <th>Sold To</th>
                 <th>Challan No</th>
-                <th>Lines</th>
-                <th>Total</th>
-                <th>Paid</th>
-                <th>Remaining</th>
-                <th>PDF</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                <th class="num">Lines</th>
+                <th class="num">Total</th>
+                <th class="num">Paid</th>
+                <th class="num">Remaining</th>
+                <th class="sh-col-pdf">PDF</th>
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for row in invoice_rows %}
             {% set inv = row.invoice %}
             <tr>
-                <td><strong>{{ inv.invoice_number }}</strong></td>
-                <td>{{ inv.invoice_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ inv.sold_to.name }}</td>
+                <td class="sh-ref">{{ inv.invoice_number }}</td>
+                <td class="nowrap">{{ inv.invoice_date.strftime('%d-%m-%Y') }}</td>
+                <td class="sh-party"><strong>{{ inv.sold_to.name }}</strong></td>
                 <td>{{ inv.factory_challan_no or '—' }}</td>
-                <td>{{ inv.lines|length }}</td>
-                <td>₨ {{ "{:,.0f}".format(inv.total_amount) }}</td>
-                <td>₨ {{ "{:,.2f}".format(row.paid) }}</td>
-                <td>
+                <td class="num">{{ inv.lines|length }}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.0f}".format(inv.total_amount) }}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.paid) }}</td>
+                <td class="num">
                     {% if row.remaining <= 0.01 %}
-                    <span class="badge badge-gray">Paid</span>
+                    <span class="chip chip-green">Paid</span>
                     {% else %}
-                    <strong>₨ {{ "{:,.2f}".format(row.remaining) }}</strong>
+                    <strong class="sh-dr"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.remaining) }}</strong>
                     {% endif %}
                 </td>
-                <td>
-                    <a href="{{ url_for('sh_main.sale_invoice_pdf', invoice_id=inv.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                <td class="sh-col-pdf">
+                    <a href="{{ url_for('sh_main.sale_invoice_pdf', invoice_id=inv.id) }}" target="_blank" class="btn btn-sm btn-secondary">Print PDF</a>
                 </td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
@@ -148,7 +148,7 @@
 
 {% block scripts %}
 <script>
-document.getElementById('invoice_date').valueAsDate = new Date();
+(function () { var d = document.getElementById('invoice_date'); if (d) d.valueAsDate = new Date(); })();
 </script>
 {{ invoice_line_script() }}
 {{ party_balance_script('sold_to_client_id', 'previous_balance', 'previous_balance_type', 'client', 'invoice_date') }}

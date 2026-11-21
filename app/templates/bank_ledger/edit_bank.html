@@ -1,11 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Edit Bank Account - Bank Ledger{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Edit Bank Account</h1>
+{% include "shared/_glass_kit.html" %}
+<div class="gk-edit">
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-mod-{{ active_module }}">{{ module_label or 'Edit' }}</span>
+        <h1>Edit Bank Account</h1>
+    </div>
 </div>
 
-<div class="card">
+<div class="card highlight-card gk-form-card">
     <form method="POST" class="form-grid">
         <div class="form-group">
             <label for="bank_name">Bank Name</label>
@@ -36,5 +41,6 @@
             <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
         </div>
     </form>
+</div>
 </div>
 {% endblock %}

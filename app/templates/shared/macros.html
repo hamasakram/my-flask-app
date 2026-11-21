@@ -12,3 +12,6 @@
 </td>
 {% endif %}
 {% endmacro %}
+
+{#- Bank display name ("HBL — PK36…") as name + smaller account line (glass UI). -#}
+{% macro bank_name(name) %}{% set parts = (name or '').split(' — ', 1) %}<span class="gk-bank-name">{{ parts[0] }}</span>{% if parts|length > 1 %}<span class="gk-bank-acct">{{ parts[1] }}</span>{% endif %}{% endmacro %}

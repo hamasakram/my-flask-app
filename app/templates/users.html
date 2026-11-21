@@ -1,12 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Users - RN COLOUR{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>User Management</h1>
-    <p class="page-subtitle">Role-based access control</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-admin">Admin</span>
+        <h1>User Management</h1>
+        <p class="page-subtitle">Role-based access control</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('admin.settings') }}" class="btn btn-secondary">Settings</a>
+    </div>
 </div>
 
-<div class="card">
+<div class="card highlight-card gk-form-card">
     <h2>Create User</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -29,28 +36,41 @@
             <button type="submit" class="btn btn-primary">Create User</button>
         </div>
     </form>
-    <div class="role-legend">
-        <p><strong>admin</strong> — full access including settings and users</p>
-        <p><strong>manager</strong> — can add/edit stock entries and view reports</p>
-        <p><strong>viewer</strong> — read-only access to dashboard and reports</p>
-        <p><strong>dashboard</strong> — dashboard only, no payments or sensitive data</p>
+    <div class="role-legend gk-roles">
+        <p><span class="chip chip-red">admin</span> full access including settings and users</p>
+        <p><span class="chip chip-violet">manager</span> can add/edit stock entries and view reports</p>
+        <p><span class="chip chip-blue">viewer</span> read-only access to dashboard and reports</p>
+        <p><span class="chip chip-gray">dashboard</span> dashboard only, no payments or sensitive data</p>
     </div>
 </div>
 
 <div class="card">
-    <h2>Existing Users</h2>
+    <div class="gk-card-head">
+        <h2>Existing Users <span class="gk-count">{{ users|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th></tr></thead>
         <tbody>
             {% for user in users %}
+            {% set role_chip = {'admin': 'red', 'manager': 'violet', 'viewer': 'blue'}.get(user.role, 'gray') %}
             <tr>
-                <td>{{ user.username }}</td>
-                <td><span class="badge badge-blue">{{ user.role }}</span></td>
-                <td>{% if user.is_active %}<span class="badge badge-green">Active</span>{% else %}<span class="badge badge-red">Inactive</span>{% endif %}</td>
-                <td>{{ user.created_at.strftime('%d-%m-%Y') }}</td>
+                <td class="gk-strong"><span class="gk-user"><span class="user-avatar" aria-hidden="true">{{ user.username[:1]|upper }}</span>{{ user.username }}</span></td>
+                <td><span class="chip chip-{{ role_chip }}">{{ user.role }}</span></td>
+                <td>{% if user.is_active %}<span class="chip chip-green">Active</span>{% else %}<span class="chip chip-red">Inactive</span>{% endif %}</td>
+                <td class="gk-date">{{ user.created_at.strftime('%d-%m-%Y') }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
+
+<style>
+.gk-roles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 0.5rem 1rem; }
+.gk-roles p { margin: 0; display: flex; align-items: center; gap: 0.55rem; color: var(--muted); font-size: 0.85rem; }
+.gk-roles .chip { min-width: 5.6rem; justify-content: center; }
+.gk-user { display: inline-flex; align-items: center; gap: 0.6rem; }
+.gk-user .user-avatar { width: 1.9rem; height: 1.9rem; font-size: 0.8rem; flex-shrink: 0; }
+</style>
 {% endblock %}

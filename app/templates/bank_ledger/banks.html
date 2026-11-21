@@ -1,14 +1,21 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "shared/macros.html" import row_actions, bank_name with context %}
 {% block title %}Bank Accounts - Bank Ledger{% endblock %}
 {% block content %}
-<div class="page-header">
-    <h1>Bank Accounts</h1>
-    <p class="page-subtitle">Add bank details — each account gets its own ledger page</p>
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
+    <div>
+        <span class="gk-eyebrow gk-bank">Bank Ledger</span>
+        <h1>Bank Accounts</h1>
+        <p class="page-subtitle">Add bank details — each account gets its own ledger page</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('bank_ledger.transfers') }}" class="btn btn-secondary">Transfers</a>
+    </div>
 </div>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card gk-form-card">
     <h2>Add Bank Account</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -44,16 +51,19 @@
 {% endif %}
 
 <div class="card">
-    <h2>Saved Bank Accounts</h2>
+    <div class="gk-card-head">
+        <h2>Saved Bank Accounts <span class="gk-count">{{ banks|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead>
             <tr>
                 <th>Bank</th>
                 <th>Account Title</th>
                 <th>Branch</th>
-                <th>Opening</th>
-                <th>Balance</th>
-                <th>Entries</th>
+                <th class="num">Opening</th>
+                <th class="num">Balance</th>
+                <th class="num">Entries</th>
                 <th>Ledger</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
@@ -61,12 +71,12 @@
         <tbody>
             {% for item in banks %}
             <tr>
-                <td><strong>{{ item.bank.display_name }}</strong></td>
+                <td class="gk-text gk-bankcell">{{ bank_name(item.bank.display_name) }}</td>
                 <td>{{ item.bank.account_title or '—' }}</td>
                 <td>{{ item.bank.branch or '—' }}</td>
-                <td>₨ {{ "{:,.2f}".format(item.bank.opening_balance) }}</td>
-                <td class="{% if item.balance < 0 %}text-danger{% endif %}">₨ {{ "{:,.2f}".format(item.balance) }}</td>
-                <td>{{ item.entry_count }}</td>
+                <td class="num">₨ {{ "{:,.2f}".format(item.bank.opening_balance) }}</td>
+                <td class="num {% if item.balance < 0 %}gk-neg{% endif %}"><strong>₨ {{ "{:,.2f}".format(item.balance) }}</strong></td>
+                <td class="num">{{ item.entry_count }}</td>
                 <td>
                     <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=item.bank.id) }}" class="btn btn-sm btn-primary">Ledger</a>
                 </td>
@@ -78,9 +88,10 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No bank accounts yet</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty"><div class="gk-empty"><strong>No bank accounts yet</strong><span>Saved accounts appear here with their balance.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}

@@ -6,7 +6,7 @@
 {{ sh_page_header('Gate Pass Screenshots', 'Upload gate pass photos for a specific day') }}
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Upload Gate Pass Screenshot</h2>
     <form method="POST" enctype="multipart/form-data" class="form-grid">
         <div class="form-group">
@@ -54,8 +54,8 @@
 {% endif %}
 
 <div class="card">
-    <h2>Uploaded Gate Pass Screenshots</h2>
-    <table class="data-table">
+    <h2>Uploaded Gate Pass Screenshots<span class="sh-count">{{ records|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Date</th>
@@ -64,20 +64,20 @@
                 <th>Sale Invoice</th>
                 <th>File</th>
                 <th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for r in records %}
             <tr>
-                <td>{{ r.gate_pass_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ r.sold_to.name if r.sold_to else '—' }}</td>
-                <td>{{ r.title or '—' }}</td>
-                <td>{% if r.sale_invoice %}{{ r.sale_invoice.invoice_number }}{% else %}—{% endif %}</td>
+                <td class="nowrap">{{ r.gate_pass_date.strftime('%d-%m-%Y') }}</td>
+                <td class="sh-party">{{ r.sold_to.name if r.sold_to else '—' }}</td>
+                <td class="wrap"><strong>{{ r.title or '—' }}</strong></td>
+                <td>{% if r.sale_invoice %}<span class="chip chip-blue">{{ r.sale_invoice.invoice_number }}</span>{% else %}<span class="sh-nil">—</span>{% endif %}</td>
                 <td>
                     <a href="{{ url_for('sh_main.view_gate_pass_screenshot', record_id=r.id) }}" target="_blank" class="btn btn-sm btn-secondary">View</a>
                 </td>
-                <td>{{ r.notes or '—' }}</td>
+                <td class="wrap">{{ r.notes or '—' }}</td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_gate_pass_screenshot', record_id=r.id),

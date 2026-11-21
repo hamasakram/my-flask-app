@@ -10,9 +10,9 @@
 
 {% if current_user.can_edit() %}
 {% if not suppliers %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.suppliers') }}">supplier companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Add Supplier Ledger Entry</h2>
     <form method="POST" class="form-grid" id="supplier-ledger-form">
         <div class="form-group">
@@ -108,29 +108,27 @@
         </div>
     </div>
     {% if grouped_parties %}
-    <table class="data-table compact">
+    <table class="data-table compact sh-table">
         <thead>
             <tr>
                 <th>Supplier</th>
-                <th>Total Purchases</th>
-                <th>Total Paid</th>
-                <th>Remaining / Advance</th>
-                <th>PDF</th>
+                <th class="num">Total Purchases</th>
+                <th class="num">Total Paid</th>
+                <th class="num">Remaining / Advance</th>
+                <th class="sh-col-pdf">PDF</th>
             </tr>
         </thead>
         <tbody>
             {% for block in grouped_parties %}
             <tr>
                 <td><strong>{{ block.party.name }}</strong></td>
-                <td>₨ {{ "{:,.0f}".format(block.total_sales) }}</td>
-                <td>₨ {{ "{:,.0f}".format(block.total_payments) }}</td>
-                <td>
-                    <strong>
-                        {% if block.remaining_balance_type == 'CR' %}Advance: {% else %}Due: {% endif %}
-                        ₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}
-                    </strong>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.0f}".format(block.total_sales) }}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.0f}".format(block.total_payments) }}</td>
+                <td class="num sh-bal">
+                    {% if block.remaining_balance_type == 'CR' %}<span class="chip chip-green">Advance</span>{% else %}<span class="chip chip-amber">Due</span>{% endif %}
+                    <span class="sh-cur">₨</span>{{ "{:,.0f}".format(block.remaining_balance) }}<span class="sh-drcr sh-drcr-{{ block.remaining_balance_type|lower }}">{{ block.remaining_balance_type }}</span>
                 </td>
-                <td><a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-sm btn-secondary">PDF</a></td>
+                <td class="sh-col-pdf"><a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-sm btn-secondary">PDF</a></td>
             </tr>
             {% endfor %}
         </tbody>
@@ -145,53 +143,52 @@
     <div class="report-party-header">
         <div>
             <h2>{{ block.party.name }}</h2>
-            <div class="report-party-stats">
-                <span>Purchases: <strong>₨ {{ "{:,.0f}".format(block.total_sales) }}</strong></span>
-                <span>Paid: <strong>₨ {{ "{:,.0f}".format(block.total_payments) }}</strong></span>
-                <span>
-                    {% if block.remaining_balance_type == 'CR' %}Advance{% else %}Remaining{% endif %}:
-                    <strong>₨ {{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong>
-                </span>
+            <div class="sh-party-stats">
+                <span class="chip chip-amber">Purchases <strong>₨&nbsp;{{ "{:,.0f}".format(block.total_sales) }}</strong></span>
+                <span class="chip chip-green">Paid <strong>₨&nbsp;{{ "{:,.0f}".format(block.total_payments) }}</strong></span>
+                <span class="chip {{ 'chip-green' if block.remaining_balance_type == 'CR' else ('chip-red' if block.remaining_balance > 0 else 'chip-gray') }}">{% if block.remaining_balance_type == 'CR' %}Advance{% else %}Remaining{% endif %} <strong>₨&nbsp;{{ "{:,.0f}".format(block.remaining_balance) }} {{ block.remaining_balance_type }}</strong></span>
             </div>
         </div>
         <a href="{{ url_for('sh_main.supplier_ledger_party_pdf', supplier_id=block.party.id) }}" target="_blank" class="btn btn-secondary">Print PDF</a>
     </div>
-    <table class="data-table compact">
+    <table class="data-table compact sh-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Ref #</th>
                 <th>Type</th>
-                <th>Amount</th>
-                <th>Balance After</th>
+                <th class="num">Amount</th>
+                <th class="num">Balance After</th>
                 <th>Notes</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for entry in block.entries %}
             <tr>
-                <td>{{ entry.entry_date.strftime('%d-%m-%Y') }}</td>
-                <td><strong>{{ entry.reference_number }}</strong></td>
+                <td class="nowrap">{{ entry.entry_date.strftime('%d-%m-%Y') }}</td>
+                <td class="sh-ref">{{ entry.reference_number }}</td>
                 <td>
                     {% if entry.entry_type == 'payment' %}
-                    <span class="badge badge-green">Payment</span>
+                    <span class="chip chip-green">Payment</span>
                     {% else %}
-                    <span class="badge badge-orange">Purchase</span>
+                    <span class="chip chip-amber">Purchase</span>
                     {% endif %}
                 </td>
-                <td>₨ {{ "{:,.0f}".format(entry.total_amount) }}</td>
-                <td><strong>₨ {{ "{:,.0f}".format(entry.current_balance) }} {{ entry.current_balance_type }}</strong></td>
-                <td>{{ entry.notes or '—' }}</td>
+                <td class="num"><span class="sh-cur">₨</span>{{ "{:,.0f}".format(entry.total_amount) }}</td>
+                <td class="num sh-bal"><span class="sh-cur">₨</span>{{ "{:,.0f}".format(entry.current_balance) }}<span class="sh-drcr sh-drcr-{{ entry.current_balance_type|lower }}">{{ entry.current_balance_type }}</span></td>
+                <td class="wrap">{{ entry.notes or '—' }}</td>
                 {% if current_user.can_edit() and not entry.source_bank_ledger_id %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_supplier_ledger', entry_id=entry.id),
                     url_for('stock_deletes.delete_sh_supplier_ledger', entry_id=entry.id)
                 ) }}
                 {% elif current_user.can_edit() %}
-                <td><small class="field-note">Via Bank Ledger</small></td>
+                <td class="sh-col-actions"><span class="chip chip-blue">Via Bank Ledger</span></td>
                 {% endif %}
             </tr>
+            {% else %}
+            <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No ledger entries for this party yet</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -201,7 +198,7 @@
 
 {% block scripts %}
 <script>
-document.getElementById('entry_date').valueAsDate = new Date();
+(function () { var d = document.getElementById('entry_date'); if (d) d.valueAsDate = new Date(); })();
 </script>
 {{ invoice_line_script() }}
 {{ party_balance_script('supplier_company_id', 'previous_balance', 'previous_balance_type', 'supplier', 'entry_date') }}

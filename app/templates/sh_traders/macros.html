@@ -1,7 +1,8 @@
 {% macro sh_page_header(title, subtitle=None) %}
+{% include "sh_traders/_glass_styles.html" %}
 <div class="page-header sh-page-header">
     <img
-        src="{{ url_for('static', filename='images/sh-traders-logo.png') }}"
+        src="{{ url_for('static', filename='images/sh-traders-logo-glass.png') }}"
         alt="Sami Hamas Traders"
         class="sh-module-logo"
     >
@@ -13,3 +14,9 @@
     </div>
 </div>
 {% endmacro %}
+
+{# ₨ amount with a de-emphasised currency sign and tabular figures #}
+{% macro money(v, places=2) -%}<span class="sh-cur">₨</span>{{ ("{:,.%df}" % places).format(v or 0) }}{%- endmacro %}
+
+{# DR / CR marker shown after a balance #}
+{% macro drcr(kind) -%}{% if kind %}<span class="sh-drcr sh-drcr-{{ kind|lower }}">{{ kind }}</span>{% endif %}{%- endmacro %}

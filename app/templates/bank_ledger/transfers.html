@@ -1,21 +1,26 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "shared/macros.html" import row_actions, bank_name with context %}
 {% block title %}Cross-Bank Transfers - Bank Ledger{% endblock %}
 {% block content %}
-<div class="page-header">
+{% include "shared/_glass_kit.html" %}
+<div class="page-header gk-head">
     <div>
+        <span class="gk-eyebrow gk-bank">Bank Ledger</span>
         <h1>Cross-Bank Transfers</h1>
         <p class="page-subtitle">Move funds between accounts — both bank ledgers update automatically</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('bank_ledger.banks') }}" class="btn btn-secondary">Bank Accounts</a>
     </div>
 </div>
 
 {% if current_user.can_edit() %}
 {% if banks|length < 2 %}
-<div class="flash flash-warning">Add at least <a href="{{ url_for('bank_ledger.banks') }}">two bank accounts</a> before recording transfers.</div>
+<p class="callout callout-amber gk-links">Add at least <a href="{{ url_for('bank_ledger.banks') }}">two bank accounts</a> before recording transfers.</p>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card transfer-card gk-form-card">
     <h2>New Transfer</h2>
-    <p class="field-note">Withdrawal is posted on the <strong>From</strong> bank and deposit on the <strong>To</strong> bank on the same date.</p>
+    <p class="field-note gk-intro">Withdrawal is posted on the <strong>From</strong> bank and deposit on the <strong>To</strong> bank on the same date.</p>
     <form method="POST" class="form-grid">
         <div class="form-group">
             <label for="transfer_date">Transfer Date</label>
@@ -60,14 +65,17 @@
 {% endif %}
 
 <div class="card">
-    <h2>Transfer History</h2>
+    <div class="gk-card-head">
+        <h2>Transfer History <span class="gk-count">{{ transfers|length }}</span></h2>
+    </div>
+    <div class="table-scroll gk-table">
     <table class="data-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>From Bank</th>
                 <th>To Bank</th>
-                <th>Amount</th>
+                <th class="num">Amount</th>
                 <th>Reference</th>
                 <th>Notes</th>
                 <th>Ledgers</th>
@@ -77,17 +85,17 @@
         <tbody>
             {% for t in transfers %}
             <tr>
-                <td>{{ t.transfer_date.strftime('%d-%m-%Y') }}</td>
-                <td>
-                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.from_bank_id) }}">{{ t.from_bank.display_name }}</a>
+                <td class="gk-date">{{ t.transfer_date.strftime('%d-%m-%Y') }}</td>
+                <td class="gk-text gk-bankcell">
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.from_bank_id) }}">{{ bank_name(t.from_bank.display_name) }}</a>
                 </td>
-                <td>
-                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.to_bank_id) }}">{{ t.to_bank.display_name }}</a>
+                <td class="gk-text gk-bankcell">
+                    <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.to_bank_id) }}">{{ bank_name(t.to_bank.display_name) }}</a>
                 </td>
-                <td><strong>₨ {{ "{:,.2f}".format(t.amount) }}</strong></td>
-                <td>{{ t.reference or '—' }}</td>
-                <td>{{ t.notes or '—' }}</td>
-                <td class="ledger-links">
+                <td class="num"><strong>₨ {{ "{:,.2f}".format(t.amount) }}</strong></td>
+                <td>{% if t.reference %}<span class="chip chip-blue">{{ t.reference }}</span>{% else %}—{% endif %}</td>
+                <td class="gk-text-sm">{{ t.notes or '—' }}</td>
+                <td class="ledger-links nowrap">
                     <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.from_bank_id) }}" class="btn btn-sm btn-secondary">From</a>
                     <a href="{{ url_for('bank_ledger.bank_ledger', bank_id=t.to_bank_id) }}" class="btn btn-sm btn-secondary">To</a>
                 </td>
@@ -99,10 +107,11 @@
                 {% endif %}
             </tr>
             {% else %}
-            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty">No cross-bank transfers yet</td></tr>
+            <tr><td colspan="{{ 8 if current_user.can_edit() else 7 }}" class="empty"><div class="gk-empty"><strong>No cross-bank transfers yet</strong><span>Recorded transfers appear here.</span></div></td></tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
 {% endblock %}
 

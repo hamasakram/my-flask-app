@@ -1,0 +1,84 @@
+{# Liquid Glass page kit for the Printing Materials + Job Planning pages (not In-Hall: that uses _ih_styles).
+   Kept in the template (like _ih_styles) so a phone with an old cached style.css still gets it.
+   Classes: gl-*. Colours come from the style.css tokens, with fallbacks. #}
+<style>
+/* ---- Section head inside a card: title left, figure / button right ---- */
+.gl-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; margin: 0 0 0.9rem; }
+.gl-head h2 { margin: 0; }
+.gl-head-note { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+.gl-count { display: inline-flex; align-items: center; min-width: 1.6rem; justify-content: center; padding: 0.05rem 0.5rem; margin-left: 0.4rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; color: var(--muted); background: rgba(255, 255, 255, 0.6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 1px var(--line-strong, rgba(23, 30, 48, 0.15)); vertical-align: 0.12em; font-variant-numeric: tabular-nums; }
+
+/* ---- Numbers ---- */
+.gl-kg { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gl-kg small { font-size: 0.78em; font-weight: 600; color: var(--muted); margin-left: 0.12rem; }
+.gl-sub { display: block; font-size: 0.78rem; color: var(--muted); font-weight: 500; margin-top: 0.1rem; }
+.gl-strong { font-weight: 700; color: var(--text); }
+.data-table td.gl-wrap { white-space: normal; min-width: 6rem; overflow-wrap: break-word; }
+/* style.css: `.data-table td { text-align: left }` comes after `td.num` and wins — put numbers back on the right */
+.data-table td.num, .data-table th.num { text-align: right; white-space: nowrap; }
+
+/* ---- Stock Left table: keep the material readable, badges side by side ---- */
+.gl-prod { font-variant-numeric: tabular-nums; }
+.gl-prod-line { display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+.gl-prod-line + .gl-prod-line { margin-top: 0.3rem; }
+.gl-prod-line .badge { min-width: 5.6rem; justify-content: center; text-align: center; }
+
+/* ---- Filter / date bar (a glass toolbar that holds a GET form) ---- */
+.gl-toolbar { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.65rem 0.75rem; margin: 0 0 1.25rem; }
+.gl-toolbar form { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0; width: 100%; }
+.gl-toolbar-label { font-size: 0.82rem; font-weight: 700; color: var(--muted); padding-left: 0.35rem; }
+.gl-toolbar input[type="date"] { width: auto; min-width: 11rem; border-radius: 999px; }
+
+/* ---- Report blocks (Daily Report): figures as small glass pills ---- */
+.gl-subhead { margin: 1.1rem 0 0.5rem; font-size: 0.74rem; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.report-category-stats, .report-job-stats { gap: 0.4rem; }
+.report-category-stats span, .report-job-stats span { display: inline-flex; align-items: baseline; gap: 0.3rem; padding: 0.28rem 0.75rem; border-radius: 999px; font-size: 0.82rem; background: rgba(255, 255, 255, 0.58); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 1px var(--line-strong, rgba(23, 30, 48, 0.15)); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.report-category-stats strong, .report-job-stats strong { color: var(--text); }
+
+/* ---- Checkbox pills (Used In: Printing / Lamination) ---- */
+.gl-checks { gap: 0.5rem; }
+.gl-checks .checkbox-inline { min-height: 2.6rem; padding: 0.45rem 1rem 0.45rem 0.8rem; border-radius: 999px; cursor: pointer; font-weight: 600; background: rgba(255, 255, 255, 0.6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 1px var(--line-strong, rgba(23, 30, 48, 0.15)); transition: background 0.15s ease, box-shadow 0.15s ease; -webkit-tap-highlight-color: transparent; }
+.gl-checks .checkbox-inline:hover { background: rgba(255, 255, 255, 0.9); }
+.gl-checks .checkbox-inline:has(input:checked) { background: var(--tint-brand, rgba(178, 30, 34, 0.08)); color: var(--primary-dark, #8f181b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 0 0 1.5px rgba(178, 30, 34, 0.55); }
+.gl-checks .checkbox-inline:has(input:focus-visible) { outline: 3px solid rgba(59, 130, 246, 0.55); outline-offset: 2px; }
+
+/* ---- Phone: data tables become stacked glass rows (td[data-label] gives each value its label) ---- */
+@media (max-width: 720px) {
+    .card:has(> .gl-stack), .table-scroll:has(> .gl-stack) { overflow: visible; }
+    .data-table.gl-stack, .gl-stack tbody, .gl-stack tr, .gl-stack td { display: block; }
+    .gl-stack thead { display: none; }
+    .data-table.gl-stack { font-size: 0.9rem; }
+    .gl-stack tbody { display: flex; flex-direction: column; gap: 0.55rem; }
+    .data-table.gl-stack tbody tr {
+        display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.5rem 0.9rem;
+        padding: 0.75rem 0.85rem; border-radius: var(--radius-md, 14px);
+        background: var(--glass-bg-soft, rgba(255, 255, 255, 0.42));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line, rgba(23, 30, 48, 0.08));
+    }
+    .data-table.gl-stack tbody tr:nth-child(even) { background: var(--glass-bg-soft, rgba(255, 255, 255, 0.42)); }
+    .data-table.gl-stack tbody tr:hover { background: rgba(255, 255, 255, 0.6); }
+    .report-job-block .data-table.gl-stack tbody tr { background: rgba(255, 255, 255, 0.55); }
+    .data-table.gl-stack td { padding: 0; border: none; white-space: normal; min-width: 0; overflow-wrap: anywhere; }
+    .data-table.gl-stack td[data-label]::before {
+        content: attr(data-label); display: block; margin-bottom: 0.1rem;
+        font-size: 0.66rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+    }
+    .data-table.gl-stack td.gl-title { order: -1; grid-column: 1 / -1; font-size: 1rem; font-weight: 700; color: var(--text); }
+    .data-table.gl-stack td.gl-title strong { font-weight: 700; }
+    .data-table.gl-stack td.gl-full, .data-table.gl-stack td.empty { grid-column: 1 / -1; }
+    .data-table.gl-stack td.empty { text-align: center; padding: 0.5rem 0; }
+    .data-table.gl-stack td.num { text-align: left; }
+    .data-table.gl-stack td.gl-end { text-align: right; }
+    .data-table.gl-stack td.gl-hide-phone { display: none; }
+    .data-table.gl-stack td.table-actions { grid-column: 1 / -1; display: flex; gap: 0.45rem; flex-wrap: wrap; padding-top: 0.55rem; border-top: 1px solid var(--line, rgba(23, 30, 48, 0.08)); }
+    .data-table.gl-stack td.table-actions .btn { min-height: 2.5rem; padding-left: 1rem; padding-right: 1rem; }
+    .data-table.gl-stack td.table-actions form { margin: 0; display: inline-flex; }
+    .data-table.gl-stack td.table-actions > :last-child { margin-left: auto; }
+    .data-table.gl-stack td .table-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; }
+    .data-table.gl-stack tbody tr:has(> td.empty) { display: block; }
+    .gl-toolbar input[type="date"] { flex: 1; min-width: 0; }
+}
+@media (prefers-reduced-transparency: reduce) {
+    @media (max-width: 720px) { .data-table.gl-stack tbody tr, .data-table.gl-stack tbody tr:nth-child(even) { background: var(--glass-bg-solid, #fff); } }
+}
+</style>

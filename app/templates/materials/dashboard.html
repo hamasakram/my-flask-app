@@ -2,6 +2,7 @@
 {% from "shared/macros.html" import row_actions with context %}
 {% block title %}Printing Materials - RN COLOUR{% endblock %}
 {% block content %}
+{% include "materials/_glass_kit.html" %}
 <div class="page-header">
     <div>
         <h1>Printing Materials</h1>
@@ -32,30 +33,30 @@
 </div>
 
 <div class="card">
-    <h2>Current Stock</h2>
-    <table class="data-table">
+    <div class="gl-head"><h2>Current Stock<span class="gl-count">{{ stats.live_stock|length }}</span></h2></div>
+    <table class="data-table gl-stack">
         <thead>
             <tr>
                 <th>Category</th>
                 <th>Material</th>
                 <th>Size</th>
                 <th>Micron</th>
-                <th>Stock In</th>
-                <th>Used</th>
-                <th>Left (KG)</th>
+                <th class="num">Stock In</th>
+                <th class="num">Used</th>
+                <th class="num">Left (KG)</th>
                 {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for item in stats.live_stock %}
             <tr>
-                <td>{{ item.material.category }}</td>
-                <td>{{ item.material.name }}</td>
-                <td>{{ item.material.size or '—' }}</td>
-                <td>{{ item.material.micron or '—' }}</td>
-                <td>{{ "%.1f"|format(item.stock_in) }}</td>
-                <td>{{ "%.1f"|format(item.used) }}</td>
-                <td><strong>{{ "%.1f"|format(item.current) }}</strong></td>
+                <td data-label="Category"><span class="chip chip-gray">{{ item.material.category }}</span></td>
+                <td class="gl-title gl-wrap"><strong>{{ item.material.name }}</strong></td>
+                <td data-label="Size">{{ item.material.size or '—' }}</td>
+                <td data-label="Micron">{{ item.material.micron or '—' }}</td>
+                <td data-label="Stock In" class="num">{{ "%.1f"|format(item.stock_in) }}</td>
+                <td data-label="Used" class="num">{{ "%.1f"|format(item.used) }}</td>
+                <td data-label="Left (KG)" class="num"><span class="gl-kg">{{ "%.1f"|format(item.current) }}</span></td>
                 {{ row_actions(url_for('stock_edits.edit_materials_current_stock', material_id=item.material.id)) }}
             </tr>
             {% else %}
@@ -66,18 +67,18 @@
 </div>
 
 <div class="card">
-    <h2>Recent Activity</h2>
-    <table class="data-table compact">
-        <thead><tr><th>Date</th><th>Material</th><th>Type</th><th>Qty (kg)</th><th>Where Used</th><th>Notes</th></tr></thead>
+    <div class="gl-head"><h2>Recent Activity</h2></div>
+    <table class="data-table compact gl-stack">
+        <thead><tr><th>Date</th><th>Material</th><th>Type</th><th class="num">Qty (kg)</th><th>Where Used</th><th>Notes</th></tr></thead>
         <tbody>
             {% for txn in stats.recent_transactions %}
             <tr>
-                <td>{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
-                <td>{{ txn.material.display_name }}</td>
-                <td><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock In' else 'orange' }}">{{ txn.transaction_type }}</span></td>
-                <td>{{ "%.1f"|format(txn.quantity) }}</td>
-                <td>{{ txn.where_used or '—' }}</td>
-                <td>{{ txn.notes or '—' }}</td>
+                <td data-label="Date" class="nowrap">{{ txn.transaction_date.strftime('%d-%m-%Y') }}</td>
+                <td class="gl-title gl-wrap">{{ txn.material.display_name }}</td>
+                <td data-label="Type"><span class="badge badge-{{ 'green' if txn.transaction_type == 'Stock In' else 'orange' }}">{{ txn.transaction_type }}</span></td>
+                <td data-label="Qty (kg)" class="num"><span class="gl-kg">{{ "%.1f"|format(txn.quantity) }}</span></td>
+                <td data-label="Where Used" class="gl-wrap">{{ txn.where_used or '—' }}</td>
+                <td data-label="Notes" class="gl-wrap gl-full">{{ txn.notes or '—' }}</td>
             </tr>
             {% else %}
             <tr><td colspan="6" class="empty">No activity yet</td></tr>

@@ -8,9 +8,9 @@
 
 {% if current_user.can_edit() %}
 {% if not clients %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Create Order Confirmation</h2>
     <form method="POST" class="form-grid">
         <div class="form-group">
@@ -51,30 +51,30 @@
 {% endif %}
 
 <div class="card">
-    <h2>Order Confirmation Records</h2>
-    <table class="data-table">
+    <h2>Order Confirmation Records<span class="sh-count">{{ orders|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Date</th>
                 <th>Material</th>
                 <th>Size</th>
                 <th>Micron</th>
-                <th>KG</th>
+                <th class="num">KG</th>
                 <th>Purchased For</th>
-                <th>PDF</th>
+                <th class="sh-col-pdf">PDF</th>
             </tr>
         </thead>
         <tbody>
             {% for order in orders %}
             <tr>
-                <td>{{ order.created_at.strftime('%d-%m-%Y') }}</td>
-                <td>{{ order.material_name }}</td>
+                <td class="nowrap">{{ order.created_at.strftime('%d-%m-%Y') }}</td>
+                <td><strong>{{ order.material_name }}</strong></td>
                 <td>{{ order.size or '—' }}</td>
-                <td>{{ order.micron or '—' }}</td>
-                <td>{{ "{:,.1f}".format(order.total_kg) }}</td>
-                <td>{{ order.client.name }}</td>
-                <td>
-                    <a href="{{ url_for('sh_main.order_confirmation_pdf', order_id=order.id) }}" target="_blank" class="btn btn-sm btn-primary">Print PDF</a>
+                <td>{% if order.micron %}<span class="chip chip-violet">{{ order.micron }}</span>{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                <td class="num"><strong>{{ "{:,.1f}".format(order.total_kg) }}</strong> <span class="muted">kg</span></td>
+                <td class="sh-party">{{ order.client.name }}</td>
+                <td class="sh-col-pdf">
+                    <a href="{{ url_for('sh_main.order_confirmation_pdf', order_id=order.id) }}" target="_blank" class="btn btn-sm btn-secondary">Print PDF</a>
                 </td>
             </tr>
             {% else %}

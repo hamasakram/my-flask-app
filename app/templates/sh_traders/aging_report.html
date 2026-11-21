@@ -7,9 +7,9 @@
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if not clients %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Customer Aging Report</h2>
     <p class="field-note">Paid invoices are left out. Balance Left is the exact amount still due on Sale Invoices. Aging days are counted from the invoice date up to the As On date.</p>
     <form method="GET" class="form-grid">
@@ -38,10 +38,12 @@
 
 {% if report %}
 <div class="card">
-    <h2>Customer Name: {{ report.client.name }}</h2>
-    <p class="field-note">As On {{ report.as_on.strftime('%d/%m/%Y') }}</p>
+    <div class="ledger-report-header">
+        <h2>Customer Name: {{ report.client.name }}</h2>
+        <span class="chip chip-blue">As On {{ report.as_on.strftime('%d/%m/%Y') }}</span>
+    </div>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table sh-table">
             <thead>
                 <tr>
                     <th>Invoice Date</th>
@@ -55,12 +57,12 @@
             <tbody>
                 {% for row in report.rows %}
                 <tr>
-                    <td>{{ row.date.strftime('%d/%m/%Y') }}</td>
-                    <td>{{ row.invoice_number }}</td>
-                    <td>{{ row.material }}</td>
-                    <td class="num">{{ "{:,.2f}".format(row.amount) }}</td>
-                    <td class="num">{{ "{:,.2f}".format(row.running_balance) }}</td>
-                    <td class="num">{{ row.aging_days }}</td>
+                    <td class="nowrap">{{ row.date.strftime('%d/%m/%Y') }}</td>
+                    <td class="sh-ref">{{ row.invoice_number }}</td>
+                    <td class="wrap">{{ row.material }}</td>
+                    <td class="num sh-dr">{{ "{:,.2f}".format(row.amount) }}</td>
+                    <td class="num sh-bal">{{ "{:,.2f}".format(row.running_balance) }}</td>
+                    <td class="num"><span class="chip {{ 'chip-red' if row.aging_days > 90 else ('chip-amber' if row.aging_days > 30 else 'chip-green') }}">{{ row.aging_days }}</span></td>
                 </tr>
                 {% else %}
                 <tr><td colspan="6" class="empty">No invoices on or before this date</td></tr>
@@ -68,43 +70,18 @@
             </tbody>
         </table>
     </div>
-    <p style="text-align:center; margin-top:1rem;"><strong>Total Balance: {{ "{:,.2f}".format(report.total_balance) }}</strong></p>
-
-    <div class="table-scroll" style="margin-top:1rem;">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    {% for key, label in report.bucket_labels[:4] %}
-                    <th>{{ label }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    {% for key, label in report.bucket_labels[:4] %}
-                    <td style="text-align:center;">{{ "{:,.2f}".format(report.buckets[key]) }}</td>
-                    {% endfor %}
-                </tr>
-            </tbody>
-        </table>
+    <div class="sh-aging-total">
+        <span>Total Balance</span>
+        <strong>{{ "{:,.2f}".format(report.total_balance) }}</strong>
     </div>
-    <div class="table-scroll" style="margin-top:0.75rem;">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    {% for key, label in report.bucket_labels[4:] %}
-                    <th>{{ label }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    {% for key, label in report.bucket_labels[4:] %}
-                    <td style="text-align:center;">{{ "{:,.2f}".format(report.buckets[key]) }}</td>
-                    {% endfor %}
-                </tr>
-            </tbody>
-        </table>
+
+    <div class="sh-aging-buckets">
+        {% for key, label in report.bucket_labels %}
+        <div class="sh-aging-bucket {% if report.buckets[key] > 0.009 %}is-due{% endif %}">
+            <span>{{ label }}</span>
+            <strong>{{ "{:,.2f}".format(report.buckets[key]) }}</strong>
+        </div>
+        {% endfor %}
     </div>
 </div>
 {% endif %}

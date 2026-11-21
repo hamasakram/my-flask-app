@@ -7,9 +7,9 @@
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if not clients %}
-<div class="flash flash-warning">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
+<div class="callout callout-amber sh-note sh-no-print">Add <a href="{{ url_for('sh_main.clients') }}">client companies</a> first.</div>
 {% else %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Generate Ledger Report</h2>
     <p class="field-note">Sales and material billed to the client increase balance (DEBIT). Payments received reduce it (CREDIT).</p>
     <form method="GET" class="form-grid" id="ledger-report-form">
@@ -44,6 +44,7 @@
 {% if preview %}
 <div class="card">
     <div class="ledger-report-header">
+        <div>
         <h2>LEDGER REPORT — {{ preview.client.name }}</h2>
         <p class="field-note">
             {% if preview.date_from and preview.date_to %}
@@ -55,16 +56,12 @@
             {% else %}
             Complete ledger from start
             {% endif %}
-            · Closing balance:
-            {% if preview.closing_type == 'CR' %}
-            (₨ {{ "{:,.2f}".format(preview.closing_balance) }})
-            {% else %}
-            ₨ {{ "{:,.2f}".format(preview.closing_balance) }}
-            {% endif %}
         </p>
+        </div>
+        <span class="chip {{ 'chip-green' if preview.closing_type == 'CR' else 'chip-amber' }}">Closing balance&nbsp;<strong>{% if preview.closing_type == 'CR' %}(₨&nbsp;{{ "{:,.2f}".format(preview.closing_balance) }}){% else %}₨&nbsp;{{ "{:,.2f}".format(preview.closing_balance) }}{% endif %}</strong></span>
     </div>
     <div class="table-scroll">
-        <table class="data-table ledger-report-table">
+        <table class="data-table ledger-report-table sh-table">
             <thead>
                 <tr>
                     <th>Date</th>
@@ -80,18 +77,18 @@
             <tbody>
                 {% for row in preview.rows %}
                 <tr class="{% if row.is_opening %}ledger-opening-row{% endif %}">
-                    <td>{{ row.date.strftime('%d-%b-%y') }}</td>
-                    <td>{{ row.type or '—' }}</td>
-                    <td>{{ row.number or '—' }}</td>
-                    <td>{{ row.extra or '—' }}</td>
-                    <td>{{ row.narration }}</td>
-                    <td class="num">{% if row.debit %}₨ {{ "{:,.2f}".format(row.debit) }}{% endif %}</td>
-                    <td class="num">{% if row.credit %}₨ {{ "{:,.2f}".format(row.credit) }}{% endif %}</td>
-                    <td class="num">
+                    <td class="nowrap">{{ row.date.strftime('%d-%b-%y') }}</td>
+                    <td>{% if row.type %}<span class="chip chip-gray sh-type-pill">{{ row.type }}</span>{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                    <td class="sh-ref">{{ row.number or '—' }}</td>
+                    <td class="nowrap">{{ row.extra or '—' }}</td>
+                    <td class="wrap">{{ row.narration }}</td>
+                    <td class="num sh-dr">{% if row.debit %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.debit) }}{% endif %}</td>
+                    <td class="num sh-cr">{% if row.credit %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.credit) }}{% endif %}</td>
+                    <td class="num sh-bal">
                         {% if row.balance_type == 'CR' %}
-                        (₨ {{ "{:,.2f}".format(row.balance) }})
+                        (<span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.balance) }})
                         {% else %}
-                        ₨ {{ "{:,.2f}".format(row.balance) }}
+                        <span class="sh-cur">₨</span>{{ "{:,.2f}".format(row.balance) }}
                         {% endif %}
                     </td>
                 </tr>
@@ -103,14 +100,14 @@
             <tfoot>
                 <tr class="ledger-totals-row">
                     <td colspan="5"><strong>Totals</strong></td>
-                    <td class="num"><strong>₨ {{ "{:,.2f}".format(preview.total_debit) }}</strong></td>
-                    <td class="num"><strong>₨ {{ "{:,.2f}".format(preview.total_credit) }}</strong></td>
+                    <td class="num"><strong><span class="sh-cur">₨</span>{{ "{:,.2f}".format(preview.total_debit) }}</strong></td>
+                    <td class="num"><strong><span class="sh-cur">₨</span>{{ "{:,.2f}".format(preview.total_credit) }}</strong></td>
                     <td class="num">
                         <strong>
                             {% if preview.closing_type == 'CR' %}
-                            (₨ {{ "{:,.2f}".format(preview.closing_balance) }})
+                            (<span class="sh-cur">₨</span>{{ "{:,.2f}".format(preview.closing_balance) }})
                             {% else %}
-                            ₨ {{ "{:,.2f}".format(preview.closing_balance) }}
+                            <span class="sh-cur">₨</span>{{ "{:,.2f}".format(preview.closing_balance) }}
                             {% endif %}
                         </strong>
                     </td>

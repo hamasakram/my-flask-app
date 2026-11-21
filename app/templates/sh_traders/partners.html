@@ -8,7 +8,7 @@
 {{ sh_bank_selector(banks, current_bank) }}
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>Add Partner</h2>
     <p class="field-note">A new partner name opens a ledger automatically. Link partners when recording partnership purchases.</p>
     <form method="POST" class="form-grid">
@@ -23,7 +23,7 @@
     </form>
 </div>
 
-<div class="card">
+<div class="card sh-no-print">
     <h2>Record Partner Payment</h2>
     <form method="POST" class="form-grid">
         <input type="hidden" name="action" value="partner_payment">
@@ -60,26 +60,26 @@
 {% endif %}
 
 <div class="card">
-    <h2>Saved Partners</h2>
-    <table class="data-table">
+    <h2>Saved Partners<span class="sh-count">{{ partners|length }}</span></h2>
+    <table class="data-table sh-table">
         <thead>
             <tr>
                 <th>Partner Name</th>
-                <th>Purchase Shares</th>
-                <th>Ledger Balance</th>
+                <th class="num">Purchase Shares</th>
+                <th class="num">Ledger Balance</th>
                 <th>Added On</th>
-                {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
             </tr>
         </thead>
         <tbody>
             {% for item in partners %}
             <tr>
                 <td><strong>{{ item.partner.name }}</strong></td>
-                <td>{{ item.purchase_count }}</td>
-                <td class="{% if item.ledger_balance > 0 %}text-success{% elif item.ledger_balance < 0 %}text-danger{% endif %}">
-                    ₨ {{ "{:,.2f}".format(item.ledger_balance) }}
+                <td class="num">{{ item.purchase_count }}</td>
+                <td class="num sh-bal {% if item.ledger_balance > 0 %}text-success{% elif item.ledger_balance < 0 %}text-danger{% endif %}">
+                    <span class="sh-cur">₨</span>{{ "{:,.2f}".format(item.ledger_balance) }}
                 </td>
-                <td>{{ item.partner.created_at.strftime('%d-%m-%Y') }}</td>
+                <td class="nowrap muted">{{ item.partner.created_at.strftime('%d-%m-%Y') }}</td>
                 {% if current_user.can_edit() %}
                 {{ row_actions(
                     url_for('stock_edits.edit_sh_partner', company_id=item.partner.id),

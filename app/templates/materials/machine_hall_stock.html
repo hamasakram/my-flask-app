@@ -1,120 +1,175 @@
 {% extends "base.html" %}
-{% from "shared/macros.html" import row_actions with context %}
+{% from "materials/_ih_macros.html" import num, rolls_text, micron_text, size_text, roll_pills %}
 {% block title %}Machine Hall Stock - RN COLOUR{% endblock %}
 {% block content %}
-{% if current_user.can_edit() and job_suggestions %}
+{% include "materials/_ih_styles.html" %}
+{% include "materials/_glass_kit.html" %}
 <style>
-.hs-wait-card { border-left: 4px solid var(--orange); padding: 1rem 1.25rem; }
-.hs-wait-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
-.hs-wait-head h2 { margin: 0; }
-.hs-wait-count { color: var(--muted); font-size: 0.8rem; font-weight: 600; }
-.hs-wait-note { margin: 0.35rem 0 0.75rem; }
-.hs-wait-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-.hs-wait-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 0.75rem; background: var(--surface); }
-.hs-wait-row + .hs-wait-row { border-top: 1px solid var(--border); }
-.hs-wait-main { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; min-width: 0; }
-.hs-wait-label { font-size: 0.9rem; overflow-wrap: anywhere; }
-.hs-wait-jobs { color: var(--muted); font-size: 0.8rem; }
-.hs-job { white-space: nowrap; }
-.hs-use-btn { flex-shrink: 0; }
-.hs-hint { font-size: 0.78rem; line-height: 1.35; padding: 0.35rem 0.5rem; border-radius: 6px; }
-.hs-hint[hidden] { display: none; }
-.hs-hint-ok { color: #166534; background: #dcfce7; }
-.hs-hint-warn { color: #9a3412; background: #ffedd5; }
-.hs-hint-link { background: none; border: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; cursor: pointer; }
-.hs-hint-link:hover { text-decoration: none; }
-.hs-flash-fill { animation: hs-fill 1.2s ease-out; }
-@keyframes hs-fill { from { background: #fef3c7; } to { background: white; } }
-@media (prefers-reduced-motion: reduce) { .hs-flash-fill { animation: none; } }
+/* Machine Hall: same look as In-Hall (ih-*), plus a few mh-* pieces */
+.mh-page .ih-panel, .mh-page .ih-wait, .mh-page .ih-list { scroll-margin-top: calc(var(--sticky-top, 0px) + 14px); }
+.mh-forms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; align-items: start; margin-bottom: 1.25rem; }
+.mh-forms > .card { margin-bottom: 0; }
+.mh-forms .ih-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mh-forms .ih-span-2 { grid-column: 1 / -1; }
+.mh-panel-icon { flex-shrink: 0; width: 2.5rem; height: 2.5rem; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; color: white; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 14px -6px rgba(40, 30, 60, 0.45); }
+.mh-panel-icon svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mh-icon-use { background: linear-gradient(180deg, #e0782b 0%, #b45309 100%); }
+.mh-icon-add { background: linear-gradient(180deg, #3d73d1 0%, #1d4ed8 100%); }
+.mh-panel-title { display: flex; align-items: flex-start; gap: 0.75rem; }
+.mh-use-panel { background: radial-gradient(120% 120% at 0% 0%, rgba(245, 158, 11, 0.11) 0%, rgba(245, 158, 11, 0) 55%), var(--glass-sheen, none), var(--glass-bg-strong, #fff); }
+.mh-hint { font-size: 0.8rem; color: var(--muted); min-height: 1em; }
+.mh-hint:not(:empty) { align-self: flex-start; color: var(--tint-blue-text, #1e3a8a); background: var(--tint-blue, rgba(59, 130, 246, 0.1)); box-shadow: inset 0 0 0 1px var(--tint-blue-border, rgba(37, 99, 235, 0.25)); border-radius: 10px; padding: 0.25rem 0.6rem; font-weight: 600; }
+.mh-page .ih-form textarea { width: 100%; }
+.mh-page .ih-panel .field-note { margin: 0; }
+.mh-fam { text-decoration: none; }
+.mh-fam:hover { text-decoration: none; color: inherit; }
+.mh-list-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; margin: 0 0 0.75rem; }
+.mh-list-head h2 { margin: 0; font-size: 1.15rem; }
+.mh-list-head span { font-size: 0.85rem; color: var(--muted); }
+.mh-group-anchor { scroll-margin-top: calc(var(--sticky-top, 0px) + 12px); }
+.mh-page .ih-act-del { font-family: inherit; }
+.mh-history h2 { margin: 0; }
+.mh-history .data-table td { vertical-align: top; }
+.mh-history .ih-tx-mat strong { display: block; }
+.mh-history .ih-tx-mat span { color: var(--muted); font-size: 0.82rem; }
+@media (max-width: 980px) {
+    .mh-forms { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+}
+@media (max-width: 760px) {
+    .mh-page .ih-row:not(.ih-has-actions) { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "size kg" "rolls rolls"; }
+    .mh-page .ih-row .ih-roll-cell:empty { display: none; }
+    /* empty grid rows still add their gap: use margins instead so a plain row stays one line tall */
+    .mh-page .ih-row { row-gap: 0; }
+    .mh-page .ih-row .ih-roll-cell:not(:empty), .mh-page .ih-row.ih-open .ih-actions { margin-top: 0.45rem; }
+    .mh-forms .ih-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .mh-forms .ih-wide-phone { grid-column: 1 / -1; }
+}
 </style>
-{% endif %}
-<div class="page-header">
+{% set can_edit = current_user.can_edit() %}
+
+{# ---- Group Machine Hall rows the same way as In-Hall (base film first, e.g. "LD · Natural") — display only #}
+{% set FILMS = ['PET', 'MPET', 'METPET', 'OPP', 'BOPP', 'MOPP', 'CPP', 'MCPP', 'LD', 'LDPE', 'LLDPE', 'HD', 'HDPE', 'PE', 'PP', 'NYLON', 'PVC', 'PEARL', 'PAPER', 'FOIL', 'ALU'] %}
+{% set PALETTE = ['#2f5fb3', '#0f8a7e', '#7353ba', '#c27c0e', '#56657a', '#b8476e', '#5f8f23', '#1b87a6'] %}
+{% set mh = namespace(fams={}, groups={}, kg=0, rolls=0) %}
+{% for item in items %}
+    {% set mtype = (item.material_type or '')|trim %}
+    {% set mname = (item.material_name or '')|trim %}
+    {% if mtype|upper in FILMS %}{% set base, finish = mtype, mname %}
+    {% elif mname|upper in FILMS %}{% set base, finish = mname, mtype %}
+    {% elif mtype %}{% set base, finish = mtype, mname %}
+    {% else %}{% set base, finish = mname, '' %}{% endif %}
+    {% if finish|lower == base|lower %}{% set finish = '' %}{% endif %}
+    {% set fkey = base|lower %}
+    {% set gkey = fkey ~ '|' ~ finish|lower %}
+    {% if fkey not in mh.fams %}{% set _ = mh.fams.update({fkey: {'key': fkey, 'name': base, 'kg': 0, 'rolls': 0, 'count': 0}}) %}{% endif %}
+    {% set fam = mh.fams[fkey] %}
+    {% set _ = fam.update({'kg': fam.kg + (item.kg or 0), 'rolls': fam.rolls + (item.rolls_left or 0), 'count': fam.count + 1}) %}
+    {% if gkey not in mh.groups %}{% set _ = mh.groups.update({gkey: {'family': fkey, 'label': (base ~ ' · ' ~ finish) if finish else base, 'rows': [], 'kg': 0, 'rolls': 0}}) %}{% endif %}
+    {% set grp = mh.groups[gkey] %}
+    {% set size_raw = (item.size or '')|trim %}
+    {% set _ = grp['rows'].append({'item': item, 'n': (size_raw.split(' ')[0]|replace('mm', ''))|float(999999), 'm': ((item.micron or '')|trim).split(' ')[0]|float(-1)}) %}
+    {% set _ = grp.update({'kg': grp.kg + (item.kg or 0), 'rolls': grp.rolls + (item.rolls_left or 0)}) %}
+    {% set mh.kg = mh.kg + (item.kg or 0) %}
+    {% set mh.rolls = mh.rolls + (item.rolls_left or 0) %}
+{% endfor %}
+{% set fam_list = mh.fams.values()|sort(attribute='key')|sort(attribute='kg', reverse=True) %}
+{% for f in fam_list %}{% set _ = f.update({'color': PALETTE[loop.index0 % PALETTE|length], 'rank': loop.index0}) %}{% endfor %}
+{% for g in mh.groups.values() %}{% set _ = g.update({'color': mh.fams[g.family].color, 'rank': mh.fams[g.family].rank}) %}{% endfor %}
+{% set group_list = mh.groups.values()|sort(attribute='label')|sort(attribute='rank') %}
+
+<div class="ih-page mh-page">
+
+<header class="ih-header">
     <div>
         <h1>Machine Hall Stock</h1>
-        <p class="page-subtitle">Material at the machine. Record what is used, how much, and where it went. Printing Materials stock is not changed.</p>
+        <p>Material at the machine. Record what is used, how much, and where it went. Printing Materials stock is not changed.</p>
     </div>
-    <div class="header-actions">
-        <a href="{{ url_for('materials.machine_hall_stock_pdf') }}" class="btn btn-primary" target="_blank">Download PDF</a>
+    <div class="ih-header-actions">
+        {% if can_edit %}
+        {% if items %}
+        <a href="#mh-use" class="ih-btn ih-btn-primary">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Record usage
+        </a>
+        {% endif %}
+        <a href="#hs-add-card" class="ih-btn {{ 'ih-btn-quiet' if items else 'ih-btn-primary' }}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add stock
+        </a>
+        {% endif %}
+        <a href="{{ url_for('materials.machine_hall_stock_pdf') }}" class="ih-btn ih-btn-quiet" target="_blank">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download PDF
+        </a>
     </div>
-</div>
+</header>
 
-{% if current_user.can_edit() %}
-{% if job_suggestions %}
-<div class="card hs-wait-card" id="hs-wait-card">
-    <div class="hs-wait-head">
-        <h2>Materials waiting for jobs</h2>
-        <span class="hs-wait-count">{{ job_suggestions|length }} material{{ '' if job_suggestions|length == 1 else 's' }}</span>
+{% if items %}
+<section class="card ih-summary" aria-label="Machine Hall summary">
+    <div class="ih-totals">
+        <span class="ih-total-label">At the machine now</span>
+        <span class="ih-total-main ih-num">{{ num(mh.kg) }}<small>kg</small></span>
+        <span class="ih-total-sub ih-num"><strong>{{ num(mh.rolls, 2) }}</strong> roll{{ '' if mh.rolls == 1 else 's' }}</span>
+        <span class="ih-total-sub ih-num"><strong>{{ items|length }}</strong> item{{ '' if items|length == 1 else 's' }}</span>
     </div>
-    <p class="field-note hs-wait-note">Open jobs in Job Planning still need these. Enter these exactly as shown so Job Planning matches them automatically.</p>
-    <ul class="hs-wait-list">
-        {% for s in job_suggestions %}
-        <li class="hs-wait-row">
-            <div class="hs-wait-main">
-                <strong class="hs-wait-label">{{ s.label }}</strong>
-                {% if s.status == 'short' %}<span class="badge badge-orange">Short</span>{% else %}<span class="badge badge-red">Not in stock</span>{% endif %}
-                <span class="hs-wait-jobs">for {% for j in s.jobs %}<span class="hs-job">{{ j }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</span>
-            </div>
-            <button type="button" class="btn btn-sm btn-secondary hs-use-btn" data-hs-index="{{ loop.index0 }}" aria-label="Use {{ s.label }} in the add form">Use</button>
+    {% if mh.kg > 0 %}
+    <div class="ih-bar" role="img" aria-label="Share of KG by material: {% for f in fam_list %}{{ f.name }} {{ num(f.kg, 0) }} kg{% if not loop.last %}, {% endif %}{% endfor %}">
+        {% for f in fam_list %}{% if f.kg > 0 %}<span style="width: {{ '%.3f'|format(100 * f.kg / mh.kg) }}%; background: {{ f.color }}" title="{{ f.name }} {{ num(f.kg) }} kg"></span>{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    <ul class="ih-fams">
+        {% for f in fam_list %}
+        <li>
+            <a class="ih-fam mh-fam" href="#mh-fam-{{ loop.index0 }}" aria-label="Go to {{ f.name }}: {{ num(f.kg) }} kg, {{ rolls_text(f.rolls) }}">
+                <span class="ih-dot" style="background: {{ f.color }}" aria-hidden="true"></span>
+                <span class="ih-fam-name">{{ f.name }}</span>
+                <span class="ih-fam-rolls ih-num">{{ rolls_text(f.rolls) }}</span>
+                <span class="ih-fam-kg ih-num">{{ num(f.kg) }} kg</span>
+            </a>
         </li>
         {% endfor %}
     </ul>
-</div>
+</section>
 {% endif %}
 
-<div class="card highlight-card" id="hs-add-card">
-    <h2>Add Machine Hall Stock</h2>
-    <form method="POST" class="form-grid" id="hs-add-form">
-        <input type="hidden" name="action" value="add">
-        <div class="form-group">
-            <label for="material_name">Material Name</label>
-            <input type="text" id="material_name" name="material_name" required{% if job_suggestions %} list="hs-material-names" autocomplete="off"{% endif %}>
-            {% if job_suggestions %}
-            <datalist id="hs-material-names">
-                {% for s in job_suggestions %}<option value="{{ s.name }}" label="{{ s.label }}"></option>{% endfor %}
-            </datalist>
-            <small class="hs-hint" id="hs-name-hint" aria-live="polite" hidden></small>
-            {% endif %}
-        </div>
-        <div class="form-group">
-            <label for="material_type">Type of Material</label>
-            <input type="text" id="material_type" name="material_type" required>
-        </div>
-        <div class="form-group">
-            <label for="size">Size</label>
-            <input type="text" id="size" name="size">
-        </div>
-        <div class="form-group">
-            <label for="micron">Micron</label>
-            <input type="text" id="micron" name="micron">
-        </div>
-        <div class="form-group">
-            <label for="rolls_left">Rolls Left <small>(optional)</small></label>
-            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0">
-        </div>
-        <div class="form-group">
-            <label for="kg">KGs <small>(optional)</small></label>
-            <input type="number" id="kg" name="kg" step="0.001" min="0">
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Machine Hall Stock</button>
-        </div>
-    </form>
-    <p class="field-note">Same name, type, size, and micron are added onto the existing row. Stock transferred from In Hall is added the same way.</p>
-</div>
+{% if can_edit %}
+{% if job_suggestions %}
+<section class="card ih-wait" id="hs-wait-card">
+    <div class="ih-wait-head">
+        <h2>Materials waiting for jobs</h2>
+        <span class="ih-wait-count">{{ job_suggestions|length }} material{{ '' if job_suggestions|length == 1 else 's' }}</span>
+    </div>
+    <p class="field-note ih-wait-note">Open jobs in Job Planning still need these. Enter these exactly as shown so Job Planning matches them automatically.</p>
+    <ul class="ih-wait-list">
+        {% for s in job_suggestions %}
+        <li class="ih-wait-row">
+            <div class="ih-wait-main">
+                <strong class="ih-wait-label">{{ s.label }}</strong>
+                {% if s.status == 'short' %}<span class="badge badge-orange">Short</span>{% else %}<span class="badge badge-red">Not in stock</span>{% endif %}
+                <span class="ih-wait-jobs">for {% for j in s.jobs %}<span class="ih-job">{{ j }}</span>{% if not loop.last %}, {% endif %}{% endfor %}</span>
+            </div>
+            <button type="button" class="ih-act hs-use-btn" data-hs-index="{{ loop.index0 }}" aria-label="Use {{ s.label }} in the add form">Use</button>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
 
-<div class="card highlight-card">
-    <h2>Material Used / Gone</h2>
+<div class="mh-forms">
+<section class="card ih-panel mh-use-panel" id="mh-use" aria-labelledby="mh-use-title">
+    <div class="ih-panel-head">
+        <div class="mh-panel-title">
+            <span class="mh-panel-icon mh-icon-use" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+            <div>
+                <h2 id="mh-use-title">Material Used / Gone</h2>
+                <p>Takes the KG (and rolls) off the Machine Hall row you pick.</p>
+            </div>
+        </div>
+    </div>
     {% if not items %}
     <p class="empty-state">Add Machine Hall stock, or transfer from In Hall, first.</p>
     {% else %}
-    <form method="POST" class="form-grid" id="usage-form">
+    <form method="POST" class="ih-form" id="usage-form">
         <input type="hidden" name="action" value="use">
-        <div class="form-group">
-            <label for="movement_date">Date</label>
-            <input type="date" id="movement_date" name="movement_date" required>
-        </div>
-        <div class="form-group">
-            <label for="item_id">Which Material</label>
+        <div class="ih-field ih-span-2">
+            <label for="item_id">Which material</label>
             <select id="item_id" name="item_id" required>
                 <option value="">Select machine hall material</option>
                 {% for item in items %}
@@ -124,75 +179,154 @@
                 </option>
                 {% endfor %}
             </select>
-            <small class="field-note" id="usage-hint"></small>
+            <small class="field-note mh-hint" id="usage-hint"></small>
         </div>
-        <div class="form-group">
-            <label for="used_kg">How Much (KG)</label>
-            <input type="number" id="used_kg" name="used_kg" step="0.001" min="0">
+        <div class="ih-field ih-wide-phone">
+            <label for="movement_date">Date</label>
+            <input type="date" id="movement_date" name="movement_date" required>
         </div>
-        <div class="form-group">
+        <div class="ih-field ih-half-phone">
+            <label for="used_kg">How much <small>(KG)</small></label>
+            <input type="number" id="used_kg" name="used_kg" step="0.001" min="0" inputmode="decimal">
+        </div>
+        <div class="ih-field ih-half-phone">
             <label for="rolls">Rolls used <small>(optional)</small></label>
-            <input type="number" id="rolls" name="rolls" step="0.01" min="0">
+            <input type="number" id="rolls" name="rolls" step="0.01" min="0" inputmode="decimal">
         </div>
-        <div class="form-group full-width">
-            <label for="where_used">Where Used</label>
+        <div class="ih-field ih-wide-phone">
+            <label for="where_used">Where used</label>
             <input type="text" id="where_used" name="where_used" required placeholder="Job, machine, or order">
         </div>
-        <div class="form-group full-width">
-            <label for="notes">Notes</label>
+        <div class="ih-field ih-span-2">
+            <label for="notes">Notes <small>(optional)</small></label>
             <input type="text" id="notes" name="notes">
         </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Record Usage</button>
+        <div class="ih-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary">Record Usage</button>
         </div>
     </form>
     {% endif %}
+</section>
+
+<section class="card ih-panel" id="hs-add-card" aria-labelledby="mh-add-title">
+    <div class="ih-panel-head">
+        <div class="mh-panel-title">
+            <span class="mh-panel-icon mh-icon-add" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+            <div>
+                <h2 id="mh-add-title">Add Machine Hall Stock</h2>
+                <p>Same name, type, size, and micron are added onto the existing row. Stock transferred from In Hall is added the same way.</p>
+            </div>
+        </div>
+    </div>
+    <form method="POST" class="ih-form" id="hs-add-form">
+        <input type="hidden" name="action" value="add">
+        <div class="ih-field ih-wide-phone">
+            <label for="material_name">Material name</label>
+            <input type="text" id="material_name" name="material_name" required{% if job_suggestions %} list="hs-material-names" autocomplete="off"{% endif %}>
+            {% if job_suggestions %}
+            <datalist id="hs-material-names">
+                {% for s in job_suggestions %}<option value="{{ s.name }}" label="{{ s.label }}"></option>{% endfor %}
+            </datalist>
+            <small class="hs-hint" id="hs-name-hint" aria-live="polite" hidden></small>
+            {% endif %}
+        </div>
+        <div class="ih-field ih-wide-phone">
+            <label for="material_type">Type of material</label>
+            <input type="text" id="material_type" name="material_type" required>
+        </div>
+        <div class="ih-field">
+            <label for="size">Size</label>
+            <input type="text" id="size" name="size">
+        </div>
+        <div class="ih-field">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron">
+        </div>
+        <div class="ih-field">
+            <label for="rolls_left">Rolls left <small>(optional)</small></label>
+            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0" inputmode="decimal">
+        </div>
+        <div class="ih-field">
+            <label for="kg">KGs <small>(optional)</small></label>
+            <input type="number" id="kg" name="kg" step="0.001" min="0" inputmode="decimal">
+        </div>
+        <div class="ih-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary">Save Machine Hall Stock</button>
+        </div>
+    </form>
+</section>
 </div>
 {% endif %}
 
-<div class="card">
-    <h2>Machine Hall Stock</h2>
-    <div class="table-scroll">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Material Name</th>
-                    <th>Type</th>
-                    <th>Size</th>
-                    <th>Micron</th>
-                    <th>Rolls Left</th>
-                    <th>KGs</th>
-                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in items %}
-                <tr>
-                    <td><strong>{{ item.material_name }}</strong></td>
-                    <td>{{ item.material_type }}</td>
-                    <td>{{ item.size or '—' }}</td>
-                    <td>{{ item.micron or '—' }}</td>
-                    <td>{% if item.rolls_left is not none %}{{ "{:,.2f}".format(item.rolls_left) }}{% else %}—{% endif %}</td>
-                    <td>{% if item.kg is not none %}{{ "{:,.3f}".format(item.kg) }}{% else %}—{% endif %}</td>
-                    {% if current_user.can_edit() %}
-                    {{ row_actions(
-                        url_for('materials.edit_hall_stock', item_id=item.id),
-                        url_for('materials.delete_hall_stock', item_id=item.id)
-                    ) }}
-                    {% endif %}
-                </tr>
-                {% else %}
-                <tr><td colspan="{{ 7 if current_user.can_edit() else 6 }}" class="empty">No Machine Hall stock yet</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+{# ------------------------------------------------------------------ Stock list #}
+<section aria-labelledby="mh-list-title">
+    <div class="mh-list-head">
+        <h2 id="mh-list-title">Machine Hall Stock</h2>
+        {% if items %}<span class="ih-num">{{ items|length }} item{{ '' if items|length == 1 else 's' }} · {{ num(mh.kg) }} kg</span>{% endif %}
     </div>
-</div>
+    <div class="card ih-list" id="mh-list">
+        {% for group in group_list %}
+        {% set first_of_family = loop.first or group_list[loop.index0 - 1].family != group.family %}
+        <div class="ih-group{% if first_of_family %} mh-group-anchor{% endif %}"{% if first_of_family %} id="mh-fam-{{ group.rank }}"{% endif %} data-family="{{ group.family }}">
+            <div class="ih-group-head">
+                <span class="ih-dot" style="background: {{ group.color }}" aria-hidden="true"></span>
+                <h3>{{ group.label }}</h3>
+                <span class="ih-group-figs ih-num"><strong>{{ num(group.kg) }} kg</strong> · {{ rolls_text(group.rolls) }}</span>
+            </div>
+            <ul class="ih-rows">
+                {% for row in group['rows']|sort(attribute='m')|sort(attribute='n') %}
+                {% set item = row.item %}
+                {% set size_raw = (item.size or '')|trim %}
+                {% set label = group.label ~ (' ' ~ size_text(item.size) if size_raw else '') ~ (' · ' ~ micron_text(item.micron) if item.micron else '') %}
+                <li class="ih-row{% if can_edit %} ih-has-actions{% endif %}" id="mh-item-{{ item.id }}">
+                    <div class="ih-size">
+                        {% if size_raw and size_raw[-1] in '0123456789' %}
+                        <span class="ih-size-mm">{{ size_raw }}<small>mm</small></span>
+                        {% else %}
+                        <span class="ih-size-mm">{{ size_raw or '—' }}</span>
+                        {% endif %}
+                        {% if item.micron %}<span class="ih-micron">{{ micron_text(item.micron) }}</span>{% endif %}
+                    </div>
+                    <div class="ih-kg">
+                        <span>{% if item.kg is not none %}<strong>{{ num(item.kg) }}</strong><small>kg</small>{% else %}<span class="ih-note">no KG</span>{% endif %}</span>
+                        <span class="ih-kg-rolls">{% if item.rolls_left is not none %}{{ rolls_text(item.rolls_left) }}{% endif %}</span>
+                    </div>
+                    {% if can_edit %}
+                    <button type="button" class="ih-more" aria-expanded="false" aria-controls="mh-act-{{ item.id }}" aria-label="Actions for {{ label }}">
+                        <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4"/></svg>
+                    </button>
+                    {% endif %}
+                    <div class="ih-count-cell">{% if item.rolls_left is not none %}<strong>{{ num(item.rolls_left, 2) }}</strong> roll{{ '' if item.rolls_left == 1 else 's' }}{% else %}—{% endif %}</div>
+                    <div class="ih-roll-cell">{% if item.roll_groups %}{{ roll_pills(item.roll_groups) }}{% if item.untracked_kg > 0 %}<span class="ih-note">+ {{ num(item.untracked_kg) }} kg not split into rolls</span>{% endif %}{% endif %}</div>
+                    {% if can_edit %}
+                    <div class="ih-actions" id="mh-act-{{ item.id }}">
+                        <button type="button" class="ih-act ih-act-go" data-mh-use="{{ item.id }}" aria-label="Record usage of {{ label }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Use
+                        </button>
+                        <a href="{{ url_for('materials.edit_hall_stock', item_id=item.id) }}" class="ih-act" aria-label="Edit {{ label }}">Edit</a>
+                        <form method="POST" action="{{ url_for('materials.delete_hall_stock', item_id=item.id) }}" class="inline-action-form" onsubmit="return confirm('Delete this record permanently?');">
+                            <button type="submit" class="ih-act ih-act-del" aria-label="Delete {{ label }}">Delete</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% else %}
+        <div class="ih-empty">
+            <strong>No Machine Hall stock yet</strong>
+            {% if can_edit %}Add it above, or transfer rolls from In Hall.{% else %}Stock added by the team will show here.{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</section>
 
-<div class="card">
-    <h2>Usage History</h2>
+{# ------------------------------------------------------------------ Usage history #}
+<section class="card ih-tx mh-history" aria-labelledby="mh-history-title">
+    <div class="gl-head"><h2 id="mh-history-title">Usage History</h2>{% if usages %}<span class="gl-head-note">{{ usages|length }} record{{ '' if usages|length == 1 else 's' }}</span>{% endif %}</div>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table gl-stack">
             <thead>
                 <tr>
                     <th>Date</th>
@@ -200,41 +334,43 @@
                     <th>Type</th>
                     <th>Size</th>
                     <th>Micron</th>
-                    <th>KG Used</th>
-                    <th>Rolls</th>
+                    <th class="num">KG Used</th>
+                    <th class="num">Rolls</th>
                     <th>Where Used</th>
                     <th>Notes</th>
-                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                    {% if can_edit %}<th><span class="sr-only">Actions</span></th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for row in usages %}
                 <tr>
-                    <td>{{ row.movement_date.strftime('%d-%m-%Y') }}</td>
-                    <td>{{ row.material_name }}</td>
-                    <td>{{ row.material_type or '—' }}</td>
-                    <td>{{ row.size or '—' }}</td>
-                    <td>{{ row.micron or '—' }}</td>
-                    <td>{% if row.gross_kg %}{{ "{:,.3f}".format(row.gross_kg) }}{% else %}—{% endif %}</td>
-                    <td>{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
-                    <td>{{ row.where_used or '—' }}</td>
-                    <td>{{ row.notes or '—' }}</td>
-                    {% if current_user.can_edit() %}
+                    <td data-label="Date" class="ih-num nowrap">{{ row.movement_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="gl-title gl-wrap">{{ row.material_name }}</td>
+                    <td data-label="Type">{{ row.material_type or '—' }}</td>
+                    <td data-label="Size">{{ row.size or '—' }}</td>
+                    <td data-label="Micron">{{ row.micron or '—' }}</td>
+                    <td data-label="KG Used" class="num"><span class="gl-kg">{% if row.gross_kg %}{{ "{:,.3f}".format(row.gross_kg) }}{% else %}—{% endif %}</span></td>
+                    <td data-label="Rolls" class="num">{% if row.rolls %}{{ "{:,.2f}".format(row.rolls) }}{% else %}—{% endif %}</td>
+                    <td data-label="Where Used" class="gl-wrap">{{ row.where_used or '—' }}</td>
+                    <td data-label="Notes" class="gl-wrap">{{ row.notes or '—' }}</td>
+                    {% if can_edit %}
                     {% set amount_text = (('{:,.3f}'.format(row.gross_kg) ~ ' kg') if row.gross_kg else '') ~ ((' and ' if row.gross_kg else '') ~ '{:,.2f}'.format(row.rolls) ~ ' roll(s)' if row.rolls else '') %}
                     <td class="table-actions">
                         <form method="POST" action="{{ url_for('materials.delete_machine_usage', movement_id=row.id) }}" class="inline-action-form"
                               onsubmit="return confirm({{ (('Delete this usage record? It was made before the stock count, so Machine Hall stock will not change.') if row.before_stock_count else ('Delete this usage record? ' ~ amount_text ~ ' of ' ~ row.material_name ~ ' will be added back to Machine Hall stock.'))|tojson|forceescape }});">
-                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            <button type="submit" class="ih-act ih-act-del">Delete</button>
                         </form>
                     </td>
                     {% endif %}
                 </tr>
                 {% else %}
-                <tr><td colspan="{{ 10 if current_user.can_edit() else 9 }}" class="empty">No usage recorded yet</td></tr>
+                <tr><td colspan="{{ 10 if can_edit else 9 }}" class="empty">No usage recorded yet</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+</section>
+
 </div>
 {% endblock %}
 
@@ -253,6 +389,40 @@
             return;
         }
         hint.textContent = 'Left at machine: ' + opt.dataset.kg + ' kg · ' + opt.dataset.rolls + ' rolls';
+    });
+})();
+</script>
+<script>
+(function () {
+    // Phone: tap a row (or its arrow) to show Use / Edit / Delete for it — same as In-Hall.
+    var list = document.getElementById('mh-list');
+    if (list) {
+        list.addEventListener('click', function (e) {
+            var row = e.target.closest('.ih-row.ih-has-actions');
+            if (!row) return;
+            var toggle = e.target.closest('.ih-more');
+            if (!toggle && (e.target.closest('a, button, form, input, select') || !window.matchMedia('(max-width: 760px)').matches)) return;
+            var open = !row.classList.contains('ih-open');
+            Array.prototype.forEach.call(list.querySelectorAll('.ih-row.ih-open'), function (r) {
+                r.classList.remove('ih-open');
+                r.querySelector('.ih-more').setAttribute('aria-expanded', 'false');
+            });
+            row.classList.toggle('ih-open', open);
+            row.querySelector('.ih-more').setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    }
+    var select = document.getElementById('item_id');
+    var panel = document.getElementById('mh-use');
+    if (!select || !panel) return;
+    var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-mh-use]'), function (btn) {
+        btn.addEventListener('click', function () {
+            select.value = btn.getAttribute('data-mh-use');
+            select.dispatchEvent(new Event('change'));
+            panel.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+            var kg = document.getElementById('used_kg');
+            if (kg) kg.focus({ preventScroll: true });
+        });
     });
 })();
 </script>

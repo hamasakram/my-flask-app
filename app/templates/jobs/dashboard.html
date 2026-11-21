@@ -3,6 +3,8 @@
 {% block title %}Job Planning - RN COLOUR{% endblock %}
 {% block content %}
 {% set full_access = not current_user.is_dashboard_only() %}
+{% include "materials/_glass_kit.html" %}
+{% include "jobs/_glass_jobs.html" %}
 <div class="page-header">
     <div>
         <h1>Job Planning</h1>
@@ -72,13 +74,13 @@
 
 <div class="card">
     <div class="card-header-row">
-        <h2>Open Jobs</h2>
+        <h2>Open Jobs<span class="gl-count">{{ stats.open|length }}</span></h2>
         {% if full_access %}
         <a href="{{ url_for('jobs.pending_jobs') }}" class="btn btn-sm btn-secondary">Open Pending Jobs</a>
         {% endif %}
     </div>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table gl-stack">
             <thead>
                 <tr>
                     <th>Job No</th>
@@ -95,15 +97,15 @@
                 {% for row in stats.open %}
                 {% set job = row.job %}
                 <tr{% if not row.ready %} class="job-row-short"{% endif %}>
-                    <td><strong>{{ job.job_number }}</strong></td>
-                    <td>{{ job.job_date.strftime('%d-%m-%Y') }}</td>
-                    <td>{{ job.job_name }}</td>
-                    <td>{{ job.customer_name or '—' }}</td>
-                    <td class="job-produce-cell">{{ jm.produce(job) }}</td>
-                    <td>{{ jm.status_badge(job) }}</td>
-                    <td class="job-nowrap">{{ jm.verdict_badge(row) }}</td>
+                    <td data-label="Job No" class="job-nowrap"><span class="gjob-no">{{ job.job_number }}</span></td>
+                    <td data-label="Date" class="job-nowrap">{{ job.job_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="gl-title gl-wrap">{{ job.job_name }}</td>
+                    <td data-label="Customer / Party" class="gl-wrap">{{ job.customer_name or '—' }}</td>
+                    <td data-label="To Produce" class="job-produce-cell">{{ jm.produce(job) }}</td>
+                    <td data-label="Status">{{ jm.status_badge(job) }}</td>
+                    <td data-label="Stock Check" class="job-nowrap gjob-verdict">{{ jm.verdict_badge(row) }}</td>
                     {% if full_access %}
-                    <td><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a></td>
+                    <td class="table-actions"><a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a></td>
                     {% endif %}
                 </tr>
                 {% else %}
@@ -122,7 +124,7 @@
         {% endif %}
     </div>
     <div class="table-scroll">
-        <table class="data-table compact">
+        <table class="data-table compact gl-stack">
             <thead>
                 <tr>
                     <th>Job No</th>
@@ -130,26 +132,26 @@
                     <th>Job Name</th>
                     <th>Customer / Party</th>
                     <th>To Produce</th>
-                    <th>Materials</th>
+                    <th class="num">Materials</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
                 {% for job in stats.recent %}
                 <tr>
-                    <td>
+                    <td data-label="Job No" class="job-nowrap">
                         {% if full_access %}
-                        <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link"><strong>{{ job.job_number }}</strong></a>
+                        <a href="{{ url_for('jobs.job_detail', job_id=job.id) }}" class="job-link gjob-no">{{ job.job_number }}</a>
                         {% else %}
-                        <strong>{{ job.job_number }}</strong>
+                        <span class="gjob-no">{{ job.job_number }}</span>
                         {% endif %}
                     </td>
-                    <td>{{ job.job_date.strftime('%d-%m-%Y') }}</td>
-                    <td>{{ job.job_name }}</td>
-                    <td>{{ job.customer_name or '—' }}</td>
-                    <td class="job-produce-cell">{{ jm.produce(job) }}</td>
-                    <td>{{ job.materials|length }}</td>
-                    <td>{{ jm.status_badge(job) }}</td>
+                    <td data-label="Date" class="job-nowrap">{{ job.job_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="gl-title gl-wrap">{{ job.job_name }}</td>
+                    <td data-label="Customer / Party" class="gl-wrap">{{ job.customer_name or '—' }}</td>
+                    <td data-label="To Produce" class="job-produce-cell">{{ jm.produce(job) }}</td>
+                    <td data-label="Materials" class="num">{{ job.materials|length }}</td>
+                    <td data-label="Status">{{ jm.status_badge(job) }}</td>
                 </tr>
                 {% else %}
                 <tr><td colspan="7" class="empty">No jobs added yet</td></tr>

@@ -10,7 +10,8 @@
 
 <div id="partnership-fields" class="form-group full-width" hidden>
     <h3>Partnership Details</h3>
-    <table class="data-table compact" id="partner-lines-table">
+    <div class="sh-scroll-x">
+    <table class="data-table compact sh-table" id="partner-lines-table">
         <thead>
             <tr>
                 <th>#</th>
@@ -44,6 +45,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     <template id="partner-line-template">
         <tr class="partner-line-row">
             <td class="line-num"></td>

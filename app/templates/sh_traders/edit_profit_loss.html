@@ -4,7 +4,7 @@
 {% block content %}
 {{ sh_page_header('Edit Profit / Loss Record') }}
 
-<div class="card">
+<div class="card sh-edit-card">
     <form method="POST" class="form-grid" id="pl-form">
         <div class="form-group">
             <label for="record_date">Date</label>
@@ -36,7 +36,7 @@
         </div>
         <div class="form-group">
             <label for="purchase_total_display">Purchase Total (auto)</label>
-            <input type="text" id="purchase_total_display" readonly class="readonly-field">
+            <input type="text" id="purchase_total_display" readonly class="readonly-field sh-readout">
         </div>
         <div class="form-group">
             <label for="sold_kg">Total Sold (KG)</label>
@@ -48,7 +48,7 @@
         </div>
         <div class="form-group">
             <label for="sold_total_display">Sold Total (auto)</label>
-            <input type="text" id="sold_total_display" readonly class="readonly-field">
+            <input type="text" id="sold_total_display" readonly class="readonly-field sh-readout">
         </div>
         <div class="form-group">
             <label>Profit (auto)</label>

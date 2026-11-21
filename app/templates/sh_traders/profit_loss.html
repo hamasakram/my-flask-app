@@ -7,13 +7,13 @@
 {{ sh_page_header('Profit / Loss Records', 'Track purchase vs sale profit or loss by broker — does not affect ledgers') }}
 {{ sh_bank_selector(banks, current_bank) }}
 
-<p class="field-note balance-note">
-    These records are for your internal profit/loss tracking only.
-    Bank payments, client ledger, and supplier ledger are <strong>not</strong> changed here.
+<p class="callout callout-blue sh-note">
+    <span>These records are for your internal profit/loss tracking only.
+    Bank payments, client ledger, and supplier ledger are <strong>not</strong> changed here.</span>
 </p>
 
 {% if current_user.can_edit() %}
-<div class="card highlight-card">
+<div class="card highlight-card sh-no-print">
     <h2>New Record</h2>
     <form method="POST" class="form-grid" id="pl-form">
         <div class="form-group">
@@ -49,7 +49,7 @@
         </div>
         <div class="form-group">
             <label for="purchase_total_display">Purchase Total (auto)</label>
-            <input type="text" id="purchase_total_display" readonly class="readonly-field" value="0.00">
+            <input type="text" id="purchase_total_display" readonly class="readonly-field sh-readout" value="0.00">
             <small class="field-note">KG × Purchase Rate / KG</small>
         </div>
 
@@ -64,7 +64,7 @@
         </div>
         <div class="form-group">
             <label for="sold_total_display">Sold Total (auto)</label>
-            <input type="text" id="sold_total_display" readonly class="readonly-field" value="0.00">
+            <input type="text" id="sold_total_display" readonly class="readonly-field sh-readout" value="0.00">
             <small class="field-note">KG × Sold Rate / KG</small>
         </div>
 
@@ -90,61 +90,65 @@
 </div>
 {% endif %}
 
-<div class="stats-grid">
+<div class="stats-grid sh-stats">
     {% for key, bucket in broker_summaries.items() %}
-    <div class="stat-card">
+    <div class="stat-card {{ 'accent-green' if bucket.profit - bucket.loss >= 0 else 'accent-red' }}">
         <span class="stat-label">{{ bucket.label }}</span>
-        <span class="stat-value">₨ {{ "{:,.2f}".format(bucket.profit - bucket.loss) }}</span>
-        <small class="field-note">Profit ₨ {{ "{:,.2f}".format(bucket.profit) }} · Loss ₨ {{ "{:,.2f}".format(bucket.loss) }} · {{ bucket.count }} record(s)</small>
+        <span class="stat-value"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bucket.profit - bucket.loss) }}</span>
+        <dl class="sh-kv">
+            <div><dt>Profit</dt><dd class="text-success"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bucket.profit) }}</dd></div>
+            <div><dt>Loss</dt><dd class="text-danger"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(bucket.loss) }}</dd></div>
+            <div><dt>Records</dt><dd>{{ bucket.count }}</dd></div>
+        </dl>
     </div>
     {% endfor %}
 </div>
 
 <div class="card">
     <div class="card-header-row">
-        <h2>Records</h2>
-        <div class="quick-actions inline-actions">
+        <h2>Records<span class="sh-count">{{ records|length }}</span></h2>
+        <div class="quick-actions inline-actions sh-no-print">
             <a href="{{ url_for('sh_main.profit_loss_report_pdf') }}" class="btn btn-secondary">Download All PDF</a>
             <a href="{{ url_for('sh_main.profit_loss_report_pdf', broker='hamas') }}" class="btn btn-secondary">Hamas PDF</a>
             <a href="{{ url_for('sh_main.profit_loss_report_pdf', broker='akram') }}" class="btn btn-secondary">Akram PDF</a>
         </div>
     </div>
     <div class="table-scroll">
-        <table class="data-table">
+        <table class="data-table sh-table">
             <thead>
                 <tr>
                     <th>Date</th>
                     <th>Material</th>
                     <th>Size</th>
-                    <th>Pur. KG</th>
-                    <th>Pur. Rate</th>
-                    <th>Pur. Total</th>
-                    <th>Sold KG</th>
-                    <th>Sold Rate</th>
-                    <th>Sold Total</th>
-                    <th>Profit</th>
-                    <th>Loss</th>
+                    <th class="num">Pur. KG</th>
+                    <th class="num">Pur. Rate</th>
+                    <th class="num">Pur. Total</th>
+                    <th class="num">Sold KG</th>
+                    <th class="num">Sold Rate</th>
+                    <th class="num">Sold Total</th>
+                    <th class="num">Profit</th>
+                    <th class="num">Loss</th>
                     <th>Broker</th>
-                    <th>PDF</th>
-                    {% if current_user.can_edit() %}<th>Actions</th>{% endif %}
+                    <th class="sh-col-pdf">PDF</th>
+                    {% if current_user.can_edit() %}<th class="sh-col-actions">Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for r in records %}
                 <tr>
-                    <td>{{ r.record_date.strftime('%d-%m-%Y') }}</td>
+                    <td class="nowrap">{{ r.record_date.strftime('%d-%m-%Y') }}</td>
                     <td><strong>{{ r.material_name }}</strong></td>
                     <td>{{ r.size or '—' }}</td>
-                    <td>{{ "{:,.1f}".format(r.purchase_kg) }}</td>
-                    <td>{{ "{:,.2f}".format(r.purchase_rate_per_kg) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(r.purchase_total) }}</td>
-                    <td>{{ "{:,.1f}".format(r.sold_kg) }}</td>
-                    <td>{{ "{:,.2f}".format(r.sold_rate_per_kg) }}</td>
-                    <td>₨ {{ "{:,.2f}".format(r.sold_total) }}</td>
-                    <td class="text-success">{% if r.profit_amount %}₨ {{ "{:,.2f}".format(r.profit_amount) }}{% else %}—{% endif %}</td>
-                    <td class="text-danger">{% if r.loss_amount %}₨ {{ "{:,.2f}".format(r.loss_amount) }}{% else %}—{% endif %}</td>
-                    <td>{{ r.broker_label }}</td>
-                    <td><a href="{{ url_for('sh_main.profit_loss_record_pdf', record_id=r.id) }}" class="btn btn-secondary btn-sm">PDF</a></td>
+                    <td class="num">{{ "{:,.1f}".format(r.purchase_kg) }}</td>
+                    <td class="num">{{ "{:,.2f}".format(r.purchase_rate_per_kg) }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.purchase_total) }}</td>
+                    <td class="num">{{ "{:,.1f}".format(r.sold_kg) }}</td>
+                    <td class="num">{{ "{:,.2f}".format(r.sold_rate_per_kg) }}</td>
+                    <td class="num"><span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.sold_total) }}</td>
+                    <td class="num text-success">{% if r.profit_amount %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.profit_amount) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                    <td class="num text-danger">{% if r.loss_amount %}<span class="sh-cur">₨</span>{{ "{:,.2f}".format(r.loss_amount) }}{% else %}<span class="sh-nil">—</span>{% endif %}</td>
+                    <td><span class="chip {{ 'chip-blue' if r.broker == 'hamas' else 'chip-violet' }}">{{ r.broker_label }}</span></td>
+                    <td class="sh-col-pdf"><a href="{{ url_for('sh_main.profit_loss_record_pdf', record_id=r.id) }}" class="btn btn-secondary btn-sm">PDF</a></td>
                     {% if current_user.can_edit() %}
                     {{ row_actions(
                         url_for('stock_edits.edit_sh_profit_loss', record_id=r.id),

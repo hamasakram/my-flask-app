@@ -5,7 +5,7 @@
 {% block content %}
 {{ sh_page_header('Edit Purchase') }}
 
-<div class="card">
+<div class="card sh-edit-card">
     <form method="POST" class="form-grid" id="purchase-form">
         <div class="form-group">
             <label for="date_purchased">Date Purchased</label>
@@ -41,7 +41,7 @@
         </div>
         <div class="form-group">
             <label for="total_amount_display">Total Amount (auto)</label>
-            <input type="text" id="total_amount_display" readonly class="readonly-field">
+            <input type="text" id="total_amount_display" readonly class="readonly-field sh-readout">
             <small class="field-note">Total Purchased (KG) × Amount / KG</small>
         </div>
         <div class="form-group">
@@ -50,7 +50,7 @@
         </div>
         <div class="form-group">
             <label for="client_total_amount_display">Client Total Amount (auto)</label>
-            <input type="text" id="client_total_amount_display" readonly class="readonly-field">
+            <input type="text" id="client_total_amount_display" readonly class="readonly-field sh-readout">
             <small class="field-note">Total Purchased (KG) × Amount / KG for Client</small>
         </div>
         <div class="form-group">
