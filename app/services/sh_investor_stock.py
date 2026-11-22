@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app import db
 from app.models import (
@@ -327,28 +327,74 @@ def apply_payment_fields(payment: ShInvestorSalePayment, data: dict, payment_dat
     payment.notes = data["notes"]
 
 
-def get_partner_summaries(partners: list[ShPartnerCompany]) -> list[dict]:
+def _sold_kg_by_purchase() -> dict[int, float]:
+    """``get_purchase_sold_kg`` for every purchase of the current bank in one statement.
+
+    Each value is the same ``coalesce(sum(quantity_kg), 0)`` over the same rows as the
+    per-purchase query (a correlated subquery per purchase), only without a round trip each.
+    """
+    sold = (
+        select(func.coalesce(func.sum(ShInvestorSale.quantity_kg), 0))
+        .where(ShInvestorSale.purchase_id == ShInvestorPurchase.id)
+        .correlate(ShInvestorPurchase)
+        .scalar_subquery()
+    )
+    query = filter_by_bank(db.session.query(ShInvestorPurchase.id, sold), ShInvestorPurchase)
+    return {purchase_id: float(total or 0) for purchase_id, total in query}
+
+
+def _paid_by_sale() -> dict[int, float]:
+    """``get_sale_paid`` for every sale of the current bank in one statement."""
+    paid = (
+        select(func.coalesce(func.sum(ShInvestorSalePayment.amount_received), 0))
+        .where(ShInvestorSalePayment.sale_id == ShInvestorSale.id)
+        .correlate(ShInvestorSale)
+        .scalar_subquery()
+    )
+    query = filter_by_bank(db.session.query(ShInvestorSale.id, paid), ShInvestorSale)
+    return {sale_id: float(total or 0) for sale_id, total in query}
+
+
+def get_partner_summaries(
+    partners: list[ShPartnerCompany],
+    purchases: list[ShInvestorPurchase] | None = None,
+    sales: list[ShInvestorSale] | None = None,
+    paid_by_sale: dict[int, float] | None = None,
+) -> list[dict]:
+    """Per-investor totals.
+
+    ``purchases``/``sales`` may be this request's ``scoped_purchases_query().all()`` /
+    ``scoped_sales_query().all()`` and ``paid_by_sale`` the matching ``get_sale_paid`` values;
+    each partner's rows are then picked from them (same rows, same order) instead of being
+    queried again per partner.
+    """
     summaries = []
     for partner in partners:
-        purchases = (
-            scoped_purchases_query()
-            .filter(ShInvestorPurchase.partner_company_id == partner.id)
-            .all()
-        )
-        sales = (
-            scoped_sales_query()
-            .filter(ShInvestorSale.partner_company_id == partner.id)
-            .all()
-        )
-        invested = sum(float(p.investment_amount or 0) for p in purchases)
-        billed = sum(float(s.total_amount or 0) for s in sales)
-        collected = sum(get_sale_paid(s.id) for s in sales)
+        if purchases is None:
+            partner_purchases = (
+                scoped_purchases_query()
+                .filter(ShInvestorPurchase.partner_company_id == partner.id)
+                .all()
+            )
+        else:
+            partner_purchases = [p for p in purchases if p.partner_company_id == partner.id]
+        if sales is None:
+            partner_sales = (
+                scoped_sales_query()
+                .filter(ShInvestorSale.partner_company_id == partner.id)
+                .all()
+            )
+        else:
+            partner_sales = [s for s in sales if s.partner_company_id == partner.id]
+        invested = sum(float(p.investment_amount or 0) for p in partner_purchases)
+        billed = sum(float(s.total_amount or 0) for s in partner_sales)
+        collected = sum(_sale_paid(s, paid_by_sale) for s in partner_sales)
         outstanding = billed - collected
         summaries.append(
             {
                 "partner": partner,
-                "purchase_count": len(purchases),
-                "sale_count": len(sales),
+                "purchase_count": len(partner_purchases),
+                "sale_count": len(partner_sales),
                 "invested": invested,
                 "billed": billed,
                 "collected": collected,
@@ -358,15 +404,33 @@ def get_partner_summaries(partners: list[ShPartnerCompany]) -> list[dict]:
     return summaries
 
 
+def _sale_paid(sale: ShInvestorSale, paid_by_sale: dict[int, float] | None) -> float:
+    if paid_by_sale is not None and sale.id in paid_by_sale:
+        return paid_by_sale[sale.id]
+    return get_sale_paid(sale.id)
+
+
+def _remaining_kg(purchase: ShInvestorPurchase, sold_by_purchase: dict[int, float]) -> float:
+    """``get_purchase_remaining_kg`` using the preloaded sold totals."""
+    sold = sold_by_purchase.get(purchase.id)
+    if sold is None:
+        sold = get_purchase_sold_kg(purchase.id)
+    return max(0.0, float(purchase.quantity_kg or 0) - sold)
+
+
 def build_page_context() -> dict:
     purchases = scoped_purchases_query().all()
     sales = scoped_sales_query().all()
     payments = scoped_payments_query().all()
     partners = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
+    sold_by_purchase = _sold_kg_by_purchase()
+    paid_by_sale = _paid_by_sale()
 
     purchase_rows = []
+    remaining_by_purchase = {}
     for purchase in purchases:
-        remaining_kg = get_purchase_remaining_kg(purchase)
+        remaining_kg = _remaining_kg(purchase, sold_by_purchase)
+        remaining_by_purchase[purchase.id] = remaining_kg
         purchase_rows.append(
             {
                 "purchase": purchase,
@@ -377,7 +441,7 @@ def build_page_context() -> dict:
 
     sale_rows = []
     for sale in sales:
-        paid = get_sale_paid(sale.id)
+        paid = _sale_paid(sale, paid_by_sale)
         sale_rows.append(
             {
                 "sale": sale,
@@ -396,7 +460,7 @@ def build_page_context() -> dict:
                 "id": purchase.id,
                 "date": purchase.purchase_date.strftime("%d-%m-%Y"),
                 "material": purchase.material_name,
-                "remaining_kg": get_purchase_remaining_kg(purchase),
+                "remaining_kg": remaining_by_purchase[purchase.id],
                 "investment": float(purchase.investment_amount or 0),
             }
         )
@@ -428,7 +492,9 @@ def build_page_context() -> dict:
         "sale_rows": sale_rows,
         "payments": payments,
         "partners": partners,
-        "partner_summaries": get_partner_summaries(partners),
+        "partner_summaries": get_partner_summaries(
+            partners, purchases=purchases, sales=sales, paid_by_sale=paid_by_sale
+        ),
         "partner_purchase_map": partner_purchase_map,
         "partner_sale_map": partner_sale_map,
         "client_sale_map": client_sale_map,

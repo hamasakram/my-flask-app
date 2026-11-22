@@ -4,6 +4,7 @@ import uuid
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.orm import joinedload, lazyload
 
 from app import db
 from app.models import PrintJob
@@ -18,8 +19,14 @@ def require_edit_access():
         abort(403)
 
 
-def _get_job_or_404(job_id: int) -> PrintJob:
-    job = db.session.get(PrintJob, job_id)
+def _get_job_or_404(job_id: int, *, with_inks: bool = True, with_creator: bool = False) -> PrintJob:
+    # Pages that never show a job's (legacy) ink lines skip loading them up front;
+    # job.inks still loads on first use. Pages that show "Created by" read the user in the
+    # same query.
+    options = [] if with_inks else [lazyload(PrintJob.inks)]
+    if with_creator:
+        options.append(joinedload(PrintJob.created_by))
+    job = db.session.get(PrintJob, job_id, options=options)
     if not job:
         abort(404)
     return job
@@ -74,7 +81,9 @@ def new_job():
             return _done(url_for("jobs.job_detail", job_id=existing.id))
         try:
             data = jobs_service.parse_job_form(request.form, material_catalog, ink_catalog)
-            job = jobs_service.create_job(data, current_user.id, form_token=token)
+            job = jobs_service.create_job(
+                data, current_user.id, form_token=token, material_catalog=material_catalog
+            )
             log_audit(current_user.id, "CREATE", "PrintJob", job.id, _job_summary(job))
             db.session.commit()
         except ValueError as exc:
@@ -128,7 +137,7 @@ def pending_jobs():
 @jobs_bp.route("/<int:job_id>")
 @login_required
 def job_detail(job_id):
-    job = _get_job_or_404(job_id)
+    job = _get_job_or_404(job_id, with_inks=False, with_creator=True)
     return render_template(
         "jobs/job_detail.html",
         check=jobs_service.evaluate_job(job),
@@ -148,7 +157,7 @@ def edit_job(job_id):
     if request.method == "POST":
         try:
             data = jobs_service.parse_job_form(request.form, material_catalog, ink_catalog)
-            jobs_service.update_job(job, data)
+            jobs_service.update_job(job, data, material_catalog=material_catalog)
             log_audit(current_user.id, "UPDATE", "PrintJob", job.id, _job_summary(job))
             db.session.commit()
         except ValueError as exc:
@@ -167,7 +176,7 @@ def edit_job(job_id):
 @login_required
 def change_status(job_id):
     require_edit_access()
-    job = _get_job_or_404(job_id)
+    job = _get_job_or_404(job_id, with_inks=False)
     status = request.form.get("status", "").strip()
     try:
         old_label = job.status_label
@@ -211,7 +220,7 @@ def delete_job(job_id):
 def job_pdf(job_id):
     from app.services.print_jobs_pdf import generate_job_card_pdf
 
-    job = _get_job_or_404(job_id)
+    job = _get_job_or_404(job_id, with_inks=False, with_creator=True)
     buffer = generate_job_card_pdf(jobs_service.evaluate_job(job))
     return send_file(
         buffer,

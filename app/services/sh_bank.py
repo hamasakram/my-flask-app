@@ -1,9 +1,22 @@
-from flask import session
+from flask import g, has_request_context, session
 from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import db
 from app.models import ShBank
+
+
+def _hold_for_request(bank: ShBank | None) -> ShBank | None:
+    """Keep the current bank referenced until the request ends.
+
+    The session's identity map only holds objects weakly, so without this the bank was
+    dropped after every ``get_current_sh_bank_id()`` call and ``db.session.get`` had to
+    query it again (hundreds of identical SELECTs on the ledger pages). The lookup itself
+    is unchanged and still reads the live row; this only stops it being thrown away.
+    """
+    if bank is not None and has_request_context():
+        g._sh_current_bank_ref = bank
+    return bank
 
 
 def get_all_banks() -> list[ShBank]:
@@ -54,15 +67,15 @@ def get_current_sh_bank() -> ShBank | None:
         if bank_id:
             bank = db.session.get(ShBank, bank_id)
             if bank:
-                return bank
+                return _hold_for_request(bank)
 
         bank = get_default_bank() or ensure_default_sh_bank()
         if bank:
             session["sh_bank_id"] = bank.id
-        return bank
+        return _hold_for_request(bank)
     except SQLAlchemyError:
         db.session.rollback()
-        return ensure_default_sh_bank()
+        return _hold_for_request(ensure_default_sh_bank())
 
 
 def get_current_sh_bank_id() -> int | None:
@@ -74,7 +87,7 @@ def set_current_sh_bank(bank_id: int) -> ShBank | None:
     bank = db.session.get(ShBank, bank_id)
     if bank:
         session["sh_bank_id"] = bank.id
-    return bank
+    return _hold_for_request(bank)
 
 
 def filter_by_bank(query, model):

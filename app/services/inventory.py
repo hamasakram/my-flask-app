@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app import db
 from app.models import AppSetting, AuditLog, InkType, InventoryTransaction, OpeningStock
@@ -147,23 +147,52 @@ def calculate_live_stock(
     if ink_type_id:
         ink_query = ink_query.filter_by(id=ink_type_id)
 
-    inks = ink_query.order_by(InkType.company_id, InkType.name).all()
-    results = []
+    # One query: every ink with its opening quantity and transaction sums as correlated
+    # sub-selects (the same filters get_opening_quantity / _sum_transactions use per ink).
+    def tx_sum(transaction_type):
+        return (
+            select(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
+            .where(
+                InventoryTransaction.company_id == InkType.company_id,
+                InventoryTransaction.ink_type_id == InkType.id,
+                InventoryTransaction.transaction_type == transaction_type,
+            )
+            .scalar_subquery()
+        )
 
-    for ink in inks:
-        opening = get_opening_quantity(ink.company_id, ink.id)
-        received = _sum_transactions(
-            ink.company_id, ink.id, InventoryTransaction.TRANSACTION_RECEIVED
+    opening_quantity = (
+        select(OpeningStock.quantity)
+        .where(OpeningStock.company_id == InkType.company_id, OpeningStock.ink_type_id == InkType.id)
+        .limit(1)
+        .scalar_subquery()
+    )
+    rows = (
+        ink_query.with_entities(
+            InkType,
+            opening_quantity,
+            tx_sum(InventoryTransaction.TRANSACTION_RECEIVED),
+            tx_sum(InventoryTransaction.TRANSACTION_ISSUED),
+            tx_sum(InventoryTransaction.TRANSACTION_USED),
         )
-        issued = _sum_transactions(
-            ink.company_id, ink.id, InventoryTransaction.TRANSACTION_ISSUED
-        )
-        used = _sum_transactions(
-            ink.company_id, ink.id, InventoryTransaction.TRANSACTION_USED
-        )
+        .order_by(InkType.company_id, InkType.name)
+        .all()
+    )
+    results = []
+    default_threshold = None  # the app-wide default, read once (only if an ink needs it)
+
+    for ink, opening, received, issued, used in rows:
+        opening = opening if opening is not None else 0.0
+        received = float(received)
+        issued = float(issued)
+        used = float(used)
         stored = opening + received - issued
         active = max(0.0, issued - used)
-        threshold = get_low_stock_threshold(ink)
+        if ink.low_stock_threshold is not None:
+            threshold = ink.low_stock_threshold
+        else:
+            if default_threshold is None:
+                default_threshold = get_low_stock_threshold(ink)
+            threshold = default_threshold
 
         results.append(
             {

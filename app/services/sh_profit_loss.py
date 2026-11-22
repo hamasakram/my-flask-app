@@ -139,8 +139,9 @@ def get_broker_summaries(records: list[ShProfitLossRecord]) -> dict:
 def get_dashboard_stats(today: date) -> dict:
     month_start = today.replace(day=1)
     query = scoped_records_query()
-    month_records = query.filter(ShProfitLossRecord.record_date >= month_start).all()
     all_records = query.all()
+    # Same rows and order as query.filter(record_date >= month_start) — without a 2nd query.
+    month_records = [r for r in all_records if r.record_date >= month_start]
 
     month_profit = sum(float(r.profit_amount or 0) for r in month_records)
     month_loss = sum(float(r.loss_amount or 0) for r in month_records)

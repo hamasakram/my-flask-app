@@ -120,12 +120,43 @@ COLUMN_MIGRATIONS = {
 }
 
 
-def _add_column_if_missing(table: str, column: str, col_type: str):
-    inspector = inspect(db.engine)
-    if not inspector.has_table(table):
-        return
+# Columns of every table, read ONCE for the COLUMN_MIGRATIONS loop at start-up. Checking each of the
+# ~70 migration columns with a fresh inspector cost 3-4 database round trips per column, which
+# made start-up take many seconds on a remote Postgres. Same checks, same ALTERs, fewer trips.
+_column_cache: dict[str, set[str]] | None = None
 
-    columns = {col["name"] for col in inspector.get_columns(table)}
+
+def _load_column_cache() -> dict[str, set[str]]:
+    cache: dict[str, set[str]] = {}
+    if db.engine.dialect.name == "postgresql":
+        with db.engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    "SELECT table_name, column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema()"
+                )
+            )
+            for table_name, column_name in rows:
+                cache.setdefault(table_name, set()).add(column_name)
+    else:
+        inspector = inspect(db.engine)
+        for table_name in inspector.get_table_names():
+            cache[table_name] = {col["name"] for col in inspector.get_columns(table_name)}
+    return cache
+
+
+def _add_column_if_missing(table: str, column: str, col_type: str):
+    columns = _column_cache.get(table) if _column_cache is not None else None
+    if columns is None:
+        # Table not seen when the cache was built (e.g. created later in start-up):
+        # check it live, exactly as before.
+        inspector = inspect(db.engine)
+        if not inspector.has_table(table):
+            return
+        columns = {col["name"] for col in inspector.get_columns(table)}
+        if _column_cache is not None:
+            _column_cache[table] = columns
+
     if column not in columns:
         try:
             with db.engine.begin() as conn:
@@ -133,6 +164,7 @@ def _add_column_if_missing(table: str, column: str, col_type: str):
         except Exception as exc:
             if "already exists" not in str(exc).lower() and "duplicatecolumn" not in str(exc).lower():
                 raise
+        columns.add(column)
 
 
 def _drop_ink_unique_constraint():
@@ -753,9 +785,14 @@ def ensure_schema():
 
     db.create_all()
 
-    for table, columns in COLUMN_MIGRATIONS.items():
-        for column, col_type in columns.items():
-            _add_column_if_missing(table, column, col_type)
+    global _column_cache
+    _column_cache = _load_column_cache()  # read all columns once for the migration loop
+    try:
+        for table, columns in COLUMN_MIGRATIONS.items():
+            for column, col_type in columns.items():
+                _add_column_if_missing(table, column, col_type)
+    finally:
+        _column_cache = None  # later start-up steps may rebuild tables: check them live
 
     _drop_ink_unique_constraint()
     _drop_materials_unique_constraint()

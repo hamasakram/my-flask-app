@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app import db
 from app.models import Material, MaterialTransaction, ProductionJob
@@ -67,10 +67,33 @@ def get_stock_used_total(material_id: int) -> float:
     )
 
 
-def get_current_stock(material: Material) -> float:
-    return float(material.initial_kg) + get_stock_in_total(material.id) - get_stock_used_total(
-        material.id
+def _stock_sum(material_id_column, transaction_type: str):
+    """coalesce(sum(quantity), 0) for one material and type: the exact filter of
+    get_stock_in_total / get_stock_used_total, as a (correlated) sub-select."""
+    return (
+        select(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
+        .where(
+            MaterialTransaction.material_id == material_id_column,
+            MaterialTransaction.transaction_type == transaction_type,
+        )
+        .scalar_subquery()
     )
+
+
+def get_stock_totals(material_id: int) -> tuple[float, float]:
+    """(Stock In total, Stock Left/used total) for one material in one round-trip."""
+    stock_in, used = db.session.execute(
+        select(
+            _stock_sum(material_id, MaterialTransaction.TRANSACTION_STOCK_IN),
+            _stock_sum(material_id, MaterialTransaction.TRANSACTION_STOCK_LEFT),
+        )
+    ).one()
+    return float(stock_in), float(used)
+
+
+def get_current_stock(material: Material) -> float:
+    stock_in, used = get_stock_totals(material.id)
+    return float(material.initial_kg) + stock_in - used
 
 
 def adjust_current_stock(material_id: int, new_current_kg: float) -> Material:
@@ -79,22 +102,29 @@ def adjust_current_stock(material_id: int, new_current_kg: float) -> Material:
     if not material:
         raise ValueError("Material not found.")
 
-    stock_in = get_stock_in_total(material.id)
-    used = get_stock_used_total(material.id)
+    stock_in, used = get_stock_totals(material.id)
     material.initial_kg = new_current_kg - stock_in + used
     db.session.flush()
     return material
 
 
 def calculate_live_stock(material_id: Optional[int] = None) -> list[dict]:
-    query = Material.query
+    # One query: each material with its Stock In / Stock Left sums as correlated sub-selects
+    # (same per-material filters as the separate get_stock_*_total queries, same sums).
+    query = db.session.query(
+        Material,
+        _stock_sum(Material.id, MaterialTransaction.TRANSACTION_STOCK_IN),
+        _stock_sum(Material.id, MaterialTransaction.TRANSACTION_STOCK_LEFT),
+    )
     if material_id:
-        query = query.filter_by(id=material_id)
+        query = query.filter(Material.id == material_id)
 
     results = []
-    for material in query.order_by(Material.category, Material.name, Material.size).all():
-        stock_in = get_stock_in_total(material.id)
-        used = get_stock_used_total(material.id)
+    for material, stock_in, used in query.order_by(
+        Material.category, Material.name, Material.size
+    ).all():
+        stock_in = float(stock_in)
+        used = float(used)
         current = float(material.initial_kg) + stock_in - used
         results.append(
             {
@@ -125,22 +155,25 @@ def get_dashboard_stats(today: date) -> dict:
     live_stock = calculate_live_stock()
     total_inventory = sum(item["current"] for item in live_stock)
 
-    stock_in_today = float(
-        db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
-        .filter(
-            MaterialTransaction.transaction_type == MaterialTransaction.TRANSACTION_STOCK_IN,
-            MaterialTransaction.transaction_date == today,
+    def day_total(transaction_type):
+        return (
+            select(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
+            .where(
+                MaterialTransaction.transaction_type == transaction_type,
+                MaterialTransaction.transaction_date == today,
+            )
+            .scalar_subquery()
         )
-        .scalar()
-    )
-    used_today = float(
-        db.session.query(func.coalesce(func.sum(MaterialTransaction.quantity), 0))
-        .filter(
-            MaterialTransaction.transaction_type == MaterialTransaction.TRANSACTION_STOCK_LEFT,
-            MaterialTransaction.transaction_date == today,
+
+    # Today's Stock In and Stock Left totals in one round-trip (the same two filtered sums).
+    stock_in_today, used_today = db.session.execute(
+        select(
+            day_total(MaterialTransaction.TRANSACTION_STOCK_IN),
+            day_total(MaterialTransaction.TRANSACTION_STOCK_LEFT),
         )
-        .scalar()
-    )
+    ).one()
+    stock_in_today = float(stock_in_today)
+    used_today = float(used_today)
 
     recent = (
         MaterialTransaction.query.order_by(

@@ -1,6 +1,8 @@
 from calendar import monthrange
 from datetime import date, timedelta
 
+from sqlalchemy.orm import selectinload
+
 from app import db
 from app.models import BankAccount, BankLedgerEntry, BankTransfer
 
@@ -97,9 +99,52 @@ def get_bank_balance_as_of(bank: BankAccount, as_of_date: date) -> float:
     return balance
 
 
-def get_rokar_day_data(entry_date: date) -> dict:
+def get_bank_balances(banks, as_of_date: date | None = None, opening_date: date | None = None) -> dict:
+    """Balances of many banks from ONE query.
+
+    Returns {bank_id: [balance, entry_count, opening_balance]} where balance is exactly
+    get_bank_balance(bank) (or get_bank_balance_as_of(bank, as_of_date)) and opening_balance is
+    get_bank_balance_as_of(bank, opening_date): same entries, same (entry_date, id) order, same
+    float arithmetic as the per-bank versions — only the rows of all banks come in together.
+    """
+    state = {}
+    for bank in banks:
+        start = float(bank.opening_balance or 0)
+        state[bank.id] = [start, 0, start]
+    if not state:
+        return state
+    columns = [BankLedgerEntry.bank_id, BankLedgerEntry.deposit, BankLedgerEntry.withdrawal]
+    if opening_date is not None:
+        # The database decides "entry_date <= opening_date", exactly as the per-bank query did.
+        columns.append((BankLedgerEntry.entry_date <= opening_date).label("in_opening"))
+    query = db.session.query(*columns)
+    if as_of_date is not None:
+        query = query.filter(BankLedgerEntry.entry_date <= as_of_date)
+    query = query.order_by(BankLedgerEntry.entry_date.asc(), BankLedgerEntry.id.asc())
+    for row in query:
+        current = state.get(row[0])
+        if current is None:
+            continue
+        change = float(row[1] or 0) - float(row[2] or 0)
+        current[0] += change
+        current[1] += 1
+        if opening_date is not None and row[3]:
+            current[2] += change
+    return state
+
+
+def _rokar_banks(banks):
+    if banks is None:
+        banks = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
+    return banks
+
+
+def get_rokar_day_data(entry_date: date, banks=None) -> dict:
+    # Banks first so entry.bank and transfer counterparties are found without extra queries.
+    banks = _rokar_banks(banks)
     entries = (
         BankLedgerEntry.query.join(BankAccount)
+        .options(selectinload(BankLedgerEntry.transfer))
         .filter(BankLedgerEntry.entry_date == entry_date)
         .order_by(BankLedgerEntry.id.asc())
         .all()
@@ -109,14 +154,17 @@ def get_rokar_day_data(entry_date: date) -> dict:
         period_label=entry_date.strftime("%d-%b-%Y"),
         start_date=entry_date,
         end_date=entry_date,
+        banks=banks,
     )
 
 
-def get_rokar_month_data(year: int, month: int) -> dict:
+def get_rokar_month_data(year: int, month: int, banks=None) -> dict:
     start_date = date(year, month, 1)
     end_date = date(year, month, monthrange(year, month)[1])
+    banks = _rokar_banks(banks)
     entries = (
         BankLedgerEntry.query.join(BankAccount)
+        .options(selectinload(BankLedgerEntry.transfer))
         .filter(
             BankLedgerEntry.entry_date >= start_date,
             BankLedgerEntry.entry_date <= end_date,
@@ -129,6 +177,7 @@ def get_rokar_month_data(year: int, month: int) -> dict:
         period_label=start_date.strftime("%B %Y"),
         start_date=start_date,
         end_date=end_date,
+        banks=banks,
     )
 
 
@@ -137,8 +186,9 @@ def _build_rokar_report(
     period_label: str,
     start_date: date,
     end_date: date,
+    banks=None,
 ) -> dict:
-    banks = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
+    banks = _rokar_banks(banks)
 
     transactions = []
     total_deposits = 0.0
@@ -154,9 +204,14 @@ def _build_rokar_report(
     total_closing = 0.0
     total_opening = 0.0
     opening_reference = start_date - timedelta(days=1)
+    balances = get_bank_balances(
+        banks,
+        as_of_date=end_date,
+        opening_date=opening_reference if start_date != end_date else None,
+    )
 
     for bank in banks:
-        closing = get_bank_balance_as_of(bank, end_date)
+        closing = balances[bank.id][0]
         period_entries = [e for e in entries if e.bank_id == bank.id]
         period_deposits_all = sum(float(e.deposit or 0) for e in period_entries)
         period_withdrawals_all = sum(float(e.withdrawal or 0) for e in period_entries)
@@ -170,7 +225,7 @@ def _build_rokar_report(
         if start_date == end_date:
             opening = closing - period_deposits_all + period_withdrawals_all
         else:
-            opening = get_bank_balance_as_of(bank, opening_reference)
+            opening = balances[bank.id][2]
 
         bank_balances.append(
             {
@@ -216,9 +271,12 @@ def get_bank_balance(bank: BankAccount) -> float:
 def get_bank_ledger_rows(bank: BankAccount) -> list[dict]:
     balance = float(bank.opening_balance or 0)
     rows = [{"type": "opening", "balance": balance, "bank": bank}]
-    entries = bank.entries.order_by(
-        BankLedgerEntry.entry_date.asc(), BankLedgerEntry.id.asc()
-    ).all()
+    # Transfers in one extra query (the page shows each transfer's other bank).
+    entries = (
+        bank.entries.options(selectinload(BankLedgerEntry.transfer))
+        .order_by(BankLedgerEntry.entry_date.asc(), BankLedgerEntry.id.asc())
+        .all()
+    )
 
     for entry in entries:
         balance += float(entry.deposit or 0) - float(entry.withdrawal or 0)
@@ -228,11 +286,12 @@ def get_bank_ledger_rows(bank: BankAccount) -> list[dict]:
 
 def get_dashboard_stats() -> dict:
     banks = BankAccount.query.order_by(BankAccount.bank_name, BankAccount.account_number).all()
+    balances = get_bank_balances(banks)
     bank_summaries = []
     total_balance = 0.0
 
     for bank in banks:
-        balance = get_bank_balance(bank)
+        balance = balances[bank.id][0]
         bank_summaries.append({"bank": bank, "balance": balance})
         total_balance += balance
 

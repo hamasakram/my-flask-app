@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app import db
 from app.models import InkType, InventoryTransaction
@@ -69,8 +69,43 @@ def get_cans_used_total(ink_id: int) -> float:
     )
 
 
+_USED_TYPES = (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
+
+
+def _cans_in_sum(ink_id_column):
+    """coalesce(sum(quantity), 0) of an ink's Cans In: the exact filter of get_cans_in_total."""
+    return (
+        select(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
+        .where(
+            InventoryTransaction.ink_type_id == ink_id_column,
+            InventoryTransaction.transaction_type == InventoryTransaction.TRANSACTION_CANS_IN,
+        )
+        .scalar_subquery()
+    )
+
+
+def _cans_used_sum(ink_id_column):
+    """coalesce(sum(quantity), 0) of an ink's Cans Out: the exact filter of get_cans_used_total."""
+    return (
+        select(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
+        .where(
+            InventoryTransaction.ink_type_id == ink_id_column,
+            InventoryTransaction.transaction_type.in_(_USED_TYPES),
+        )
+        .scalar_subquery()
+    )
+
+
+def get_cans_totals(ink_id: int) -> tuple[float, float]:
+    """(Cans In total, Cans Out total) for one ink in one round-trip; same sums as
+    get_cans_in_total / get_cans_used_total."""
+    cans_in, used = db.session.execute(select(_cans_in_sum(ink_id), _cans_used_sum(ink_id))).one()
+    return float(cans_in), float(used)
+
+
 def get_current_cans(ink: InkType) -> float:
-    return float(ink.initial_cans) + get_cans_in_total(ink.id) - get_cans_used_total(ink.id)
+    cans_in, used = get_cans_totals(ink.id)
+    return float(ink.initial_cans) + cans_in - used
 
 
 def get_current_weight(ink: InkType) -> float:
@@ -78,14 +113,18 @@ def get_current_weight(ink: InkType) -> float:
 
 
 def calculate_live_stock(ink_id: Optional[int] = None) -> list[dict]:
-    query = InkType.query
+    # One query: each ink with its Cans In / Cans Out sums as correlated sub-selects (the same
+    # per-ink filters the separate get_cans_*_total queries used, so the sums are identical).
+    query = db.session.query(InkType, _cans_in_sum(InkType.id), _cans_used_sum(InkType.id))
     if ink_id:
-        query = query.filter_by(id=ink_id)
+        query = query.filter(InkType.id == ink_id)
 
     results = []
-    for ink in query.order_by(InkType.ink_company, InkType.name, InkType.color_code).all():
-        cans_in = get_cans_in_total(ink.id)
-        used = get_cans_used_total(ink.id)
+    for ink, cans_in, used in query.order_by(
+        InkType.ink_company, InkType.name, InkType.color_code
+    ).all():
+        cans_in = float(cans_in)
+        used = float(used)
         current_cans = float(ink.initial_cans) + cans_in - used
         current_weight = current_cans * float(ink.weight_per_can)
         results.append(
@@ -135,24 +174,27 @@ def get_dashboard_stats(today: date) -> dict:
     total_cans = sum(item["current_cans"] for item in live_stock)
     total_weight = sum(item["current_weight"] for item in live_stock)
 
-    cans_in_today = float(
-        db.session.query(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
-        .filter(
-            InventoryTransaction.transaction_type == InventoryTransaction.TRANSACTION_CANS_IN,
-            InventoryTransaction.transaction_date == today,
+    # Today's Cans In and Cans Out totals in one round-trip (the same two filtered sums).
+    cans_in_today, used_today = db.session.execute(
+        select(
+            select(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
+            .where(
+                InventoryTransaction.transaction_type == InventoryTransaction.TRANSACTION_CANS_IN,
+                InventoryTransaction.transaction_date == today,
+            )
+            .scalar_subquery(),
+            select(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
+            .where(
+                InventoryTransaction.transaction_type.in_(
+                    (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
+                ),
+                InventoryTransaction.transaction_date == today,
+            )
+            .scalar_subquery(),
         )
-        .scalar()
-    )
-    used_today = float(
-        db.session.query(func.coalesce(func.sum(InventoryTransaction.quantity), 0))
-        .filter(
-            InventoryTransaction.transaction_type.in_(
-                (InventoryTransaction.TRANSACTION_CANS_OUT, "Cans Left")
-            ),
-            InventoryTransaction.transaction_date == today,
-        )
-        .scalar()
-    )
+    ).one()
+    cans_in_today = float(cans_in_today)
+    used_today = float(used_today)
 
     recent = (
         InventoryTransaction.query.order_by(

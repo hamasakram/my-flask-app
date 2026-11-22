@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.orm import joinedload, selectinload
 
 from app import db
 from app.models import Company, GlueItem, GlueOpeningStock, GlueTransaction
@@ -168,6 +169,7 @@ def opening_stock():
     records = (
         GlueOpeningStock.query.join(Company)
         .join(GlueItem)
+        .options(selectinload(GlueOpeningStock.company), selectinload(GlueOpeningStock.item))
         .order_by(Company.name, GlueItem.name)
         .all()
     )
@@ -236,6 +238,11 @@ def receive_stock():
 
     recent_received = (
         GlueTransaction.query.filter_by(transaction_type=GlueTransaction.TRANSACTION_RECEIVED)
+        .options(
+            joinedload(GlueTransaction.company),
+            joinedload(GlueTransaction.item),
+            joinedload(GlueTransaction.created_by),
+        )
         .order_by(GlueTransaction.transaction_date.desc(), GlueTransaction.id.desc())
         .limit(30)
         .all()
@@ -317,6 +324,11 @@ def use_stock():
 
     recent_usage = (
         GlueTransaction.query.filter_by(transaction_type=GlueTransaction.TRANSACTION_USED)
+        .options(
+            joinedload(GlueTransaction.company),
+            joinedload(GlueTransaction.item),
+            joinedload(GlueTransaction.created_by),
+        )
         .order_by(GlueTransaction.transaction_date.desc(), GlueTransaction.id.desc())
         .limit(30)
         .all()
@@ -361,6 +373,8 @@ def live_inventory():
     company_id = request.args.get("company_id", type=int)
     item_search = request.args.get("item", "").strip().lower()
 
+    # Companies first: the live stock rows then find their company already loaded.
+    companies = get_glue_companies()
     rows = glue_live_stock(company_id=company_id)
     if item_search:
         rows = [
@@ -372,7 +386,7 @@ def live_inventory():
     return render_template(
         "glue/live_inventory.html",
         rows=rows,
-        companies=get_glue_companies(),
+        companies=companies,
         selected_company=company_id,
         item_search=request.args.get("item", ""),
     )

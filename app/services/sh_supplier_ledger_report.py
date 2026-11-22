@@ -38,7 +38,7 @@ from app.services.sh_ledger_sync import (
     ENTRY_PAYMENT,
     _entry_kind,
     _supplier_ledger_entries,
-    get_supplier_account_balance,
+    supplier_account_balance_from,
 )
 
 PKT = timezone(timedelta(hours=5))
@@ -119,13 +119,27 @@ def _match_proof(entry_date: date, amount: float, proofs: list, used: set) -> Op
     return None
 
 
-def _payment_details(entry: ShSupplierLedgerEntry, proofs: list, used: set, banks: dict) -> dict:
+def _load_bank_entries(entries) -> dict:
+    """The bank ledger rows the payment entries came from, in one query (by primary key)."""
+    ids = sorted({entry.source_bank_ledger_id for entry in entries if entry.source_bank_ledger_id})
+    found = {}
+    for start in range(0, len(ids), 500):
+        chunk = ids[start:start + 500]
+        for bank_entry in ShLedgerEntry.query.filter(ShLedgerEntry.id.in_(chunk)).all():
+            found[bank_entry.id] = bank_entry
+    return found
+
+
+def _payment_details(
+    entry: ShSupplierLedgerEntry, proofs: list, used: set, banks: dict, bank_entries: dict | None = None
+) -> dict:
     amount = float(entry.total_amount or 0)
-    bank_entry = (
-        db.session.get(ShLedgerEntry, entry.source_bank_ledger_id)
-        if entry.source_bank_ledger_id
-        else None
-    )
+    if not entry.source_bank_ledger_id:
+        bank_entry = None
+    elif bank_entries is not None and entry.source_bank_ledger_id in bank_entries:
+        bank_entry = bank_entries[entry.source_bank_ledger_id]
+    else:
+        bank_entry = db.session.get(ShLedgerEntry, entry.source_bank_ledger_id)
     bank = banks.get(bank_entry.bank_id if bank_entry else entry.bank_id)
     bank_name = bank.name if bank else ""
     if bank_entry is not None:
@@ -164,10 +178,16 @@ def build_supplier_ledger_timeline(
     used_proofs: set[int] = set()
 
     raw_rows = []
-    for entry in _supplier_ledger_entries(supplier_id):
+    # Loaded once: also used for the opening/closing balances below (the same rows
+    # get_supplier_account_balance would query again).
+    entries = _supplier_ledger_entries(supplier_id)
+    bank_entries = _load_bank_entries(
+        [entry for entry in entries if _entry_kind(entry) == ENTRY_PAYMENT]
+    )
+    for entry in entries:
         amount = float(entry.total_amount or 0)
         if _entry_kind(entry) == ENTRY_PAYMENT:
-            details = _payment_details(entry, proofs, used_proofs, banks)
+            details = _payment_details(entry, proofs, used_proofs, banks, bank_entries)
             raw_rows.append(
                 {
                     "sort_key": (entry.entry_date, 1, entry.id),
@@ -200,8 +220,8 @@ def build_supplier_ledger_timeline(
     raw_rows.sort(key=lambda row: row["sort_key"])
 
     if date_from:
-        opening_balance, opening_type = get_supplier_account_balance(
-            supplier_id, before_date=date_from - timedelta(days=1)
+        opening_balance, opening_type = supplier_account_balance_from(
+            entries, before_date=date_from - timedelta(days=1)
         )
     else:
         opening_balance, opening_type = 0.0, PAYABLE
@@ -245,7 +265,7 @@ def build_supplier_ledger_timeline(
 
     closing_balance, closing_type = _unsigned(running)
     if not filtered and not (date_from or date_to):
-        closing_balance, closing_type = get_supplier_account_balance(supplier_id)
+        closing_balance, closing_type = supplier_account_balance_from(entries)
 
     return {
         "supplier": supplier,

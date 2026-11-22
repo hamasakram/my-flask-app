@@ -3,6 +3,7 @@ from datetime import datetime
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 from app import db
 from app.models import (
@@ -111,6 +112,15 @@ def require_edit_access():
 
 def _parse_date(value: str):
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _get_for_page_or_404(model, ident, *relationships):
+    """model.query.get_or_404(ident); on GET the related rows the edit page shows come in the
+    same SELECT (POST requests load exactly as before)."""
+    query = model.query
+    if request.method == "GET":
+        query = query.options(*(joinedload(rel) for rel in relationships))
+    return query.get_or_404(ident)
 
 
 def _used_ink_return_url(return_to: str, entry_date: str) -> str:
@@ -653,7 +663,9 @@ def edit_materials_opening(record_id):
 @stock_edits_bp.route("/glue/received/<int:txn_id>", methods=["GET", "POST"])
 @login_required
 def edit_glue_received(txn_id):
-    txn = GlueTransaction.query.get_or_404(txn_id)
+    txn = _get_for_page_or_404(
+        GlueTransaction, txn_id, GlueTransaction.company, GlueTransaction.item
+    )
     if txn.transaction_type != GlueTransaction.TRANSACTION_RECEIVED:
         abort(404)
 
@@ -708,7 +720,9 @@ def edit_glue_received(txn_id):
 @stock_edits_bp.route("/glue/used/<int:txn_id>", methods=["GET", "POST"])
 @login_required
 def edit_glue_used(txn_id):
-    txn = GlueTransaction.query.get_or_404(txn_id)
+    txn = _get_for_page_or_404(
+        GlueTransaction, txn_id, GlueTransaction.company, GlueTransaction.item
+    )
     if txn.transaction_type != GlueTransaction.TRANSACTION_USED:
         abort(404)
 
@@ -749,7 +763,9 @@ def edit_glue_used(txn_id):
 @stock_edits_bp.route("/glue/opening/<int:record_id>", methods=["GET", "POST"])
 @login_required
 def edit_glue_opening(record_id):
-    record = GlueOpeningStock.query.get_or_404(record_id)
+    record = _get_for_page_or_404(
+        GlueOpeningStock, record_id, GlueOpeningStock.company, GlueOpeningStock.item
+    )
 
     if request.method == "POST":
         require_edit_access()
@@ -790,7 +806,9 @@ def edit_glue_opening(record_id):
 @stock_edits_bp.route("/chemicals/received/<int:txn_id>", methods=["GET", "POST"])
 @login_required
 def edit_chemicals_received(txn_id):
-    txn = ChemicalTransaction.query.get_or_404(txn_id)
+    txn = _get_for_page_or_404(
+        ChemicalTransaction, txn_id, ChemicalTransaction.company, ChemicalTransaction.item
+    )
     if txn.transaction_type != ChemicalTransaction.TRANSACTION_RECEIVED:
         abort(404)
 
@@ -845,7 +863,9 @@ def edit_chemicals_received(txn_id):
 @stock_edits_bp.route("/chemicals/used/<int:txn_id>", methods=["GET", "POST"])
 @login_required
 def edit_chemicals_used(txn_id):
-    txn = ChemicalTransaction.query.get_or_404(txn_id)
+    txn = _get_for_page_or_404(
+        ChemicalTransaction, txn_id, ChemicalTransaction.company, ChemicalTransaction.item
+    )
     if txn.transaction_type != ChemicalTransaction.TRANSACTION_USED:
         abort(404)
 
@@ -886,7 +906,9 @@ def edit_chemicals_used(txn_id):
 @stock_edits_bp.route("/chemicals/opening/<int:record_id>", methods=["GET", "POST"])
 @login_required
 def edit_chemicals_opening(record_id):
-    record = ChemicalOpeningStock.query.get_or_404(record_id)
+    record = _get_for_page_or_404(
+        ChemicalOpeningStock, record_id, ChemicalOpeningStock.company, ChemicalOpeningStock.item
+    )
 
     if request.method == "POST":
         require_edit_access()
@@ -2029,7 +2051,7 @@ def edit_home_party(party_id):
 @stock_edits_bp.route("/home/ledger/<int:entry_id>", methods=["GET", "POST"])
 @login_required
 def edit_home_ledger_entry(entry_id):
-    entry = HomeLedgerEntry.query.get_or_404(entry_id)
+    entry = _get_for_page_or_404(HomeLedgerEntry, entry_id, HomeLedgerEntry.party)
 
     if request.method == "POST":
         require_edit_access()
@@ -2118,7 +2140,7 @@ def edit_bank_account(bank_id):
 @stock_edits_bp.route("/bank/ledger/<int:entry_id>", methods=["GET", "POST"])
 @login_required
 def edit_bank_ledger_entry(entry_id):
-    entry = BankLedgerEntry.query.get_or_404(entry_id)
+    entry = _get_for_page_or_404(BankLedgerEntry, entry_id, BankLedgerEntry.bank)
 
     if entry.is_transfer:
         flash("Edit the full transfer to change both bank ledgers together.", "info")

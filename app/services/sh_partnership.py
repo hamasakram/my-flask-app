@@ -158,6 +158,49 @@ def get_partner_ledger_balance(partner_id: int) -> float:
     return float(credits) - float(debits)
 
 
+def get_partner_ledger_overview(partner_ids) -> dict[int, tuple[float, int]]:
+    """``(get_partner_ledger_balance(id), partner.purchase_shares.count())`` per partner.
+
+    One statement for all partners: every value is the same aggregate over the same rows as
+    the per-partner queries (correlated subqueries), so the numbers are identical.
+    """
+    from app.models import ShLedgerEntry
+    from app.services.sh_bank import get_current_sh_bank_id
+
+    wanted = set(partner_ids)
+    if not wanted:
+        return {}
+    bank_id = get_current_sh_bank_id()
+
+    def ledger_sum(column):
+        sub = db.select(db.func.coalesce(db.func.sum(column), 0)).where(
+            ShLedgerEntry.partner_company_id == ShPartnerCompany.id
+        )
+        if bank_id:
+            sub = sub.where(
+                db.or_(ShLedgerEntry.bank_id == bank_id, ShLedgerEntry.bank_id.is_(None))
+            )
+        return sub.correlate(ShPartnerCompany).scalar_subquery()
+
+    share_count = (
+        db.select(db.func.count(ShPurchasePartnerShare.id))
+        .where(ShPurchasePartnerShare.partner_id == ShPartnerCompany.id)
+        .correlate(ShPartnerCompany)
+        .scalar_subquery()
+    )
+    rows = db.session.query(
+        ShPartnerCompany.id,
+        ledger_sum(ShLedgerEntry.credit),
+        ledger_sum(ShLedgerEntry.debit),
+        share_count,
+    )
+    overview = {}
+    for partner_id, credits, debits, shares in rows:
+        if partner_id in wanted:
+            overview[partner_id] = (float(credits or 0) - float(debits or 0), shares)
+    return overview
+
+
 def format_partnership_summary(purchase) -> str:
     if not purchase.has_partnership or not purchase.partner_shares.count():
         return "—"

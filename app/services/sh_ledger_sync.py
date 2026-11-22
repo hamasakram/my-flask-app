@@ -57,8 +57,30 @@ def get_client_account_balance(
     Client ledger payment rows (including bank sync) reduce the balance.
     """
     bank_id = get_current_sh_bank_id()
+    return client_account_balance_from(
+        _client_sale_invoices(client_id, bank_id),
+        _client_ledger_entries(client_id),
+        before_date=before_date,
+        before_ledger_id=before_ledger_id,
+        exclude_invoice_id=exclude_invoice_id,
+    )
+
+
+def client_account_balance_from(
+    invoices,
+    entries,
+    before_date=None,
+    before_ledger_id: int | None = None,
+    exclude_invoice_id: int | None = None,
+) -> tuple[float, str]:
+    """``get_client_account_balance`` on rows already loaded by the caller.
+
+    ``invoices`` must be the client's sale invoices as ``_client_sale_invoices`` returns
+    them and ``entries`` the client's ledger rows as ``_client_ledger_entries`` returns
+    them (same rows, same order), so the result is identical without querying again.
+    """
     invoice_sales = 0.0
-    for invoice in _client_sale_invoices(client_id, bank_id):
+    for invoice in invoices:
         if exclude_invoice_id and invoice.id == exclude_invoice_id:
             continue
         if before_date and invoice.invoice_date > before_date:
@@ -67,7 +89,7 @@ def get_client_account_balance(
 
     ledger_sales = 0.0
     total_payments = 0.0
-    for entry in _client_ledger_entries(client_id):
+    for entry in entries:
         if before_date and entry.entry_date > before_date:
             continue
         if (
@@ -110,8 +132,58 @@ def compute_invoice_balances(client_id: int) -> dict[int, dict]:
     """FIFO allocation of ledger payments to sale invoices (oldest first)."""
     bank_id = get_current_sh_bank_id()
     invoices = _client_sale_invoices(client_id, bank_id)
+    return _fifo_invoice_balances(invoices, _client_ledger_entries(client_id))
+
+
+def compute_invoice_balances_for_clients(client_ids) -> dict[int, dict[int, dict]]:
+    """``compute_invoice_balances`` for many clients with two queries in total.
+
+    Loads the invoice and ledger columns the FIFO needs for the whole current bank once
+    (same filters and order as the per-client queries), then runs the unchanged FIFO per
+    client. Returns ``{client_id: compute_invoice_balances(client_id)}``.
+    """
+    wanted = set(client_ids)
+    if not wanted:
+        return {}
+    bank_id = get_current_sh_bank_id()
+    invoice_query = db.session.query(
+        ShSaleInvoice.id, ShSaleInvoice.sold_to_client_id, ShSaleInvoice.total_amount
+    )
+    if bank_id:
+        invoice_query = invoice_query.filter(
+            db.or_(ShSaleInvoice.bank_id == bank_id, ShSaleInvoice.bank_id.is_(None))
+        )
+    invoices_by_client: dict[int, list] = {}
+    for row in invoice_query.order_by(ShSaleInvoice.invoice_date.asc(), ShSaleInvoice.id.asc()):
+        if row.sold_to_client_id in wanted:
+            invoices_by_client.setdefault(row.sold_to_client_id, []).append(row)
+
+    entry_query = filter_by_bank(
+        db.session.query(
+            ShClientLedgerEntry.sold_to_client_id,
+            ShClientLedgerEntry.entry_type,
+            ShClientLedgerEntry.total_amount,
+        ),
+        ShClientLedgerEntry,
+    )
+    entries_by_client: dict[int, list] = {}
+    for row in entry_query.order_by(
+        ShClientLedgerEntry.entry_date.asc(), ShClientLedgerEntry.id.asc()
+    ):
+        if row.sold_to_client_id in wanted:
+            entries_by_client.setdefault(row.sold_to_client_id, []).append(row)
+
+    return {
+        client_id: _fifo_invoice_balances(
+            invoices_by_client.get(client_id, []), entries_by_client.get(client_id, [])
+        )
+        for client_id in wanted
+    }
+
+
+def _fifo_invoice_balances(invoices, entries) -> dict[int, dict]:
     payment_pool = 0.0
-    for entry in _client_ledger_entries(client_id):
+    for entry in entries:
         if _entry_kind(entry) == ENTRY_PAYMENT:
             payment_pool += float(entry.total_amount or 0)
 
@@ -166,9 +238,22 @@ def get_supplier_account_balance(
 
     DR = still owed to supplier. CR = advance paid (supplier credit / owes you back).
     """
+    return supplier_account_balance_from(
+        _supplier_ledger_entries(supplier_id),
+        before_date=before_date,
+        before_ledger_id=before_ledger_id,
+    )
+
+
+def supplier_account_balance_from(
+    entries,
+    before_date=None,
+    before_ledger_id: int | None = None,
+) -> tuple[float, str]:
+    """``get_supplier_account_balance`` on the rows ``_supplier_ledger_entries`` returned."""
     total_purchases = 0.0
     total_payments = 0.0
-    for entry in _supplier_ledger_entries(supplier_id):
+    for entry in entries:
         if before_date and entry.entry_date > before_date:
             continue
         if (

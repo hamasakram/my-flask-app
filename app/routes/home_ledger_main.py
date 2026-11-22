@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app.models import HomeLedgerEntry, HomeParty
-from app.services.home_ledger import get_dashboard_stats, get_party_balance, get_party_ledger_rows
+from app.services.home_ledger import get_dashboard_stats, get_party_balances, get_party_ledger_rows
 from app.services.inventory import log_audit
 
 home_ledger_bp = Blueprint("home_ledger", __name__, url_prefix="/home-ledger")
@@ -73,8 +73,9 @@ def parties():
         return redirect(url_for("home_ledger.party_ledger", party_id=party.id))
 
     party_list = HomeParty.query.order_by(HomeParty.name).all()
+    balances = get_party_balances(party_list)
     summaries = [
-        {"party": p, "balance": get_party_balance(p), "entry_count": p.entries.count()}
+        {"party": p, "balance": balances[p.id][0], "entry_count": balances[p.id][1]}
         for p in party_list
     ]
     return render_template("home_ledger/parties.html", parties=summaries)
@@ -126,7 +127,8 @@ def party_ledger(party_id):
         return redirect(url_for("home_ledger.party_ledger", party_id=party_id))
 
     ledger_rows = get_party_ledger_rows(party)
-    current_balance = get_party_balance(party)
+    # The last running balance is exactly get_party_balance(party) — no second query.
+    current_balance = ledger_rows[-1]["balance"]
     return render_template(
         "home_ledger/party_ledger.html",
         party=party,

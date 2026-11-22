@@ -1,5 +1,6 @@
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.orm import selectinload
 
 from app import db
 from app.models import AppSetting, InkType, User
@@ -37,7 +38,11 @@ def settings():
             flash("Settings updated.", "success")
         return redirect(url_for("admin.settings"))
 
-    ink_thresholds = InkType.query.order_by(InkType.company_id, InkType.name).all()
+    ink_thresholds = (
+        InkType.query.options(selectinload(InkType.company))
+        .order_by(InkType.company_id, InkType.name)
+        .all()
+    )
     return render_template(
         "settings.html",
         default_threshold=int(setting.value),

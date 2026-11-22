@@ -73,24 +73,23 @@ def register(app):
         table = _table()
         user_id = current_user.get_id() if current_user.is_authenticated else None
         try:
+            # Insert straight away: the token column is unique, so a token that was already
+            # used fails here (IntegrityError) and is looked up below. That saves a SELECT
+            # (one database round trip) on every normal save.
             with db.engine.begin() as conn:
                 if random.random() < 0.02:
                     cutoff = datetime.now(timezone.utc) - timedelta(days=KEEP_DAYS)
                     conn.execute(delete(table).where(table.c.created_at < cutoff))
-                existing = conn.execute(
-                    select(table.c.location).where(table.c.token == token)
-                ).first()
-                if existing is None:
-                    conn.execute(
-                        insert(table).values(
-                            token=token,
-                            user_id=int(user_id) if user_id else None,
-                            endpoint=(request.endpoint or "")[:120],
-                            created_at=datetime.now(timezone.utc),
-                        )
+                conn.execute(
+                    insert(table).values(
+                        token=token,
+                        user_id=int(user_id) if user_id else None,
+                        endpoint=(request.endpoint or "")[:120],
+                        created_at=datetime.now(timezone.utc),
                     )
-                    g.submit_token = token
-                    return None
+                )
+            g.submit_token = token
+            return None
         except IntegrityError:
             with db.engine.begin() as conn:
                 existing = conn.execute(

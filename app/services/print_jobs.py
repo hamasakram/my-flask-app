@@ -13,6 +13,8 @@ from __future__ import annotations
 import re
 from datetime import date, datetime, timedelta, timezone
 
+from sqlalchemy.orm import lazyload
+
 from app import db
 from app.models import HallStockItem, InkType, PrintJob, PrintJobInk, PrintJobMaterial
 from app.services import ink_inventory
@@ -59,8 +61,12 @@ def to_pkt(value: datetime | None) -> datetime | None:
 # --------------------------------------------------------------------------- keys
 
 
+_SPACES = re.compile(r"\s+")
+_MICRON_UNIT = re.compile(r"(microns?|mic|μ|µ|u)$")
+
+
 def _clean(value) -> str:
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+    return _SPACES.sub(" ", str(value or "")).strip()
 
 
 def _norm_text(value) -> str:
@@ -68,13 +74,13 @@ def _norm_text(value) -> str:
 
 
 def _norm_size(value) -> str:
-    return re.sub(r"\s+", "", _norm_text(value))
+    return _SPACES.sub("", _norm_text(value))
 
 
 def _norm_micron(value) -> str:
     text = _norm_text(value)
-    text = re.sub(r"(microns?|mic|μ|µ|u)$", "", text).strip()
-    return re.sub(r"\s+", "", text)
+    text = _MICRON_UNIT.sub("", text).strip()
+    return _SPACES.sub("", text)
 
 
 def material_key(name: str, size: str = "", micron: str = "", category: str = "") -> str:
@@ -117,6 +123,76 @@ def _merge_entries(entries: list[dict]) -> dict:
     return merged
 
 
+class MaterialCatalog(dict):
+    """The material catalog (a plain dict of entries by material_key) that also remembers its
+    entries grouped by loose_key (name + size + micron), in catalog order. resolve_entry's
+    fallback then looks the group up instead of re-normalising every entry for every job line.
+    Any change other than adding a new key drops the groups; they are rebuilt when next needed.
+    """
+
+    __slots__ = ("_loose",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._loose = None
+
+    @staticmethod
+    def _entry_loose_key(entry) -> str:
+        return loose_key(entry["name"], entry["size"], entry["micron"])
+
+    def loose_matches(self, wanted: str) -> list[dict]:
+        """Entries whose loose_key is wanted, in catalog order."""
+        groups = self._loose
+        if groups is None:
+            groups = {}
+            for entry in self.values():
+                groups.setdefault(self._entry_loose_key(entry), []).append(entry)
+            self._loose = groups
+        return list(groups.get(wanted, ()))
+
+    def __setitem__(self, key, value):
+        if self._loose is not None:
+            if key in self:
+                self._loose = None
+            else:
+                try:
+                    self._loose.setdefault(self._entry_loose_key(value), []).append(value)
+                except (KeyError, TypeError):
+                    self._loose = None
+        super().__setitem__(key, value)
+
+    def _changed(self):
+        self._loose = None
+
+    def __delitem__(self, key):
+        self._changed()
+        super().__delitem__(key)
+
+    def __ior__(self, other):
+        self._changed()
+        return super().__ior__(other)
+
+    def clear(self):
+        self._changed()
+        super().clear()
+
+    def pop(self, *args):
+        self._changed()
+        return super().pop(*args)
+
+    def popitem(self):
+        self._changed()
+        return super().popitem()
+
+    def setdefault(self, key, default=None):
+        self._changed()
+        return super().setdefault(key, default)
+
+    def update(self, *args, **kwargs):
+        self._changed()
+        super().update(*args, **kwargs)
+
+
 def resolve_entry(line, catalog: dict[str, dict]) -> dict | None:
     """Catalog entry for a saved job material line.
 
@@ -131,9 +207,12 @@ def resolve_entry(line, catalog: dict[str, dict]) -> dict | None:
     if entry:
         return entry
     wanted = loose_key(line.material_name, line.size, line.micron)
-    candidates = [
-        e for e in catalog.values() if loose_key(e["name"], e["size"], e["micron"]) == wanted
-    ]
+    if isinstance(catalog, MaterialCatalog):
+        candidates = catalog.loose_matches(wanted)
+    else:
+        candidates = [
+            e for e in catalog.values() if loose_key(e["name"], e["size"], e["micron"]) == wanted
+        ]
     if not candidates:
         return None
     category = _norm_text(line.category)
@@ -198,9 +277,16 @@ def _blank_material_entry(key, category, name, size, micron) -> dict:
     }
 
 
+def _all_rows(model) -> list:
+    """Model.query.all() as plain rows (attribute names as keys), without ORM objects."""
+    return db.session.query(
+        *(getattr(model, attr.key) for attr in model.__mapper__.column_attrs)
+    ).all()
+
+
 def build_material_catalog() -> dict[str, dict]:
     """In Hall and Machine Hall materials keyed by material_key, with live KG and rolls."""
-    entries: dict[str, dict] = {}
+    entries: dict[str, dict] = MaterialCatalog()
 
     def entry_for(category, name, size, micron) -> dict:
         key = material_key(name, size, micron, category)
@@ -210,7 +296,9 @@ def build_material_catalog() -> dict[str, dict]:
             entries[key]["category"] = _clean(category)
         return entries[key]
 
-    for item in HallStockItem.query.all():
+    # Rows are read as plain tuples (same SELECT of every column as Model.query.all(), so the
+    # same rows in the same order) instead of building an ORM object for every hall row / line.
+    for item in _all_rows(HallStockItem):
         entry = entry_for(item.material_type, item.material_name, item.size, item.micron)
         kg = max(0.0, float(item.kg or 0))
         rolls = max(0.0, float(item.rolls_left or 0))
@@ -225,7 +313,7 @@ def build_material_catalog() -> dict[str, dict]:
     # Materials typed on earlier jobs (not in either hall) stay selectable as "to purchase".
     for entry in entries.values():
         entry["total_kg"] = entry["in_hall_kg"] + entry["machine_kg"]
-    for line in PrintJobMaterial.query.all():
+    for line in _all_rows(PrintJobMaterial):
         if resolve_entry(line, entries) is None:
             key = material_key(line.material_name, line.size, line.micron, line.category)
             entries[key] = _blank_material_entry(
@@ -420,6 +508,8 @@ def evaluate_job(job: PrintJob, material_catalog=None, ink_catalog=None) -> dict
 
 
 def evaluate_jobs(jobs: list[PrintJob]) -> list[dict]:
+    if not jobs:
+        return []  # nothing to check: skip reading the hall stock
     material_catalog = build_material_catalog()
     return [evaluate_job(job, material_catalog) for job in jobs]
 
@@ -576,8 +666,14 @@ def hall_material_suggestions() -> list[dict]:
 # --------------------------------------------------------------------------- queries
 
 
+def _without_ink_lines(query):
+    """Job lists only show materials: don't load every job's (legacy) ink lines up front.
+    job.inks still loads on first use if anything asks for it."""
+    return query.options(lazyload(PrintJob.inks))
+
+
 def list_jobs(status: str | None = None, search: str | None = None) -> list[PrintJob]:
-    query = PrintJob.query
+    query = _without_ink_lines(PrintJob.query)
     if status == "open":
         query = query.filter(PrintJob.status.in_(PrintJob.OPEN_STATUSES))
     elif status in PrintJob.STATUSES:
@@ -596,7 +692,8 @@ def list_jobs(status: str | None = None, search: str | None = None) -> list[Prin
 
 def list_open_jobs() -> list[PrintJob]:
     return (
-        PrintJob.query.filter(PrintJob.status.in_(PrintJob.OPEN_STATUSES))
+        _without_ink_lines(PrintJob.query)
+        .filter(PrintJob.status.in_(PrintJob.OPEN_STATUSES))
         .order_by(PrintJob.job_date.asc(), PrintJob.id.asc())
         .all()
     )
@@ -606,14 +703,20 @@ def dashboard_stats() -> dict:
     open_jobs = evaluate_jobs(list_open_jobs())
     today = pkt_today()
     month_start = today.replace(day=1)
-    counts = {
-        status: PrintJob.query.filter(PrintJob.status == status).count()
-        for status in PrintJob.STATUSES
+    # One grouped query for the per-status counts and this month's completed count.
+    found = {
+        status: (int(total or 0), int(this_month or 0))
+        for status, total, this_month in db.session.query(
+            PrintJob.status,
+            db.func.count(PrintJob.id),
+            db.func.sum(db.case((PrintJob.job_date >= month_start, 1), else_=0)),
+        )
+        .filter(PrintJob.status.in_(PrintJob.STATUSES))
+        .group_by(PrintJob.status)
+        .all()
     }
-    completed_this_month = PrintJob.query.filter(
-        PrintJob.status == PrintJob.STATUS_COMPLETED,
-        PrintJob.job_date >= month_start,
-    ).count()
+    counts = {status: found.get(status, (0, 0))[0] for status in PrintJob.STATUSES}
+    completed_this_month = found.get(PrintJob.STATUS_COMPLETED, (0, 0))[1]
     return {
         "today": today,
         "counts": counts,
@@ -623,7 +726,10 @@ def dashboard_stats() -> dict:
         "ready_count": sum(1 for row in open_jobs if row["ready"]),
         "short_count": sum(1 for row in open_jobs if not row["ready"]),
         "completed_this_month": completed_this_month,
-        "recent": PrintJob.query.order_by(PrintJob.created_at.desc()).limit(8).all(),
+        "recent": _without_ink_lines(PrintJob.query)
+        .order_by(PrintJob.created_at.desc())
+        .limit(8)
+        .all(),
     }
 
 
@@ -773,11 +879,13 @@ def _next_job_number() -> str:
     return f"JOB-{highest + 1:04d}"
 
 
-def _apply_lines(job: PrintJob, data: dict) -> None:
+def _apply_lines(job: PrintJob, data: dict, material_catalog: dict | None = None) -> None:
     # Keep the "status when saved" of materials that stay on the job, so editing a job
     # doesn't hide that a material has since arrived. New materials get today's status.
     previous = {line.material_key: line.status_at_save for line in job.materials}
-    catalog = build_material_catalog()
+    # The Add/Edit Job request already read the catalog for its form; nothing it depends on
+    # (hall stock, saved job lines) has changed since, so it is reused instead of read again.
+    catalog = material_catalog if material_catalog is not None else build_material_catalog()
     job.materials.clear()
     job.inks.clear()
     db.session.flush()
@@ -799,7 +907,12 @@ def find_job_by_token(token: str | None) -> PrintJob | None:
     return PrintJob.query.filter_by(form_token=token[:64]).first()
 
 
-def create_job(data: dict, user_id: int | None, form_token: str | None = None) -> PrintJob:
+def create_job(
+    data: dict,
+    user_id: int | None,
+    form_token: str | None = None,
+    material_catalog: dict | None = None,
+) -> PrintJob:
     job = PrintJob(
         form_token=(form_token or "").strip()[:64] or None,
         job_number=_next_job_number(),
@@ -813,19 +926,19 @@ def create_job(data: dict, user_id: int | None, form_token: str | None = None) -
         created_by_id=user_id,
     )
     db.session.add(job)
-    _apply_lines(job, data)
+    _apply_lines(job, data, material_catalog)
     db.session.flush()
     return job
 
 
-def update_job(job: PrintJob, data: dict) -> PrintJob:
+def update_job(job: PrintJob, data: dict, material_catalog: dict | None = None) -> PrintJob:
     job.job_date = data["job_date"]
     job.job_name = data["job_name"]
     job.customer_name = data["customer_name"]
     job.production_qty = data["production_qty"]
     job.production_unit = data["production_unit"]
     job.notes = data["notes"]
-    _apply_lines(job, data)
+    _apply_lines(job, data, material_catalog)
     db.session.flush()
     return job
 

@@ -8,7 +8,7 @@ from app.models import BankAccount, BankLedgerEntry, BankTransfer
 from app.services.bank_ledger import (
     bank_account_exists,
     create_bank_transfer,
-    get_bank_balance,
+    get_bank_balances,
     get_bank_ledger_rows,
     get_dashboard_stats,
     get_rokar_day_data,
@@ -88,8 +88,9 @@ def banks():
         return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank.id))
 
     bank_list = _all_banks()
+    balances = get_bank_balances(bank_list)
     summaries = [
-        {"bank": b, "balance": get_bank_balance(b), "entry_count": b.entries.count()}
+        {"bank": b, "balance": balances[b.id][0], "entry_count": balances[b.id][1]}
         for b in bank_list
     ]
     return render_template("bank_ledger/banks.html", banks=summaries)
@@ -256,7 +257,8 @@ def bank_ledger(bank_id):
         return redirect(url_for("bank_ledger.bank_ledger", bank_id=bank_id))
 
     ledger_rows = get_bank_ledger_rows(bank)
-    current_balance = get_bank_balance(bank)
+    # The last running balance is exactly get_bank_balance(bank) — no second query.
+    current_balance = ledger_rows[-1]["balance"]
     return render_template(
         "bank_ledger/bank_ledger.html",
         bank=bank,
@@ -373,7 +375,7 @@ def rokar():
         flash("Daily rokar entry added.", "success")
         return redirect(url_for("bank_ledger.rokar", date=parsed_date.isoformat()))
 
-    rokar_data = get_rokar_day_data(selected_date)
+    rokar_data = get_rokar_day_data(selected_date, banks=all_banks)
     return render_template(
         "bank_ledger/rokar.html",
         banks=all_banks,
@@ -412,10 +414,11 @@ def rokar_monthly():
     if month < 1 or month > 12:
         month = date.today().month
 
-    rokar_data = get_rokar_month_data(year, month)
+    all_banks = _all_banks()
+    rokar_data = get_rokar_month_data(year, month, banks=all_banks)
     return render_template(
         "bank_ledger/rokar_monthly.html",
-        banks=_all_banks(),
+        banks=all_banks,
         rokar=rokar_data,
         selected_month=month,
         selected_year=year,

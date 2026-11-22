@@ -21,7 +21,7 @@ from app.services.sh_ledger_sync import (
     _entry_kind,
     balance_after_payment,
     balance_after_sale,
-    get_client_account_balance,
+    client_account_balance_from,
 )
 
 
@@ -147,7 +147,10 @@ def build_client_ledger_timeline(
                 }
             )
 
-    for entry in _client_ledger_entries(client_id):
+    # Loaded once: the opening/closing balances below use these same rows (identical to the
+    # queries get_client_account_balance would run again).
+    entries = _client_ledger_entries(client_id)
+    for entry in entries:
         if _entry_kind(entry) == ENTRY_PAYMENT:
             raw_rows.append(
                 {
@@ -179,8 +182,8 @@ def build_client_ledger_timeline(
 
     if date_from:
         opening_before = date_from - timedelta(days=1)
-        opening_balance, opening_type = get_client_account_balance(
-            client_id, before_date=opening_before
+        opening_balance, opening_type = client_account_balance_from(
+            invoices, entries, before_date=opening_before
         )
     else:
         opening_balance, opening_type = 0.0, "DR"
@@ -233,7 +236,7 @@ def build_client_ledger_timeline(
 
     closing_balance, closing_type = running, running_type
     if not filtered and not (date_from or date_to):
-        closing_balance, closing_type = get_client_account_balance(client_id)
+        closing_balance, closing_type = client_account_balance_from(invoices, entries)
 
     return {
         "client": client,

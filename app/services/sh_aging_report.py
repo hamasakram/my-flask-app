@@ -10,9 +10,13 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.models import ShClientCompany, ShSaleInvoice
-from app.services.sh_bank import filter_by_bank
-from app.services.sh_ledger_sync import compute_invoice_balances
+from app.models import ShClientCompany
+from app.services.sh_bank import get_current_sh_bank_id
+from app.services.sh_ledger_sync import (
+    _client_ledger_entries,
+    _client_sale_invoices,
+    _fifo_invoice_balances,
+)
 
 BUCKETS = (
     ("first_15", "First 15 days", 0, 15),
@@ -74,16 +78,17 @@ def _split_remaining(lines, remaining: float) -> list[float]:
 
 def build_customer_aging_report(client_id: int, as_on: date) -> dict:
     client = ShClientCompany.query.get_or_404(client_id)
-    balances = compute_invoice_balances(client_id)
-    invoices = (
-        filter_by_bank(ShSaleInvoice.query, ShSaleInvoice)
-        .filter(
-            ShSaleInvoice.sold_to_client_id == client_id,
-            ShSaleInvoice.invoice_date <= as_on,
-        )
-        .order_by(ShSaleInvoice.invoice_date.asc(), ShSaleInvoice.id.asc())
-        .all()
-    )
+    bank_id = get_current_sh_bank_id()
+    # compute_invoice_balances(client_id), keeping its invoice rows: the aging rows are the
+    # subset of them in this bank dated on/before as_on — the same rows and order the
+    # separate filter_by_bank(...).filter(...).order_by(date, id) query returned.
+    client_invoices = _client_sale_invoices(client_id, bank_id)
+    balances = _fifo_invoice_balances(client_invoices, _client_ledger_entries(client_id))
+    invoices = [
+        invoice
+        for invoice in client_invoices
+        if bank_id is not None and invoice.bank_id == bank_id and invoice.invoice_date <= as_on
+    ]
 
     rows = []
     running = 0.0

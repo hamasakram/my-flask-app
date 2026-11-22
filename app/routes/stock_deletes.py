@@ -73,9 +73,13 @@ def require_edit_access():
         abort(403)
 
 
-def _delete_entity(entity, entity_type: str, details: str, redirect_url: str):
+def _delete_entity(entity, entity_type: str, details: str, redirect_url: str, children=None):
     require_edit_access()
     entity_id = entity.id
+    if children is not None:
+        # The rows the delete cascade would remove, in one DELETE instead of a SELECT plus one
+        # DELETE per row; the cascade then finds nothing left. Same rows end up deleted.
+        children.delete(synchronize_session=False)
     db.session.delete(entity)
     log_audit(current_user.id, "DELETE", entity_type, entity_id, details)
     db.session.commit()
@@ -711,6 +715,7 @@ def delete_home_party(party_id):
         "HomeParty",
         f"Deleted home party: {party.name}",
         url_for("home_ledger.parties"),
+        children=HomeLedgerEntry.query.filter(HomeLedgerEntry.party_id == party.id),
     )
 
 
@@ -742,6 +747,7 @@ def delete_bank_account(bank_id):
         "BankAccount",
         f"Deleted bank account: {bank.display_name}",
         url_for("bank_ledger.banks"),
+        children=BankLedgerEntry.query.filter(BankLedgerEntry.bank_id == bank.id),
     )
 
 

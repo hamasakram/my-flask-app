@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 
 from app import db
 from app.models import InkType, UsedInkName, UsedInkShade, UsedInkStock
@@ -99,25 +99,23 @@ def get_used_ink_balance(ink_name: str, shade_name: str = "") -> float:
         return 0.0
 
     if cleaned_shade:
-        added = float(
-            db.session.query(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
-            .filter(
-                func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
-                func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
-                UsedInkStock.entry_type == UsedInkStock.ENTRY_ADD,
+
+        def total(entry_type):
+            return (
+                select(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
+                .where(
+                    func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
+                    func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
+                    UsedInkStock.entry_type == entry_type,
+                )
+                .scalar_subquery()
             )
-            .scalar()
-        )
-        used = float(
-            db.session.query(func.coalesce(func.sum(UsedInkStock.quantity_total), 0))
-            .filter(
-                func.lower(UsedInkStock.ink_name) == cleaned_ink.lower(),
-                func.lower(UsedInkStock.shade_name) == cleaned_shade.lower(),
-                UsedInkStock.entry_type == UsedInkStock.ENTRY_USE,
-            )
-            .scalar()
-        )
-        return added - used
+
+        # Added and used totals in one round-trip (the same two filtered sums as before).
+        added, used = db.session.execute(
+            select(total(UsedInkStock.ENTRY_ADD), total(UsedInkStock.ENTRY_USE))
+        ).one()
+        return float(added) - float(used)
 
     return sum(
         row["balance_kg"]
@@ -171,10 +169,18 @@ def resolve_used_ink_for_usage(ink_name: str, shade_name: str) -> tuple[str, str
 
 def get_used_ink_balances() -> list[dict]:
     """Current used ink stock levels in kg across all entries."""
-    entries = UsedInkStock.query.order_by(
-        UsedInkStock.ink_name.asc(),
-        UsedInkStock.shade_name.asc(),
-    ).all()
+    # Same SELECT (every column, same ORDER BY) as UsedInkStock.query, read as plain rows:
+    # only four fields are needed, so no ORM object is built per entry.
+    entries = (
+        db.session.query(
+            *(getattr(UsedInkStock, attr.key) for attr in UsedInkStock.__mapper__.column_attrs)
+        )
+        .order_by(
+            UsedInkStock.ink_name.asc(),
+            UsedInkStock.shade_name.asc(),
+        )
+        .all()
+    )
     grouped: dict[tuple[str, str], dict] = {}
 
     for entry in entries:

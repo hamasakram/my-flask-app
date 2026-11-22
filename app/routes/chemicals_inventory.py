@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.orm import joinedload, selectinload
 
 from app import db
 from app.models import ChemicalItem, ChemicalOpeningStock, ChemicalTransaction, Company
@@ -168,6 +169,7 @@ def opening_stock():
     records = (
         ChemicalOpeningStock.query.join(Company)
         .join(ChemicalItem)
+        .options(selectinload(ChemicalOpeningStock.company), selectinload(ChemicalOpeningStock.item))
         .order_by(Company.name, ChemicalItem.name)
         .all()
     )
@@ -237,6 +239,11 @@ def receive_stock():
     recent_received = (
         ChemicalTransaction.query.filter_by(
             transaction_type=ChemicalTransaction.TRANSACTION_RECEIVED
+        )
+        .options(
+            joinedload(ChemicalTransaction.company),
+            joinedload(ChemicalTransaction.item),
+            joinedload(ChemicalTransaction.created_by),
         )
         .order_by(ChemicalTransaction.transaction_date.desc(), ChemicalTransaction.id.desc())
         .limit(30)
@@ -321,6 +328,11 @@ def use_stock():
         ChemicalTransaction.query.filter_by(
             transaction_type=ChemicalTransaction.TRANSACTION_USED
         )
+        .options(
+            joinedload(ChemicalTransaction.company),
+            joinedload(ChemicalTransaction.item),
+            joinedload(ChemicalTransaction.created_by),
+        )
         .order_by(ChemicalTransaction.transaction_date.desc(), ChemicalTransaction.id.desc())
         .limit(30)
         .all()
@@ -365,6 +377,8 @@ def live_inventory():
     company_id = request.args.get("company_id", type=int)
     item_search = request.args.get("item", "").strip().lower()
 
+    # Companies first: the live stock rows then find their company already loaded.
+    companies = get_chemical_companies()
     rows = chemical_live_stock(company_id=company_id)
     if item_search:
         rows = [
@@ -376,7 +390,7 @@ def live_inventory():
     return render_template(
         "chemicals/live_inventory.html",
         rows=rows,
-        companies=get_chemical_companies(),
+        companies=companies,
         selected_company=company_id,
         item_search=request.args.get("item", ""),
     )

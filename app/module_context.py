@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from flask import url_for
+from flask import current_app, has_request_context, request, url_for
 
 MODULE_INK = "ink"
 MODULE_MATERIALS = "materials"
@@ -79,7 +79,16 @@ def module_label(module: str) -> str:
 
 def module_dashboard_url(module: str) -> str:
     endpoint = MODULE_DASHBOARD_ENDPOINTS.get(module, "main.dashboard")
-    return url_for(endpoint)
+    if not has_request_context():
+        return url_for(endpoint)
+    # Dashboard URLs take no arguments and never change while the app runs, so each is built
+    # once (per app and script root) instead of 8 url_for() calls on every rendered page.
+    cache = current_app.extensions.setdefault("rn_dashboard_urls", {})
+    key = (request.script_root, endpoint)
+    url = cache.get(key)
+    if url is None:
+        url = cache[key] = url_for(endpoint)
+    return url
 
 
 def all_module_options(current: Optional[str] = None):
@@ -94,15 +103,18 @@ def all_module_options(current: Optional[str] = None):
     ]
 
 
-def dashboard_only_allowed_endpoints() -> set[str | None]:
-    return set(MODULE_DASHBOARD_ENDPOINTS.values()) | {
-        "auth.login",
-        "auth.logout",
-        "auth.choose_module",
-        "static",
-        "ping",
-        None,
-    }
+_DASHBOARD_ONLY_ALLOWED: frozenset[str | None] = frozenset(MODULE_DASHBOARD_ENDPOINTS.values()) | {
+    "auth.login",
+    "auth.logout",
+    "auth.choose_module",
+    "static",
+    "ping",
+    None,
+}
+
+
+def dashboard_only_allowed_endpoints() -> frozenset[str | None]:
+    return _DASHBOARD_ONLY_ALLOWED
 
 
 def other_module(current: str) -> str:

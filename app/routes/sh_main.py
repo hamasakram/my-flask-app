@@ -2,6 +2,7 @@ from datetime import datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
+from sqlalchemy.orm import lazyload
 
 from app import db
 from app.models import (
@@ -42,7 +43,7 @@ from app.services.sh_supplier_ledger_report import (
 )
 from app.services.sh_ledger_pdf import generate_client_ledger_pdf, generate_supplier_ledger_pdf
 from app.services.sh_ledger_sync import (
-    compute_invoice_balances,
+    compute_invoice_balances_for_clients,
     get_client_ledger_balance_before,
     get_invoice_remaining,
     get_last_client_ledger_balance,
@@ -64,7 +65,11 @@ from app.services.sh_manual_ledger import (
     next_supplier_ledger_ref,
 )
 from app.services.sh_order_confirmation_pdf import generate_order_confirmation_pdf
-from app.services.sh_partnership import apply_partnership_from_form, get_partner_ledger_balance
+from app.services.sh_partnership import (
+    apply_partnership_from_form,
+    get_partner_ledger_balance,
+    get_partner_ledger_overview,
+)
 from app.services.sh_payment_receipt import (
     get_payment_receipts,
     next_payment_receipt_number,
@@ -363,14 +368,21 @@ def partners():
         return redirect(url_for("sh_main.partners"))
 
     partner_list = ShPartnerCompany.query.order_by(ShPartnerCompany.name).all()
-    summaries = [
-        {
-            "partner": partner,
-            "ledger_balance": get_partner_ledger_balance(partner.id),
-            "purchase_count": partner.purchase_shares.count(),
-        }
-        for partner in partner_list
-    ]
+    overview = get_partner_ledger_overview([partner.id for partner in partner_list])
+    summaries = []
+    for partner in partner_list:
+        if partner.id in overview:
+            ledger_balance, purchase_count = overview[partner.id]
+        else:
+            ledger_balance = get_partner_ledger_balance(partner.id)
+            purchase_count = partner.purchase_shares.count()
+        summaries.append(
+            {
+                "partner": partner,
+                "ledger_balance": ledger_balance,
+                "purchase_count": purchase_count,
+            }
+        )
     return render_template(
         "sh_traders/partners.html",
         partners=summaries,
@@ -596,11 +608,12 @@ def payments():
             flash(msg, "info")
         return redirect(url_for("sh_main.payments"))
 
+    ledger_rows = get_ledger_rows()
     return render_template(
         "sh_traders/payments.html",
         bank=bank,
-        ledger_rows=get_ledger_rows(),
-        current_balance=get_current_ledger_balance(),
+        ledger_rows=ledger_rows,
+        current_balance=get_current_ledger_balance(ledger_rows),
         suppliers=suppliers,
         clients=clients,
         partners=partners,
@@ -699,7 +712,7 @@ def client_ledger():
 
     return render_template(
         "sh_traders/client_ledger.html",
-        grouped_parties=group_client_ledger_by_party(),
+        grouped_parties=group_client_ledger_by_party(parties=clients),
         clients=clients,
         next_reference=next_client_ledger_ref(),
         banks=get_all_banks(),
@@ -968,7 +981,7 @@ def supplier_ledger():
 
     return render_template(
         "sh_traders/supplier_ledger.html",
-        grouped_parties=group_supplier_ledger_by_party(),
+        grouped_parties=group_supplier_ledger_by_party(parties=suppliers),
         suppliers=suppliers,
         next_reference=next_supplier_ledger_ref(),
         banks=get_all_banks(),
@@ -1156,11 +1169,14 @@ def payment_receipt():
         return redirect(url_for("sh_main.payment_receipt_pdf", receipt_id=receipt.id))
 
     client_invoice_options = {}
-    balance_cache = {}
-    for invoice in _bank_sale_invoices().all():
+    # The page never shows invoice lines, so don't join them in; balances for every
+    # client come from one batched FIFO instead of two queries per client.
+    invoice_list = _bank_sale_invoices().options(lazyload(ShSaleInvoice.lines)).all()
+    balance_cache = compute_invoice_balances_for_clients(
+        {invoice.sold_to_client_id for invoice in invoice_list}
+    )
+    for invoice in invoice_list:
         client_id = invoice.sold_to_client_id
-        if client_id not in balance_cache:
-            balance_cache[client_id] = compute_invoice_balances(client_id)
         balance = balance_cache[client_id].get(
             invoice.id,
             {"remaining": float(invoice.total_amount or 0), "paid": 0.0},
@@ -1305,7 +1321,8 @@ def gate_pass_screenshots():
         return redirect(url_for("sh_main.banks"))
 
     clients = ShClientCompany.query.order_by(ShClientCompany.name).all()
-    invoices = _bank_sale_invoices().all()
+    # Only number/date/client are shown for each invoice; skip joining their lines.
+    invoices = _bank_sale_invoices().options(lazyload(ShSaleInvoice.lines)).all()
 
     if request.method == "POST":
         require_edit_access()
@@ -1447,12 +1464,12 @@ def sale_invoices():
         return redirect(url_for("sh_main.sale_invoice_pdf", invoice_id=invoice.id))
 
     invoice_list = _bank_sale_invoices().all()
-    balance_cache = {}
+    balance_cache = compute_invoice_balances_for_clients(
+        {invoice.sold_to_client_id for invoice in invoice_list}
+    )
     invoice_rows = []
     for invoice in invoice_list:
         client_id = invoice.sold_to_client_id
-        if client_id not in balance_cache:
-            balance_cache[client_id] = compute_invoice_balances(client_id)
         balance = balance_cache[client_id].get(
             invoice.id,
             {"paid": 0.0, "remaining": float(invoice.total_amount or 0)},

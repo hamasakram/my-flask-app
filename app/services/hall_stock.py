@@ -388,8 +388,10 @@ def transfer_to_machine_hall(form, user_id: int | None) -> HallStockMovement:
     return movement
 
 
-def stock_count_last_id() -> int:
-    """Id of the last transfer/usage record made before the stock count (0 if none)."""
+_STOCK_COUNT_G_KEY = "_hall_stock_count_last_id"
+
+
+def _read_stock_count_last_id() -> int:
     from app.models import AppSetting
 
     setting = AppSetting.query.filter_by(key="hall_stock_count_last_movement_id").first()
@@ -397,6 +399,26 @@ def stock_count_last_id() -> int:
         return int(setting.value) if setting else 0
     except ValueError:
         return 0
+
+
+def stock_count_last_id() -> int:
+    """Id of the last transfer/usage record made before the stock count (0 if none).
+
+    Read once per request (the In Hall / Machine Hall pages ask for it on every history row);
+    the setting is only written by the one-time stock count import at start-up.
+    """
+    from flask import g, has_request_context, request
+
+    if not has_request_context():
+        return _read_stock_count_last_id()
+    # Tied to this request object: g can outlive a request when an app context was already
+    # pushed (scripts/tests), and the value must never carry over to another request.
+    current = request._get_current_object()
+    cached = g.get(_STOCK_COUNT_G_KEY)
+    if cached is None or cached[0] is not current:
+        cached = (current, _read_stock_count_last_id())
+        setattr(g, _STOCK_COUNT_G_KEY, cached)
+    return cached[1]
 
 
 def is_before_stock_count(movement: HallStockMovement) -> bool:

@@ -202,8 +202,11 @@ def get_ledger_rows() -> list[dict]:
     return rows
 
 
-def get_current_ledger_balance() -> float:
-    rows = get_ledger_rows()
+def get_current_ledger_balance(rows: list[dict] | None = None) -> float:
+    """Closing bank balance. Pass ``rows`` when the caller already built ``get_ledger_rows()``
+    in this request so the whole ledger is not loaded a second time."""
+    if rows is None:
+        rows = get_ledger_rows()
     if rows:
         return rows[-1]["balance"]
     bank = get_current_sh_bank()
@@ -284,7 +287,12 @@ def get_ledger_pdf_rows() -> list[dict]:
                 "balance": f"{balance:,.2f}",
             }
         )
-    for item in get_ledger_rows():
+    ledger_rows = get_ledger_rows()
+    # Load each referenced party table once and keep it alive for the loop, so
+    # entry.supplier / .client / .partner below resolve from the session instead of
+    # one lazy SELECT per party.
+    party_refs = _load_ledger_parties([item["entry"] for item in ledger_rows])  # noqa: F841
+    for item in ledger_rows:
         entry = item["entry"]
         balance = item["balance"]
         party = "—"
@@ -305,6 +313,20 @@ def get_ledger_pdf_rows() -> list[dict]:
             }
         )
     return rows
+
+
+def _load_ledger_parties(entries) -> list:
+    from app.models import ShClientCompany, ShPartnerCompany, ShSupplierCompany
+
+    loaded = []
+    for model, attr in (
+        (ShSupplierCompany, "supplier_company_id"),
+        (ShClientCompany, "client_company_id"),
+        (ShPartnerCompany, "partner_company_id"),
+    ):
+        if any(getattr(entry, attr) for entry in entries):
+            loaded.extend(model.query.all())
+    return loaded
 
 
 def _normalize_purchase_row(purchase: ShPurchase) -> dict:

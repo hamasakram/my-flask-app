@@ -2,6 +2,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
+from sqlalchemy import literal
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app import db
@@ -12,7 +13,6 @@ from app.services.ink_inventory import (
     create_ink,
     get_current_cans,
     get_ink_options,
-    list_inks,
 )
 from app.services.ink_export import export_used_inks_pdf
 from app.services.ink_used_stock import (
@@ -76,11 +76,18 @@ def inks_list():
 
     summary = summarize_ink_stock(calculate_live_stock())
     # Inks with Cans In / Cans Out (or opening) records can't be deleted; hide Delete for them.
-    in_use = {
-        row[0]
-        for row in db.session.query(InventoryTransaction.ink_type_id).distinct()
-        if row[0] is not None
-    } | {row[0] for row in db.session.query(OpeningStock.ink_type_id).distinct()}
+    # Both id lists come back in one round-trip (UNION ALL, tagged by source).
+    used_ids = (
+        db.session.query(literal(1).label("src"), InventoryTransaction.ink_type_id.label("ink_id"))
+        .distinct()
+        .union_all(
+            db.session.query(literal(2).label("src"), OpeningStock.ink_type_id.label("ink_id")).distinct()
+        )
+        .all()
+    )
+    in_use = {ink_id for src, ink_id in used_ids if src == 1 and ink_id is not None} | {
+        ink_id for src, ink_id in used_ids if src == 2
+    }
     companies = sorted({g["name"] for g in summary["groups"]} | {"RL", "Horizon Inks"}, key=str.lower)
     colours = sorted({r["colour"] for r in summary["rows"] if r["colour"]}, key=str.lower)
     existing = [
@@ -120,8 +127,6 @@ def current_stock_pdf():
 @inventory_bp.route("/cans-in", methods=["GET", "POST"])
 @login_required
 def cans_in():
-    inks = list_inks()
-
     if request.method == "POST":
         require_edit_access()
         ink_type_id = request.form.get("ink_type_id", type=int)
@@ -169,18 +174,19 @@ def cans_in():
         .limit(20)
         .all()
     )
+    ink_stock = calculate_live_stock()
     return render_template(
         "ink/cans_in.html",
-        inks=inks,
+        # calculate_live_stock lists every ink in list_inks() order: no second ink query.
+        inks=[row["ink"] for row in ink_stock],
         recent=recent,
-        ink_stock=calculate_live_stock(),
+        ink_stock=ink_stock,
     )
 
 
 @inventory_bp.route("/cans-out", methods=["GET", "POST"])
 @login_required
 def cans_out():
-    inks = list_inks()
     from datetime import timedelta, timezone
 
     # Pakistan has no daylight saving: "today" is always UTC+5 (the server runs on UTC).
@@ -269,15 +275,17 @@ def cans_out():
         .all()
     )
     report_data = get_used_ink_report_data(filter_date)
+    ink_stock = calculate_live_stock()
     return render_template(
         "ink/cans_out.html",
-        inks=inks,
+        # calculate_live_stock lists every ink in list_inks() order: no second ink query.
+        inks=[row["ink"] for row in ink_stock],
         recent=recent,
         report_data=report_data,
         selected_date=filter_date.isoformat(),
         ink_names=list_used_ink_names(),
         shade_names=list_used_ink_shades(),
-        ink_stock=calculate_live_stock(),
+        ink_stock=ink_stock,
         prev_date=(filter_date - timedelta(days=1)).isoformat(),
         next_date=(filter_date + timedelta(days=1)).isoformat(),
         today_date=pk_today.isoformat(),

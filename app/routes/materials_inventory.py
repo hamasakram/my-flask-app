@@ -67,8 +67,10 @@ def materials_list():
             flash(str(exc), "danger")
         return redirect(url_for("materials.materials_list"))
 
-    materials = list_materials()
-    live_stock = {item["material"].id: item["current"] for item in calculate_live_stock()}
+    # calculate_live_stock lists every material in list_materials() order: no second query.
+    stock_rows = calculate_live_stock()
+    materials = [item["material"] for item in stock_rows]
+    live_stock = {item["material"].id: item["current"] for item in stock_rows}
     return render_template(
         "materials/materials.html", materials=materials, live_stock=live_stock
     )
@@ -77,8 +79,6 @@ def materials_list():
 @materials_bp.route("/stock-in", methods=["GET", "POST"])
 @login_required
 def stock_in():
-    materials = list_materials()
-
     if request.method == "POST":
         require_edit_access()
         material_id = request.form.get("material_id", type=int)
@@ -127,15 +127,13 @@ def stock_in():
         .all()
     )
     return render_template(
-        "materials/stock_in.html", materials=materials, recent=recent
+        "materials/stock_in.html", materials=list_materials(), recent=recent
     )
 
 
 @materials_bp.route("/stock-left", methods=["GET", "POST"])
 @login_required
 def stock_left():
-    materials = list_materials()
-
     if request.method == "POST":
         require_edit_access()
         material_id = request.form.get("material_id", type=int)
@@ -212,7 +210,7 @@ def stock_left():
     )
     return render_template(
         "materials/stock_left.html",
-        materials=materials,
+        materials=list_materials(),
         recent=recent,
         job_names=list_production_job_names(),
     )
