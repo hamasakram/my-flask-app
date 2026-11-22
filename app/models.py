@@ -363,6 +363,55 @@ class HallStockMovement(db.Model):
     created_by = db.relationship("User", foreign_keys=[created_by_id])
 
 
+class HallStockPurchase(db.Model):
+    """A purchase of printing material received straight into In Hall or Machine Hall.
+
+    Saving one adds its KG / rolls / roll weights to the matching hall stock row (same rules as
+    "Add Stock"), and the purchase itself stays here as a separate record. Deleting it takes
+    that stock back out of the hall.
+    """
+
+    __tablename__ = "hall_stock_purchases"
+
+    id = db.Column(db.Integer, primary_key=True)
+    location = db.Column(db.String(20), nullable=False)
+    purchase_date = db.Column(db.Date, nullable=False)
+    supplier_name = db.Column(db.String(200), default="")
+    bill_no = db.Column(db.String(100), default="")
+    item_id = db.Column(db.Integer, db.ForeignKey("hall_stock_items.id"), nullable=True)
+    material_name = db.Column(db.String(150), nullable=False)
+    material_type = db.Column(db.String(100), default="")
+    size = db.Column(db.String(100), default="")
+    micron = db.Column(db.String(50), default="")
+    kg = db.Column(db.Float, nullable=False)
+    rolls = db.Column(db.Float, nullable=True)
+    roll_weights = db.Column(db.Text, nullable=True)
+    rate_per_kg = db.Column(db.Float, nullable=True)
+    amount = db.Column(db.Float, nullable=True)
+    notes = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    item = db.relationship("HallStockItem", foreign_keys=[item_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def location_label(self) -> str:
+        return "Machine Hall" if self.location == HallStockItem.LOCATION_MACHINE else "In Hall"
+
+    @property
+    def roll_list(self) -> list:
+        from app.services.hall_stock import load_rolls
+
+        return load_rolls(self.roll_weights)
+
+    @property
+    def roll_spec(self) -> str:
+        from app.services.hall_stock import format_roll_spec
+
+        return format_roll_spec(self.roll_list)
+
+
 class ProductionJob(db.Model):
     """Saved job names for Stock Left 'Where Used' autocomplete."""
 

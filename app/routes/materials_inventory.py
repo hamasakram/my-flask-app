@@ -1,10 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from app import db
-from app.models import HallStockItem, HallStockMovement, Material, MaterialTransaction
+from app.models import HallStockItem, HallStockMovement, HallStockPurchase, Material, MaterialTransaction
 from app.services.hall_stock import (
     add_or_increase_stock,
     list_items,
@@ -15,6 +15,16 @@ from app.services.hall_stock import (
     undo_machine_usage,
     undo_transfer,
     update_item_fields,
+)
+from app.services.hall_purchases import (
+    LOCATIONS as PURCHASE_LOCATIONS,
+    delete_purchase,
+    detach_item,
+    list_purchases,
+    parse_optional_date,
+    record_purchase,
+    summarize,
+    supplier_names,
 )
 from app.services.hall_stock_pdf import generate_hall_stock_pdf
 from app.services.inventory import log_audit
@@ -607,6 +617,7 @@ def delete_hall_stock(item_id):
         (HallStockMovement.source_item_id == item.id)
         | (HallStockMovement.dest_item_id == item.id)
     ).delete(synchronize_session=False)
+    detach_item(item.id)  # purchase records stay as history
     log_audit(
         current_user.id,
         "DELETE",
@@ -618,3 +629,166 @@ def delete_hall_stock(item_id):
     db.session.commit()
     flash("Stock row deleted.", "success")
     return redirect(url_for(back))
+
+
+# ---------------------------------------------------------------------------
+# Material purchases received into In Hall / Machine Hall
+# ---------------------------------------------------------------------------
+
+PKT = timezone(timedelta(hours=5))
+
+
+def _today_pk():
+    return datetime.now(PKT).date()
+
+
+def _purchase_filters(args) -> dict:
+    """Filters from the query string. Default period: this month (Pakistan time)."""
+    today = _today_pk()
+    period = (args.get("period") or "").strip()
+    date_from = parse_optional_date(args.get("from"))
+    date_to = parse_optional_date(args.get("to"))
+    if period == "all":
+        date_from = date_to = None
+    elif period == "last_month":
+        first_this = today.replace(day=1)
+        date_to = first_this - timedelta(days=1)
+        date_from = date_to.replace(day=1)
+    elif period == "today":
+        date_from = date_to = today
+    elif not args.get("from") and not args.get("to"):
+        period = period or "this_month"
+        date_from, date_to = today.replace(day=1), today
+    else:
+        period = "custom"
+    location = (args.get("location") or "").strip()
+    if location not in PURCHASE_LOCATIONS:
+        location = ""
+    return {
+        "period": period or "this_month",
+        "date_from": date_from,
+        "date_to": date_to,
+        "location": location,
+        "q": (args.get("q") or "").strip(),
+    }
+
+
+def _purchase_filter_args(filters: dict) -> dict:
+    """Query-string form of the filters (for links: PDF, redirects)."""
+    args = {}
+    if filters["period"] in ("all", "last_month", "today"):
+        args["period"] = filters["period"]
+    elif filters["period"] == "custom":
+        if filters["date_from"]:
+            args["from"] = filters["date_from"].isoformat()
+        if filters["date_to"]:
+            args["to"] = filters["date_to"].isoformat()
+    if filters["location"]:
+        args["location"] = filters["location"]
+    if filters["q"]:
+        args["q"] = filters["q"]
+    return args
+
+
+@materials_bp.route("/purchases", methods=["GET", "POST"])
+@login_required
+def hall_purchases():
+    if request.method == "POST":
+        require_edit_access()
+        hall = request.form.get("location") or None
+        try:
+            purchase, item, created = record_purchase(request.form, current_user.id)
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "HallStockPurchase",
+                purchase.id,
+                f"{purchase.location_label}: {purchase.material_name} {purchase.kg:g} kg"
+                + (f" from {purchase.supplier_name}" if purchase.supplier_name else ""),
+            )
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("materials.hall_purchases", hall=hall))
+        size = f" {purchase.size} mm" if (purchase.size or "").isdigit() else (f" {purchase.size}" if purchase.size else "")
+        where = "as a new row" if created else "onto the existing stock"
+        flash(
+            f"Purchase saved: {purchase.kg:,.3f} kg of {purchase.material_name}{size} added to "
+            f"{purchase.location_label} {where}.",
+            "success",
+        )
+        _flash_job_notice(item.material_name, item.size, item.micron, item.material_type)
+        return redirect(url_for("materials.hall_purchases", hall=purchase.location))
+
+    filters = _purchase_filters(request.args)
+    purchases = list_purchases(filters["location"], filters["date_from"], filters["date_to"], filters["q"])
+    form_hall = request.args.get("hall") or filters["location"] or HallStockItem.LOCATION_IN_HALL
+    if form_hall not in PURCHASE_LOCATIONS:
+        form_hall = HallStockItem.LOCATION_IN_HALL
+    hall_items = HallStockItem.query.order_by(
+        HallStockItem.material_type, HallStockItem.material_name, HallStockItem.size
+    ).all()
+    return render_template(
+        "materials/hall_purchases.html",
+        purchases=purchases,
+        summary=summarize(purchases),
+        filters=filters,
+        filter_args=_purchase_filter_args(filters),
+        locations=PURCHASE_LOCATIONS,
+        form_hall=form_hall,
+        today=_today_pk(),
+        suppliers=supplier_names(),
+        hall_items=hall_items,
+    )
+
+
+@materials_bp.route("/purchases/<int:purchase_id>/delete", methods=["POST"])
+@login_required
+def delete_hall_purchase(purchase_id):
+    require_edit_access()
+    purchase = HallStockPurchase.query.get_or_404(purchase_id)
+    back_args = {k: v for k, v in request.form.items() if k in ("period", "from", "to", "location", "q") and v}
+    try:
+        result = delete_purchase(purchase)
+        log_audit(
+            current_user.id,
+            "DELETE",
+            "HallStockPurchase",
+            purchase_id,
+            f"Deleted purchase: {result['name']} {result['kg']:g} kg from {result['hall']}",
+        )
+        db.session.commit()
+    except ValueError as exc:
+        db.session.rollback()
+        flash(str(exc), "danger")
+        return redirect(url_for("materials.hall_purchases", **back_args))
+    if result.get("history_only"):
+        flash(
+            f"Purchase record deleted. {result['name']} is no longer in {result['hall']} stock, "
+            "so no stock was changed.",
+            "success",
+        )
+    else:
+        flash(
+            f"Purchase deleted: {result['kg']:,.3f} kg of {result['name']} taken back out of {result['hall']}.",
+            "success",
+        )
+    return redirect(url_for("materials.hall_purchases", **back_args))
+
+
+@materials_bp.route("/purchases/pdf")
+@login_required
+def hall_purchases_pdf():
+    from app.services.hall_purchases_pdf import generate_hall_purchases_pdf
+
+    filters = _purchase_filters(request.args)
+    purchases = list_purchases(filters["location"], filters["date_from"], filters["date_to"], filters["q"])
+    buffer = generate_hall_purchases_pdf(purchases, summarize(purchases), filters)
+    stamp = _today_pk().strftime("%Y%m%d")
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"material_purchases_{stamp}.pdf",
+    )

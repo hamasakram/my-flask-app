@@ -21,6 +21,9 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Transfer to Machine Hall
         </a>
         {% endif %}
+        <a href="{{ url_for('materials.hall_purchases', hall='in_hall', _anchor='pu-form') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9.5 8h5M9.5 12h5"/></svg>Record purchase
+        </a>
         {% endif %}
         <a href="{{ url_for('materials.in_hall_stock_pdf') }}" class="ih-btn ih-btn-quiet" target="_blank">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download PDF

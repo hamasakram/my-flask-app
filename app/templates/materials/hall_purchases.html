@@ -1,0 +1,841 @@
+{% extends "base.html" %}
+{% from "materials/_ih_macros.html" import num, rolls_text, micron_text, size_text %}
+{% block title %}Material Purchases - RN COLOUR{% endblock %}
+
+{# ---- Small helpers (display only) #}
+{% macro money(value) -%}
+{%- set v = value or 0 -%}
+{%- if (v * 100)|round|int % 100 == 0 %}₨ {{ "{:,.0f}".format(v) }}{% else %}₨ {{ "{:,.2f}".format(v) }}{% endif -%}
+{%- endmacro %}
+{% macro dmy(d) -%}{{ d.day }} {{ d.strftime('%b %Y') }}{%- endmacro %}
+{% macro date_range(a, b) -%}
+{%- if a and b and a == b %}{{ dmy(a) }}
+{%- elif a and b and a.year == b.year and a.month == b.month %}{{ a.day }} – {{ b.day }} {{ b.strftime('%b %Y') }}
+{%- elif a and b and a.year == b.year %}{{ a.day }} {{ a.strftime('%b') }} – {{ dmy(b) }}
+{%- elif a and b %}{{ dmy(a) }} – {{ dmy(b) }}
+{%- elif a %}from {{ dmy(a) }}
+{%- elif b %}up to {{ dmy(b) }}
+{%- endif -%}
+{%- endmacro %}
+{# Link to this page with some filters changed (empty value = drop it). #}
+{% macro purl(over) -%}
+{%- set a = {} -%}
+{%- for k, v in filter_args.items() %}{% set _ = a.update({k: v}) %}{% endfor -%}
+{%- for k, v in over.items() %}{% if v %}{% set _ = a.update({k: v}) %}{% elif k in a %}{% set _ = a.pop(k) %}{% endif %}{% endfor -%}
+{{- url_for('materials.hall_purchases', **a) -}}
+{%- endmacro %}
+{% macro material_label(name, mtype) -%}
+{%- set n = (name or '')|trim -%}{%- set t = (mtype or '')|trim -%}
+{%- if t and t|lower != n|lower %}{{ n }} · {{ t }}{% else %}{{ n }}{% endif -%}
+{%- endmacro %}
+
+{% block content %}
+{% include "materials/_ih_styles.html" %}
+{% include "materials/_glass_kit.html" %}
+<style>
+/* Material Purchases: same look as In-Hall (ih-*), plus pu-* pieces */
+.pu-page { --pu-in: #2f5fb3; --pu-mh: #7353ba; }
+.pu-page .ih-panel, .pu-page #pu-history { scroll-margin-top: calc(var(--sticky-top, 0px) + 14px); }
+
+/* Header */
+.pu-header p { max-width: 44rem; }
+
+/* Summary */
+.pu-summary { padding: 1.1rem 1.25rem 1.2rem; }
+.pu-sum-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 1.1rem 1.5rem; align-items: start; }
+.pu-sum-grid.pu-sum-solo { grid-template-columns: minmax(0, 1fr); }
+.pu-sum-head { display: flex; align-items: baseline; gap: 0.35rem 0.6rem; flex-wrap: wrap; margin: 0 0 0.75rem; }
+.pu-sum-head h2 { margin: 0; font-size: 1.05rem; }
+.pu-sum-range { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pu-sum-head .chip { align-self: center; }
+.pu-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: 0.55rem; }
+.pu-tile { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; padding: 0.7rem 0.85rem 0.75rem; border-radius: 14px; background: rgba(255, 255, 255, 0.5); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 1px var(--line-strong, rgba(23, 30, 48, 0.15)); }
+.pu-tile-label { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.pu-tile-value { font-size: 1.6rem; font-weight: 750; color: #1b2740; letter-spacing: -0.025em; line-height: 1.15; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pu-tile-value small { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-left: 0.15rem; letter-spacing: 0; }
+.pu-tile-sub { font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pu-tile-sub strong { color: var(--text); }
+.pu-tile-main { background: linear-gradient(180deg, rgba(178, 30, 34, 0.07), rgba(178, 30, 34, 0.02)), rgba(255, 255, 255, 0.55); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 0 1px rgba(178, 30, 34, 0.22); }
+.pu-split { margin-top: 0.85rem; }
+.pu-split .ih-bar { margin-bottom: 0.6rem; }
+.pu-halls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pu-halls .ih-fam { text-decoration: none; }
+.pu-halls .ih-fam:hover { text-decoration: none; color: inherit; }
+.pu-suppliers h3 { margin: 0 0 0.55rem; font-size: 0.78rem; font-weight: 750; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.pu-sup-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.pu-sup { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem 0.75rem; align-items: baseline; font-size: 0.88rem; }
+.pu-sup-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pu-sup-name.pu-none { color: var(--muted); font-weight: 500; font-style: italic; }
+.pu-sup-kg { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pu-sup-kg small { color: var(--muted); font-weight: 500; }
+.pu-sup-bar { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: rgba(23, 30, 48, 0.07); overflow: hidden; box-shadow: inset 0 1px 1px rgba(23, 30, 48, 0.08); }
+.pu-sup-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #c83036, #a3191e); min-width: 4px; }
+.pu-sup-more { font-size: 0.8rem; color: var(--muted); margin: 0.55rem 0 0; }
+
+/* Record form */
+.pu-form-card { background: radial-gradient(120% 120% at 0% 0%, var(--pu-wash, rgba(59, 130, 246, 0.09)) 0%, rgba(255, 255, 255, 0) 55%), var(--glass-sheen, none), var(--glass-bg-strong, #fff); }
+.pu-form-card:has(input[value="machine_hall"]:checked) { --pu-wash: rgba(139, 92, 246, 0.11); }
+.pu-panel-title { display: flex; align-items: flex-start; gap: 0.75rem; }
+.pu-panel-icon { flex-shrink: 0; width: 2.5rem; height: 2.5rem; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; color: white; background: linear-gradient(180deg, #d13a40 0%, #a8191f 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 6px 14px -6px rgba(178, 30, 34, 0.55); }
+.pu-panel-icon svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pu-dest { grid-column: 1 / -1; margin: 0; padding: 0; border: none; min-width: 0; }
+.pu-dest legend { padding: 0; margin: 0 0 0.4rem; }
+.pu-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.3rem; padding: 0.3rem; border-radius: 20px; background: rgba(23, 30, 48, 0.06); box-shadow: inset 0 1px 2px rgba(23, 30, 48, 0.1), 0 1px 0 rgba(255, 255, 255, 0.85); }
+.pu-seg-opt { position: relative; display: flex; align-items: center; gap: 0.7rem; min-height: 3.6rem; padding: 0.55rem 0.9rem; border-radius: 16px; cursor: pointer; color: var(--muted); transition: background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+.pu-seg-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.pu-seg-opt:hover { background: rgba(255, 255, 255, 0.5); }
+.pu-seg-icon { flex-shrink: 0; width: 2.3rem; height: 2.3rem; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.55); box-shadow: inset 0 0 0 1px var(--line-strong, rgba(23, 30, 48, 0.15)); color: #6b7487; transition: background 0.15s ease, color 0.15s ease; }
+.pu-seg-icon svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pu-seg-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.pu-seg-text strong { font-size: 1.02rem; font-weight: 700; color: var(--text); }
+.pu-seg-text small { font-size: 0.78rem; }
+.pu-seg-opt:has(input:checked) { background: rgba(255, 255, 255, 0.96); color: var(--pu-text); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 1), 0 0 0 2px var(--pu-c), 0 6px 16px -8px rgba(40, 30, 60, 0.45); }
+.pu-seg-opt:has(input:checked) .pu-seg-icon { background: var(--pu-c); color: white; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4); }
+.pu-seg-opt:has(input:checked) .pu-seg-text strong { color: var(--pu-text); }
+.pu-seg-opt:has(input:focus-visible) { outline: 3px solid rgba(59, 130, 246, 0.55); outline-offset: 2px; }
+.pu-seg-in_hall { --pu-c: var(--pu-in); --pu-text: #1e3f9e; }
+.pu-seg-machine_hall { --pu-c: var(--pu-mh); --pu-text: #4c2a91; }
+.pu-span-2 { grid-column: span 2; }
+.pu-match { grid-column: 1 / -1; margin: -0.2rem 0 0; display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.86rem; line-height: 1.4; padding: 0.5rem 0.75rem; border-radius: 12px; }
+.pu-match[hidden] { display: none; }
+.pu-match svg { flex-shrink: 0; width: 1rem; height: 1rem; margin-top: 0.12rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.pu-match-add { color: #14532d; background: var(--tint-green, rgba(16, 185, 129, 0.14)); box-shadow: inset 0 0 0 1px var(--tint-green-border, rgba(5, 150, 105, 0.28)); }
+.pu-match-new { color: var(--tint-blue-text, #1e3f9e); background: var(--tint-blue, rgba(59, 130, 246, 0.12)); box-shadow: inset 0 0 0 1px var(--tint-blue-border, rgba(37, 99, 235, 0.26)); }
+.pu-match-near { color: #7c2d12; background: var(--tint-amber, rgba(245, 158, 11, 0.16)); box-shadow: inset 0 0 0 1px var(--tint-amber-border, rgba(217, 119, 6, 0.3)); }
+.pu-match strong { font-weight: 700; }
+.pu-match-use { display: inline; background: none; border: none; padding: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.pu-calc { grid-column: 1 / -1; margin: -0.25rem 0 0; font-size: 0.86rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pu-calc[hidden] { display: none; }
+.pu-calc strong { color: #14532d; font-size: 0.95rem; }
+.pu-page .ih-form textarea { width: 100%; min-height: 3.2rem; }
+.pu-form-foot .ih-btn { min-width: 17rem; }
+
+/* History: heading + filter bar */
+.pu-hist-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.35rem 1rem; flex-wrap: wrap; margin: 0.5rem 0 0.75rem; }
+.pu-hist-head h2 { margin: 0; font-size: 1.15rem; }
+.pu-hist-head span { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pu-toolbar { position: static; padding: 0.6rem 0.65rem; }
+.pu-toolbar form { margin: 0; }
+.pu-search-row { display: flex; gap: 0.5rem; align-items: center; }
+.pu-search-row .ih-search { flex: 1; }
+.pu-filter-rows { display: flex; align-items: center; gap: 0.5rem 1.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.pu-filter-rows .ih-chips { margin: 0; flex: 0 1 auto; min-width: 0; }
+.pu-chips a.ih-chip { text-decoration: none; }
+.pu-chips .ih-chip[aria-current="true"] { color: white; background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 55%), linear-gradient(180deg, #c83036 0%, #a3191e 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 4px 12px -5px rgba(178, 30, 34, 0.6); }
+.pu-chips .ih-chip svg { width: 0.85rem; height: 0.85rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s ease; }
+.pu-chips .ih-chip[aria-expanded="true"] svg { transform: rotate(180deg); }
+.pu-hall-dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8); }
+.pu-chips .ih-chip[aria-current="true"] .pu-hall-dot { background: white !important; box-shadow: none; }
+.pu-custom { display: flex; align-items: flex-end; gap: 0.5rem 0.65rem; flex-wrap: wrap; margin-top: 0.6rem; padding: 0.65rem 0.7rem; border-radius: 14px; background: rgba(255, 255, 255, 0.42); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line, rgba(23, 30, 48, 0.08)); }
+.pu-custom[hidden] { display: none; }
+.pu-custom label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; font-weight: 600; color: var(--text); }
+.pu-custom input[type="date"] { min-height: 2.6rem; border-radius: 12px; min-width: 10.5rem; }
+.pu-active { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.6rem; margin: 0.55rem 0 0; font-size: 0.82rem; color: var(--muted); }
+.pu-active a { color: #1d4ed8; font-weight: 600; }
+
+/* History: list (table on desktop, cards on phone) */
+.pu-list { padding: 0; }
+.pu-table { min-width: 0; }
+.pu-table th, .pu-table td { vertical-align: top; }
+.pu-table thead th { padding-top: 0.75rem; padding-bottom: 0.65rem; }
+.pu-table thead th:first-child { padding-left: 1.1rem; }
+.pu-table td:first-child { padding-left: 1.1rem; }
+.pu-table th:last-child, .pu-table td:last-child { padding-right: 1.1rem; }
+.pu-table tbody tr:nth-child(even) { background: transparent; }
+.pu-table tbody tr.pu-row:hover { background: rgba(255, 255, 255, 0.55); }
+.pu-table tbody tr.pu-row td { border-bottom: 1px solid var(--line, rgba(23, 30, 48, 0.08)); }
+.pu-table tbody:last-child tr.pu-row:last-child td { border-bottom: none; }
+.pu-table tr.pu-day-head th { position: static; padding: 0.6rem 1.1rem; text-transform: none; letter-spacing: 0; font-size: 0.92rem; color: var(--text); white-space: normal; background: linear-gradient(180deg, #fefdfe, #f8f5f8); border-top: 1px solid var(--line-strong, rgba(23, 30, 48, 0.15)); border-bottom: 1px solid var(--line, rgba(23, 30, 48, 0.08)); }
+.pu-table tbody:first-of-type tr.pu-day-head th { border-top: none; }
+.pu-day-line { display: flex; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; flex-wrap: wrap; }
+.pu-day-date { font-weight: 700; }
+.pu-day-date span { color: var(--muted); font-weight: 600; margin-left: 0.3rem; }
+.pu-day-figs { font-size: 0.82rem; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pu-day-figs strong { color: var(--text); }
+.pu-table td[data-cell="hall"], .pu-table td[data-cell="kg"], .pu-table td[data-cell="amount"], .pu-table td[data-cell="actions"] { width: 1%; white-space: nowrap; }
+.pu-sup-cell { min-width: 7rem; }
+.pu-mat { min-width: 7rem; }
+.pu-sup-cell span { white-space: nowrap; }
+.pu-hall { font-weight: 700; }
+.pu-hall::before { content: ""; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor; opacity: 0.85; }
+.pu-mat strong, .pu-sup-cell strong { display: block; font-weight: 700; }
+.pu-mat span, .pu-sup-cell span, .pu-amt span, .pu-kg-cell span, .pu-note-cell span { display: block; font-size: 0.8rem; color: var(--muted); }
+.pu-mat .ih-micron { display: inline-block; margin-left: 0.2rem; font-size: 0.72rem; color: #334155; }
+.pu-kg-cell strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.pu-kg-cell small { color: var(--muted); font-weight: 600; margin-left: 0.15rem; }
+.pu-rolls-cell { min-width: 7.5rem; max-width: 18rem; }
+.pu-rolls-n { display: block; font-size: 0.86rem; font-variant-numeric: tabular-nums; margin-bottom: 0.25rem; }
+.pu-rolls-n strong { font-weight: 700; }
+.pu-amt strong { display: block; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pu-note-cell { min-width: 10rem; max-width: 16rem; }
+.pu-note-cell .pu-by { white-space: nowrap; }
+.pu-note-text { display: block; white-space: normal; overflow-wrap: anywhere; font-size: 0.86rem; color: var(--text); }
+.pu-by { margin-top: 0.15rem; }
+.pu-dash { color: var(--muted); }
+.pu-table td[data-cell="rolls"]:empty::before, .pu-table td[data-cell="amount"]:empty::before { content: "—"; color: var(--muted); }
+.pu-actions-cell form { margin: 0; display: inline-flex; }
+.pu-list .ih-empty .ih-btn { margin-top: 0.85rem; }
+
+@media (max-width: 980px) {
+    .pu-sum-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 1101px) {
+    .pu-only-phone { display: none !important; }
+}
+/* History list: a table on wide screens, one card per purchase below 1100px (tablet, phone) */
+@media (max-width: 1100px) {
+    .pu-table thead { display: none; }
+    .pu-table, .pu-table tbody, .pu-table tr, .pu-table th, .pu-table td { display: block; }
+    .pu-table tr.pu-day-head th { padding: 0.6rem 0.9rem; }
+    .pu-table tbody tr.pu-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "hall kg" "mat kg" "sup sup" "rolls rolls" "amt amt" "note act"; column-gap: 0.75rem; padding: 0.75rem 0.9rem 0.8rem; border-bottom: 1px solid var(--line, rgba(23, 30, 48, 0.08)); }
+    .pu-table tbody:last-child tr.pu-row:last-child { border-bottom: none; }
+    .pu-table tbody tr.pu-row td { padding: 0; border: none; white-space: normal; width: auto; min-width: 0; max-width: none; }
+    .pu-table td[data-cell="hall"] { grid-area: hall; }
+    .pu-table td[data-cell="material"] { grid-area: mat; margin-top: 0.3rem; }
+    .pu-table td[data-cell="material"] strong { font-size: 1rem; }
+    .pu-table td[data-cell="supplier"] { grid-area: sup; margin-top: 0.3rem; }
+    .pu-table td[data-cell="supplier"] strong { display: inline; font-weight: 600; }
+    .pu-table td[data-cell="supplier"] span { display: inline; }
+    .pu-table td[data-cell="supplier"] span::before { content: " · "; }
+    .pu-table td[data-cell="supplier"].pu-nosup strong { display: none; }
+    .pu-table td[data-cell="supplier"].pu-nosup span::before { content: none; }
+    .pu-table td[data-cell="supplier"].pu-nosup:not(:has(span)) { display: none; }
+    .pu-table td[data-cell="kg"] { grid-area: kg; text-align: right; }
+    .pu-table td[data-cell="kg"] strong { font-size: 1.15rem; }
+    .pu-table td[data-cell="rolls"] { grid-area: rolls; margin-top: 0.45rem; }
+    .pu-table td[data-cell="rolls"] .pu-rolls-n { display: none; }
+    .pu-table td[data-cell="rolls"]:not(:has(ul)) { display: none; }
+    .pu-table td[data-cell="amount"] { grid-area: amt; margin-top: 0.4rem; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; text-align: left; }
+    .pu-table td[data-cell="amount"] strong { display: inline; }
+    .pu-table td[data-cell="amount"] span { display: inline; }
+    .pu-table td[data-cell="notes"] { grid-area: note; margin-top: 0.45rem; align-self: center; }
+    .pu-table td[data-cell="actions"] { grid-area: act; margin-top: 0.45rem; align-self: center; text-align: right; }
+    .pu-table td[data-cell="actions"] .ih-act-del { min-height: 2.5rem; background: rgba(239, 68, 68, 0.08); box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.25); }
+    .pu-table td[data-cell="rolls"]:empty, .pu-table td[data-cell="amount"]:empty { display: none; }
+}
+@media (max-width: 760px) {
+    /* header buttons: two per row */
+    .pu-header-actions .ih-btn-primary { grid-column: auto; }
+    .pu-header-actions.pu-three > :first-child { grid-column: 1 / -1; }
+    .pu-summary { padding: 1rem; }
+    .pu-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+    .pu-tile { padding: 0.65rem 0.75rem; }
+    .pu-tile-value { font-size: 1.35rem; }
+    .pu-tile-wide { grid-column: 1 / -1; }
+    /* hall boxes: name, then KG, then the count (no squeeze on narrow phones) */
+    .pu-halls .ih-fam { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "dot name" ". kg" ". rolls"; }
+    .pu-halls .ih-fam-rolls { white-space: normal; }
+    .pu-seg-opt { gap: 0.55rem; padding: 0.5rem 0.6rem; min-height: 3.5rem; }
+    .pu-seg-icon { width: 2rem; height: 2rem; border-radius: 10px; }
+    .pu-seg-icon svg { width: 1.05rem; height: 1.05rem; }
+    .pu-seg-text small { font-size: 0.72rem; }
+    .pu-span-2 { grid-column: 1 / -1; }
+    .pu-half-phone { grid-column: span 1; }
+    .pu-form-foot .ih-btn { min-width: 0; }
+    .pu-page .ih-form textarea { font-size: 16px; }
+    .pu-search-row .ih-btn { padding-left: 0.9rem; padding-right: 0.9rem; }
+    .pu-filter-rows { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 0.4rem; }
+    .pu-chips { flex-wrap: wrap; overflow: visible; }
+    .pu-custom label { flex: 1 1 8rem; }
+    .pu-custom input[type="date"] { min-width: 0; width: 100%; font-size: 16px; }
+    .pu-custom .ih-btn { flex: 1 1 100%; }
+    .pu-day-line { flex-direction: column; gap: 0.1rem; }
+}
+@media (max-width: 480px) {
+    /* the big Goes-to toggle: icon above the words so "Machine Hall" stays on one line */
+    .pu-seg-opt { flex-direction: column; justify-content: center; gap: 0.3rem; padding: 0.6rem 0.4rem; text-align: center; min-height: 5.25rem; }
+    .pu-seg-text { align-items: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pu-chips .ih-chip svg { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+    .pu-table tr.pu-day-head th { background: #f8f6f8; }
+}
+</style>
+
+{% set can_edit = current_user.can_edit() %}
+{% set t = summary.total %}
+{% set period_names = {'this_month': 'This month', 'last_month': 'Last month', 'today': 'Today', 'all': 'All time', 'custom': 'Chosen dates'} %}
+{% set period_name = period_names.get(filters.period, 'This month') %}
+{% set range_text = date_range(filters.date_from, filters.date_to) %}
+{% set hall_class = {'in_hall': 'chip-blue', 'machine_hall': 'chip-violet'} %}
+{% set hall_color = {'in_hall': '#2f5fb3', 'machine_hall': '#7353ba'} %}
+{% set filtered = filters.location or filters.q %}
+
+<div class="ih-page pu-page">
+
+<header class="ih-header pu-header">
+    <div>
+        <h1>Material Purchases</h1>
+        <p>Material bought straight into In Hall or Machine Hall — each purchase is kept as its own record and added to that hall's stock.</p>
+    </div>
+    <div class="ih-header-actions pu-header-actions{% if not can_edit %} pu-three{% endif %}">
+        {% if can_edit %}
+        <a href="#pu-form" class="ih-btn ih-btn-primary" data-pu-jump>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Record purchase
+        </a>
+        {% endif %}
+        <a href="{{ url_for('materials.hall_purchases_pdf', **filter_args) }}" class="ih-btn ih-btn-quiet" target="_blank">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Download PDF
+        </a>
+        <a href="{{ url_for('materials.in_hall_stock') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 4l9 6.5V20H3z"/><path d="M9 20v-6h6v6"/></svg>In Hall Stock
+        </a>
+        <a href="{{ url_for('materials.machine_hall_stock') }}" class="ih-btn ih-btn-quiet">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9V4h10v5"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v6H7z"/></svg>Machine Hall Stock
+        </a>
+    </div>
+</header>
+
+{# ------------------------------------------------------------------ Summary #}
+{% if t.count %}
+{% set sup_list = summary.by_supplier %}
+<section class="card pu-summary" aria-labelledby="pu-sum-title">
+    <div class="pu-sum-grid{% if sup_list|length < 2 %} pu-sum-solo{% endif %}">
+        <div>
+            <div class="pu-sum-head">
+                <h2 id="pu-sum-title">{{ period_name }}</h2>
+                {% if range_text and filters.period != 'all' %}<span class="pu-sum-range">{{ range_text }}</span>{% endif %}
+                {% if filters.location %}<span class="chip {{ hall_class[filters.location] }}">{{ locations[filters.location] }} only</span>{% endif %}
+                {% if filters.q %}<span class="chip chip-gray">“{{ filters.q }}”</span>{% endif %}
+            </div>
+            <div class="pu-tiles">
+                <div class="pu-tile pu-tile-main">
+                    <span class="pu-tile-label">Bought</span>
+                    <span class="pu-tile-value">{{ num(t.kg) }}<small>kg</small></span>
+                    <span class="pu-tile-sub">{% if t.rolls %}<strong>{{ num(t.rolls, 2) }}</strong> roll{{ '' if t.rolls == 1 else 's' }}{% else %}no roll count{% endif %}</span>
+                </div>
+                <div class="pu-tile">
+                    <span class="pu-tile-label">Purchases</span>
+                    <span class="pu-tile-value">{{ t.count }}</span>
+                    {% set named_sups = sup_list|rejectattr(0, 'equalto', '—')|list %}
+                    <span class="pu-tile-sub">{% if named_sups %}from <strong>{{ named_sups|length }}</strong> supplier{{ '' if named_sups|length == 1 else 's' }}{% else %}no supplier given{% endif %}</span>
+                </div>
+                {% if t.priced %}
+                <div class="pu-tile pu-tile-wide">
+                    <span class="pu-tile-label">Amount</span>
+                    <span class="pu-tile-value">{{ money(t.amount) }}</span>
+                    <span class="pu-tile-sub">{% if t.priced < t.count %}({{ t.priced }} of {{ t.count }} priced){% else %}all priced{% endif %}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% if not filters.location %}
+            {% set bh = summary.by_hall %}
+            <div class="pu-split">
+                {% if t.kg > 0 %}
+                <div class="ih-bar" role="img" aria-label="Split by hall: In Hall {{ num(bh.in_hall.kg) }} kg, Machine Hall {{ num(bh.machine_hall.kg) }} kg">
+                    {% for key in ['in_hall', 'machine_hall'] %}{% if bh[key].kg > 0 %}<span style="width: {{ '%.3f'|format(100 * bh[key].kg / t.kg) }}%; background: {{ hall_color[key] }}" title="{{ locations[key] }} {{ num(bh[key].kg) }} kg"></span>{% endif %}{% endfor %}
+                </div>
+                {% endif %}
+                <ul class="ih-fams pu-halls">
+                    {% for key in ['in_hall', 'machine_hall'] %}
+                    {% set b = bh[key] %}
+                    <li>
+                        <a class="ih-fam" href="{{ purl({'location': key}) }}#pu-history" aria-label="Show only {{ locations[key] }}: {{ num(b.kg) }} kg in {{ b.count }} purchase{{ '' if b.count == 1 else 's' }}">
+                            <span class="ih-dot" style="background: {{ hall_color[key] }}" aria-hidden="true"></span>
+                            <span class="ih-fam-name">{{ locations[key] }}</span>
+                            <span class="ih-fam-rolls ih-num">{{ b.count }} purchase{{ '' if b.count == 1 else 's' }}</span>
+                            <span class="ih-fam-kg ih-num">{{ num(b.kg) }} kg</span>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+        {% if sup_list|length > 1 %}
+        {% set top_kg = sup_list[0][1].kg or 1 %}
+        <div class="pu-suppliers">
+            <h3>Top suppliers</h3>
+            <ol class="pu-sup-list">
+                {% for name, b in sup_list[:5] %}
+                <li class="pu-sup">
+                    <span class="pu-sup-name{% if name == '—' %} pu-none{% endif %}">{{ 'No supplier given' if name == '—' else name }}</span>
+                    <span class="pu-sup-kg ih-num">{{ num(b.kg) }} kg <small>· {{ b.count }}</small></span>
+                    <span class="pu-sup-bar" aria-hidden="true"><span style="width: {{ '%.1f'|format(100 * b.kg / top_kg) if top_kg else 0 }}%"></span></span>
+                </li>
+                {% endfor %}
+            </ol>
+            {% if sup_list|length > 5 %}<p class="pu-sup-more">+ {{ sup_list|length - 5 }} more supplier{{ '' if sup_list|length == 6 else 's' }}</p>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+{# ------------------------------------------------------------------ Record a purchase #}
+{% if can_edit %}
+{% set hall_data = [] %}
+{% for it in hall_items %}{% set _ = hall_data.append({'loc': it.location, 'name': it.material_name or '', 'type': it.material_type or '', 'size': it.size or '', 'micron': it.micron or '', 'kg': it.kg, 'rolls': it.rolls_left}) %}{% endfor %}
+<section class="card ih-panel pu-form-card" id="pu-form" aria-labelledby="pu-form-title">
+    <div class="ih-panel-head">
+        <div class="pu-panel-title">
+            <span class="pu-panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9.5 8h5M9.5 12h5"/></svg></span>
+            <div>
+                <h2 id="pu-form-title">Record a purchase</h2>
+                <p>Saved as its own purchase record and added to the hall you pick. The same name, type, size and micron go onto the existing stock row.</p>
+            </div>
+        </div>
+    </div>
+    <form method="POST" action="{{ url_for('materials.hall_purchases') }}" class="ih-form" id="pu-add-form" autocomplete="off">
+        <fieldset class="pu-dest">
+            <legend class="ih-label">Goes to</legend>
+            <div class="pu-seg">
+                {% for key, label in locations.items() %}
+                <label class="pu-seg-opt pu-seg-{{ key }}">
+                    <input type="radio" name="location" value="{{ key }}"{% if key == form_hall %} checked{% endif %} required>
+                    <span class="pu-seg-icon" aria-hidden="true">
+                        {% if key == 'machine_hall' %}<svg viewBox="0 0 24 24"><path d="M7 9V4h10v5"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M7 14h10v6H7z"/></svg>
+                        {% else %}<svg viewBox="0 0 24 24"><path d="M3 10.5 12 4l9 6.5V20H3z"/><path d="M9 20v-6h6v6"/></svg>{% endif %}
+                    </span>
+                    <span class="pu-seg-text"><strong>{{ label }}</strong><small>{{ 'Waiting in the hall' if key == 'in_hall' else 'At the machine' }}</small></span>
+                </label>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <div class="ih-field pu-span-2">
+            <label for="supplier_name">Supplier</label>
+            <input type="text" id="supplier_name" name="supplier_name" placeholder="Who sold it"{% if suppliers %} list="pu-suppliers"{% endif %} autocapitalize="words">
+            {% if suppliers %}<datalist id="pu-suppliers">{% for s in suppliers %}<option value="{{ s }}"></option>{% endfor %}</datalist>{% endif %}
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="bill_no">Bill / invoice no.</label>
+            <input type="text" id="bill_no" name="bill_no" placeholder="Optional">
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="purchase_date">Date</label>
+            <input type="date" id="purchase_date" name="purchase_date" value="{{ today.isoformat() }}" required>
+        </div>
+
+        <div class="ih-field pu-half-phone">
+            <label for="material_name">Material name</label>
+            <input type="text" id="material_name" name="material_name" required placeholder="e.g. PET, LD" list="pu-names">
+            <datalist id="pu-names">{% for n in hall_items|map(attribute='material_name')|map('trim')|reject('equalto', '')|unique|sort %}<option value="{{ n }}"></option>{% endfor %}</datalist>
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="material_type">Type</label>
+            <input type="text" id="material_type" name="material_type" required placeholder="e.g. Natural" list="pu-types">
+            <datalist id="pu-types">{% for n in hall_items|map(attribute='material_type')|map('trim')|reject('equalto', '')|unique|sort %}<option value="{{ n }}"></option>{% endfor %}</datalist>
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="size">Size <small>(mm)</small></label>
+            <input type="text" id="size" name="size" inputmode="decimal" placeholder="e.g. 835" list="pu-sizes">
+            <datalist id="pu-sizes"></datalist>
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="micron">Micron</label>
+            <input type="text" id="micron" name="micron" placeholder="e.g. 12" list="pu-microns">
+            <datalist id="pu-microns"></datalist>
+        </div>
+        <p class="pu-match" id="pu-match" aria-live="polite" hidden></p>
+
+        <div class="ih-builder" id="pu-roll-builder">
+            <div class="ih-builder-head">
+                <label class="ih-label" for="roll_spec">Roll weights <small>(optional)</small></label>
+                <span class="ih-roll-preview" data-roll-preview aria-live="polite">Weight x number of rolls, e.g. 168.8x5 + 30x1</span>
+            </div>
+            <input type="text" id="roll_spec" name="roll_spec" data-roll-spec placeholder="168.8x5 + 30x1" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="pu-roll-help">
+            <div class="ih-quick" role="group" aria-label="Add rolls of one weight">
+                <span class="ih-quick-label" id="pu-roll-help">Or add them one weight at a time:</span>
+                <span class="ih-quick-row">
+                    <input type="text" inputmode="decimal" data-roll-weight placeholder="Weight" aria-label="Roll weight in kg">
+                    <span class="ih-quick-unit">kg</span>
+                    <span class="ih-quick-x" aria-hidden="true">×</span>
+                    <input type="number" inputmode="numeric" min="1" max="500" step="1" value="1" data-roll-count aria-label="Number of rolls">
+                    <span class="ih-quick-unit">rolls</span>
+                    <button type="button" class="ih-act" data-roll-add>Add</button>
+                </span>
+            </div>
+            <ul class="ih-rolls" data-roll-chips hidden aria-label="Rolls entered"></ul>
+        </div>
+
+        <div class="ih-field pu-half-phone">
+            <label for="kg">KG</label>
+            <input type="number" id="kg" name="kg" step="0.001" min="0.001" inputmode="decimal" required data-roll-kg>
+            <small class="ih-auto-note" data-auto-note="kg" hidden>From roll weights</small>
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="rolls_left">Rolls</label>
+            <input type="number" id="rolls_left" name="rolls_left" step="0.01" min="0" inputmode="decimal" data-roll-rolls>
+            <small class="ih-auto-note" data-auto-note="rolls_left" hidden>From roll weights</small>
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="rate_per_kg">Rate per KG <small>(optional)</small></label>
+            <input type="number" id="rate_per_kg" name="rate_per_kg" step="0.01" min="0" inputmode="decimal" placeholder="₨">
+        </div>
+        <div class="ih-field pu-half-phone">
+            <label for="amount">Amount <small>(optional)</small></label>
+            <input type="number" id="amount" name="amount" step="0.01" min="0" inputmode="decimal" placeholder="₨">
+            <small class="ih-auto-note" id="pu-amount-note" hidden>KG × rate</small>
+        </div>
+        <p class="pu-calc" id="pu-calc" aria-live="polite" hidden></p>
+
+        <div class="ih-field ih-span-all">
+            <label for="notes">Notes <small>(optional)</small></label>
+            <textarea id="notes" name="notes" rows="2" placeholder="Anything to remember about this purchase"></textarea>
+        </div>
+        <div class="ih-form-foot pu-form-foot">
+            <button type="submit" class="ih-btn ih-btn-primary" id="pu-submit">Save purchase &amp; add to {{ locations[form_hall] }}</button>
+            <p class="field-note">Without roll weights, type the KG and number of rolls. With a rate, the amount is worked out for you.</p>
+        </div>
+    </form>
+</section>
+<script type="application/json" id="pu-items">{{ hall_data|tojson }}</script>
+{% endif %}
+
+{# ------------------------------------------------------------------ History #}
+<section id="pu-history" aria-labelledby="pu-hist-title">
+    <div class="pu-hist-head">
+        <h2 id="pu-hist-title">Purchase history</h2>
+        {% if t.count %}<span>{{ t.count }} purchase{{ '' if t.count == 1 else 's' }} · {{ num(t.kg) }} kg</span>{% endif %}
+    </div>
+
+    <div class="ih-toolbar pu-toolbar">
+        <form method="GET" action="{{ url_for('materials.hall_purchases') }}" class="pu-search-row" role="search">
+            {% for k, v in filter_args.items() if k != 'q' %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+            <div class="ih-search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+                <input type="search" name="q" value="{{ filters.q }}" placeholder="Supplier, bill no., film" aria-label="Search purchases by supplier, bill no. or material" autocomplete="off" enterkeyhint="search">
+                {% if filters.q %}
+                <a class="ih-search-clear" href="{{ purl({'q': ''}) }}#pu-history" aria-label="Clear search">
+                    <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg>
+                </a>
+                {% endif %}
+            </div>
+            <button type="submit" class="ih-btn ih-btn-quiet">Search</button>
+        </form>
+        <div class="pu-filter-rows">
+            <nav class="ih-chips pu-chips" aria-label="Period">
+                {% for key, label in [('this_month', 'This month'), ('last_month', 'Last month'), ('today', 'Today'), ('all', 'All')] %}
+                <a class="ih-chip" href="{{ purl({'period': '' if key == 'this_month' else key, 'from': '', 'to': ''}) }}#pu-history"{% if filters.period == key %} aria-current="true"{% endif %}>{{ label }}</a>
+                {% endfor %}
+                <button type="button" class="ih-chip" id="pu-custom-btn" aria-controls="pu-custom" aria-expanded="{{ 'true' if filters.period == 'custom' else 'false' }}"{% if filters.period == 'custom' %} aria-current="true"{% endif %}>
+                    Dates<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M3 5l4 4 4-4"/></svg>
+                </button>
+            </nav>
+            <nav class="ih-chips pu-chips" aria-label="Hall">
+                <a class="ih-chip" href="{{ purl({'location': ''}) }}#pu-history"{% if not filters.location %} aria-current="true"{% endif %}>All halls</a>
+                {% for key, label in locations.items() %}
+                <a class="ih-chip" href="{{ purl({'location': key}) }}#pu-history"{% if filters.location == key %} aria-current="true"{% endif %}><span class="pu-hall-dot" style="background: {{ hall_color[key] }}" aria-hidden="true"></span>{{ label }}</a>
+                {% endfor %}
+            </nav>
+        </div>
+        <form method="GET" action="{{ url_for('materials.hall_purchases') }}#pu-history" class="pu-custom" id="pu-custom"{% if filters.period != 'custom' %} hidden{% endif %}>
+            {% if filters.location %}<input type="hidden" name="location" value="{{ filters.location }}">{% endif %}
+            {% if filters.q %}<input type="hidden" name="q" value="{{ filters.q }}">{% endif %}
+            <label>From<input type="date" name="from" value="{{ filters.date_from.isoformat() if filters.date_from else '' }}"></label>
+            <label>To<input type="date" name="to" value="{{ filters.date_to.isoformat() if filters.date_to else '' }}"></label>
+            <button type="submit" class="ih-btn ih-btn-quiet">Show</button>
+        </form>
+        <p class="pu-active">
+            <span>{{ period_name }}{% if range_text and filters.period != 'all' %} · {{ range_text }}{% endif %}{% if filters.location %} · {{ locations[filters.location] }} only{% endif %}{% if filters.q %} · matching “{{ filters.q }}”{% endif %}</span>
+            {% if filtered or filters.period != 'this_month' %}<a href="{{ url_for('materials.hall_purchases') }}#pu-history">Reset</a>{% endif %}
+        </p>
+    </div>
+
+    <div class="card pu-list">
+        {% if purchases %}
+        <table class="data-table pu-table">
+            <thead>
+                <tr>
+                    <th scope="col">Hall</th>
+                    <th scope="col">Material</th>
+                    <th scope="col">Supplier</th>
+                    <th scope="col" class="num">KG</th>
+                    <th scope="col">Rolls</th>
+                    <th scope="col" class="num">Amount</th>
+                    <th scope="col">Notes</th>
+                    {% if can_edit %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
+                </tr>
+            </thead>
+            {% for day, rows in purchases|groupby('purchase_date')|reverse %}
+            {% set day_kg = rows|sum(attribute='kg') %}
+            {% set day_priced = rows|selectattr('amount', 'number')|list %}
+            {% set age = (today - day).days %}
+            <tbody class="pu-day">
+                <tr class="pu-day-head">
+                    <th colspan="{{ 8 if can_edit else 7 }}" scope="rowgroup">
+                        <span class="pu-day-line">
+                            <span class="pu-day-date">{% if age == 0 %}Today<span>{{ day.strftime('%a') }} {{ dmy(day) }}</span>{% elif age == 1 %}Yesterday<span>{{ day.strftime('%a') }} {{ dmy(day) }}</span>{% else %}{{ day.strftime('%a') }} {{ dmy(day) }}{% endif %}</span>
+                            <span class="pu-day-figs">{{ rows|length }} purchase{{ '' if rows|length == 1 else 's' }} · <strong>{{ num(day_kg) }} kg</strong>{% if day_priced %} · {{ money(day_priced|sum(attribute='amount')) }}{% endif %}</span>
+                        </span>
+                    </th>
+                </tr>
+                {% for p in rows %}
+                {% set label = material_label(p.material_name, p.material_type) %}
+                <tr class="pu-row" id="pu-p-{{ p.id }}">
+                    <td data-cell="hall"><span class="chip {{ hall_class.get(p.location, 'chip-gray') }} pu-hall">{{ p.location_label }}</span></td>
+                    <td data-cell="material" class="pu-mat">
+                        <strong>{{ label }}</strong>
+                        <span>{{ size_text(p.size) or 'no size' }}{% if p.micron %} · {{ micron_text(p.micron) }}{% endif %}</span>
+                    </td>
+                    <td data-cell="supplier" class="pu-sup-cell{% if not p.supplier_name %} pu-nosup{% endif %}">
+                        {%- if p.supplier_name %}<strong>{{ p.supplier_name }}</strong>{% else %}<strong class="pu-dash">—</strong>{% endif %}
+                        {%- if p.bill_no %}<span>Bill {{ p.bill_no }}</span>{% endif -%}
+                    </td>
+                    <td data-cell="kg" class="num pu-kg-cell">
+                        <strong>{{ num(p.kg) }}</strong><small>kg</small>
+                        {%- if p.rolls %}<span class="pu-only-phone">{{ rolls_text(p.rolls) }}</span>{% endif %}
+                    </td>
+                    <td data-cell="rolls" class="pu-rolls-cell">
+                        {%- if p.rolls %}<span class="pu-rolls-n"><strong>{{ num(p.rolls, 2) }}</strong> roll{{ '' if p.rolls == 1 else 's' }}</span>{% endif -%}
+                        {%- if p.roll_spec %}<ul class="ih-rolls" aria-label="Roll weights">{% for part in p.roll_spec.split(' + ') %}{% set bits = part.split('x') %}<li class="ih-roll"><span class="ih-roll-w">{{ num(bits[0]|float) }} kg</span>{% if bits[1]|int > 1 %}<span class="ih-roll-n">× {{ bits[1] }}</span>{% endif %}</li>{% endfor %}</ul>{% endif -%}
+                    </td>
+                    <td data-cell="amount" class="num pu-amt">
+                        {%- if p.amount is not none %}<strong>{{ money(p.amount) }}</strong>{% if p.rate_per_kg is not none %}<span>{{ money(p.rate_per_kg) }} / kg</span>{% endif %}{% endif -%}
+                    </td>
+                    <td data-cell="notes" class="pu-note-cell">
+                        {%- if p.notes %}<span class="pu-note-text">{{ p.notes }}</span>{% endif -%}
+                        <span class="pu-by">{% if p.created_by %}Added by {{ p.created_by.username }}{% else %}Added{% endif %}</span>
+                    </td>
+                    {% if can_edit %}
+                    <td data-cell="actions" class="pu-actions-cell">
+                        <form method="POST" action="{{ url_for('materials.delete_hall_purchase', purchase_id=p.id) }}"
+                              onsubmit="return confirm({{ ('Delete this purchase? ' ~ num(p.kg) ~ ' kg of ' ~ p.material_name ~ ' will be taken back out of ' ~ p.location_label ~ '.')|tojson|forceescape }});">
+                            {% for k, v in filter_args.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+                            <button type="submit" class="ih-act ih-act-del" aria-label="Delete purchase of {{ num(p.kg) }} kg {{ label }}">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% endfor %}
+        </table>
+        {% else %}
+        <div class="ih-empty">
+            {% if filtered or filters.period != 'all' %}
+            <strong>No purchases {{ 'match these filters' if filtered else 'in this period' }}</strong>
+            {{ period_name }}{% if range_text and filters.period != 'all' %} ({{ range_text }}){% endif %}{% if filters.location %} · {{ locations[filters.location] }} only{% endif %}{% if filters.q %} · matching “{{ filters.q }}”{% endif %}
+            <div><a href="{{ url_for('materials.hall_purchases', period='all') }}#pu-history" class="ih-btn ih-btn-quiet">Show all purchases</a></div>
+            {% else %}
+            <strong>No purchases recorded yet</strong>
+            {% if can_edit %}Record material bought straight into In Hall or Machine Hall with the form above.
+            <div><a href="#pu-form" class="ih-btn ih-btn-primary" data-pu-jump>Record purchase</a></div>
+            {% else %}Purchases recorded by the team will show here.{% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+    // Custom dates row: open / close.
+    var btn = document.getElementById('pu-custom-btn');
+    var row = document.getElementById('pu-custom');
+    if (btn && row) {
+        btn.addEventListener('click', function () {
+            var open = row.hidden;
+            row.hidden = !open;
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open) { var first = row.querySelector('input[type=date]'); if (first) first.focus(); }
+        });
+    }
+})();
+</script>
+{% if current_user.can_edit() %}
+{% include "materials/_ih_rolls_js.html" %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('pu-add-form');
+    if (!form) return;
+    var LABELS = {{ locations|tojson }};
+    var items = [];
+    try { items = JSON.parse(document.getElementById('pu-items').textContent) || []; } catch (e) { /* hints are optional */ }
+
+    var nameIn = form.querySelector('#material_name');
+    var typeIn = form.querySelector('#material_type');
+    var sizeIn = form.querySelector('#size');
+    var micronIn = form.querySelector('#micron');
+    var kgIn = form.querySelector('#kg');
+    var rateIn = form.querySelector('#rate_per_kg');
+    var amountIn = form.querySelector('#amount');
+    var amountNote = document.getElementById('pu-amount-note');
+    var submitBtn = document.getElementById('pu-submit');
+    var matchEl = document.getElementById('pu-match');
+    var calcEl = document.getElementById('pu-calc');
+    var sizeList = document.getElementById('pu-sizes');
+    var micronList = document.getElementById('pu-microns');
+    var builderRoot = document.getElementById('pu-roll-builder');
+    if (window.IHRolls) window.IHRolls.builder(builderRoot);
+
+    function hall() { var r = form.querySelector('input[name="location"]:checked'); return r ? r.value : 'in_hall'; }
+    // Same identity as the server (hall_stock.identity_key): trimmed, case-insensitive.
+    function key(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
+    // Looser compare, only for "did you mean": spaces / dots / dashes and a mm or μ suffix ignored.
+    function loose(v) { return key(v).replace(/[\s.\-_]+/g, ''); }
+    function looseSize(v) { return loose(v).replace(/mm$/, ''); }
+    function looseMicron(v) { return loose(v).replace(/(microns?|mic|μ|µ|u)$/, ''); }
+    function fmtKg(v) { return Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 3 }); }
+    function money(v) {
+        var r = Math.round(Number(v || 0) * 100) / 100;
+        var whole = Math.abs(r - Math.round(r)) < 0.005;
+        return '₨ ' + r.toLocaleString('en-US', { minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
+    }
+    function withUnit(v, unit) { v = String(v || '').trim(); return v && /\d$/.test(v) ? v + ' ' + unit : v; }
+    function itemLabel(it) {
+        var name = String(it.name || '').trim(), type = String(it.type || '').trim();
+        var mat = type && key(type) !== key(name) ? name + ' ' + type : name;
+        return [withUnit(it.size, 'mm'), mat].filter(Boolean).join(' ') + (it.micron ? ' · ' + withUnit(it.micron, 'μ') : '');
+    }
+    function typedKg() { var v = parseFloat(kgIn.value); return v > 0 ? v : 0; }
+
+    function setMatch(kind, parts) {
+        matchEl.className = 'pu-match pu-match-' + kind;
+        matchEl.textContent = '';
+        var icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('aria-hidden', 'true');
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', kind === 'add' ? 'M5 12.5l4.5 4.5L19 7.5' : kind === 'near' ? 'M12 8v5M12 16.5v.5M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0z' : 'M12 5v14M5 12h14');
+        icon.appendChild(path);
+        matchEl.appendChild(icon);
+        var span = document.createElement('span');
+        parts.forEach(function (p) {
+            if (typeof p === 'string') { span.appendChild(document.createTextNode(p)); return; }
+            var el = document.createElement(p.onClick ? 'button' : 'strong');
+            if (p.onClick) { el.type = 'button'; el.className = 'pu-match-use'; el.addEventListener('click', p.onClick); }
+            el.textContent = p.text;
+            span.appendChild(el);
+        });
+        matchEl.appendChild(span);
+        matchEl.hidden = false;
+    }
+
+    function useItem(it) {
+        nameIn.value = it.name; typeIn.value = it.type; sizeIn.value = it.size; micronIn.value = it.micron;
+        update();
+    }
+
+    function updateMatch() {
+        var where = hall();
+        if (!key(nameIn.value) || !key(typeIn.value)) { matchEl.hidden = true; return; }
+        var want = [key(nameIn.value), key(typeIn.value), key(sizeIn.value), key(micronIn.value)].join('|');
+        var inHall = items.filter(function (it) { return it.loc === where; });
+        var hit = null;
+        inHall.forEach(function (it) {
+            if (!hit && [key(it.name), key(it.type), key(it.size), key(it.micron)].join('|') === want) hit = it;
+        });
+        if (hit) {
+            var parts = ['Will be added onto existing stock: ', { text: itemLabel(hit) + ' · ' + fmtKg(hit.kg) + ' kg' }];
+            var kg = typedKg();
+            if (kg) parts.push(' → ' + fmtKg(Math.round((Number(hit.kg || 0) + kg) * 1000) / 1000) + ' kg after this purchase');
+            setMatch('add', parts);
+            return;
+        }
+        // Not the same row: is there one that only differs in spelling, or in micron?
+        var near = inHall.filter(function (it) {
+            return loose(it.name) === loose(nameIn.value) && loose(it.type) === loose(typeIn.value) &&
+                looseSize(it.size) === looseSize(sizeIn.value) &&
+                (!micronIn.value.trim() || !String(it.micron || '').trim() || looseMicron(it.micron) === looseMicron(micronIn.value));
+        }).slice(0, 3);
+        if (near.length) {
+            var warn = ['New stock row will be created in ' + LABELS[where] + '. Similar stock there: '];
+            near.forEach(function (it, i) {
+                if (i) warn.push(', ');
+                warn.push({ text: itemLabel(it) + (it.micron ? '' : ' (no micron)') + ' · ' + fmtKg(it.kg) + ' kg', onClick: function () { useItem(it); nameIn.focus(); } });
+            });
+            warn.push(' — tap it to add onto that row instead.');
+            setMatch('near', warn);
+            return;
+        }
+        setMatch('new', ['New stock row will be created in ' + LABELS[where] + '.']);
+    }
+
+    // Size / micron suggestions for the material typed (this hall first).
+    function fillList(list, values) {
+        var sig = values.join('|');
+        if (list.dataset.sig === sig) return;
+        list.dataset.sig = sig;
+        list.textContent = '';
+        values.forEach(function (v) { var o = document.createElement('option'); o.value = v; list.appendChild(o); });
+    }
+    function uniq(arr) { var seen = {}, out = []; arr.forEach(function (v) { var k = key(v); if (v && !seen[k]) { seen[k] = 1; out.push(String(v).trim()); } }); return out; }
+    function byNum(a, b) { return (parseFloat(a) || 0) - (parseFloat(b) || 0); }
+    function updateLists() {
+        var where = hall();
+        var same = items.filter(function (it) { return key(it.name) === key(nameIn.value) && (!key(typeIn.value) || key(it.type) === key(typeIn.value)); });
+        same.sort(function (a, b) { return (a.loc === where ? 0 : 1) - (b.loc === where ? 0 : 1); });
+        fillList(sizeList, uniq(same.filter(function (it) { return it.loc === where; }).map(function (it) { return it.size; })).sort(byNum)
+            .concat(uniq(same.map(function (it) { return it.size; })).sort(byNum)).filter(function (v, i, a) { return a.indexOf(v) === i; }));
+        var sized = same.filter(function (it) { return !sizeIn.value.trim() || key(it.size) === key(sizeIn.value); });
+        fillList(micronList, uniq(sized.map(function (it) { return it.micron; })).sort(byNum));
+    }
+
+    // Amount: with a rate it is KG × rate (the server works it out the same way); otherwise typed.
+    function updateMoney() {
+        var kg = typedKg();
+        var rateGiven = rateIn.value.trim() !== '';
+        var rate = parseFloat(rateIn.value);
+        calcEl.textContent = '';
+        if (rateGiven && !isNaN(rate)) {
+            if (!amountIn.readOnly) { amountIn.dataset.manual = amountIn.value; }
+            amountIn.readOnly = true;
+            amountIn.classList.add('ih-auto');
+            amountNote.hidden = false;
+            amountIn.value = kg ? String(Math.round(kg * rate * 100) / 100) : '';
+            if (kg) {
+                calcEl.appendChild(document.createTextNode('Amount = ' + fmtKg(kg) + ' kg × ' + money(rate) + ' = '));
+                var b = document.createElement('strong');
+                b.textContent = money(kg * rate);
+                calcEl.appendChild(b);
+            } else {
+                calcEl.textContent = 'Enter the KG (or roll weights) to work out the amount.';
+            }
+            calcEl.hidden = false;
+            return;
+        }
+        if (amountIn.readOnly) {
+            amountIn.readOnly = false;
+            amountIn.value = amountIn.dataset.manual || '';
+            amountIn.classList.remove('ih-auto');
+            amountNote.hidden = true;
+        }
+        var amount = parseFloat(amountIn.value);
+        if (amount > 0 && kg) {
+            calcEl.textContent = money(amount) + ' for ' + fmtKg(kg) + ' kg ≈ ' + money(amount / kg) + ' per kg';
+            calcEl.hidden = false;
+        } else {
+            calcEl.hidden = true;
+        }
+    }
+
+    function updateButton() {
+        submitBtn.textContent = 'Save purchase & add to ' + (LABELS[hall()] || 'the hall');
+    }
+
+    function update() { updateLists(); updateMatch(); updateMoney(); }
+
+    // 'input' bubbles after the roll builder has filled KG; chip removal / quick-add send ih-rolls-change.
+    form.addEventListener('input', function (e) { if (e.target.name !== 'location') update(); });
+    form.addEventListener('change', function (e) { if (e.target.name === 'location') { updateButton(); update(); } });
+    if (builderRoot) builderRoot.addEventListener('ih-rolls-change', function () { updateMatch(); updateMoney(); });
+
+    // Header "Record purchase" jump: scroll to the form and start with the supplier.
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pu-jump]'), function (link) {
+        link.addEventListener('click', function (e) {
+            var card = document.getElementById('pu-form');
+            if (!card) return;
+            e.preventDefault();
+            var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            card.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+            var first = document.getElementById('supplier_name');
+            if (first) first.focus({ preventScroll: true });
+        });
+    });
+
+    updateButton();
+    update();
+})();
+</script>
+{% endif %}
+{% endblock %}
