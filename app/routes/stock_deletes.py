@@ -581,19 +581,47 @@ def delete_sh_purchase(purchase_id):
     )
 
 
+def _safe_next(default: str) -> str:
+    """Where to go after a delete: the page the button was on (local paths only)."""
+    target = (request.form.get("next") or "").strip()
+    if target.startswith("/") and not target.startswith("//") and "\\" not in target:
+        return target
+    return default
+
+
 @stock_deletes_bp.route("/sh/ledger/<int:entry_id>", methods=["POST"])
 @login_required
 def delete_sh_ledger(entry_id):
+    require_edit_access()
     entry = ShLedgerEntry.query.get_or_404(entry_id)
-    from app.services.sh_ledger_sync import remove_linked_party_entries
+    from app.services.sh_ledger_sync import (
+        recalculate_client_ledger_chain,
+        recalculate_supplier_ledger_chain,
+        remove_linked_party_entries,
+    )
 
+    # Party ledgers that copy this bank entry: their running balances are redone afterwards.
+    supplier_chains = {
+        (row.supplier_company_id, row.bank_id)
+        for row in ShSupplierLedgerEntry.query.filter_by(source_bank_ledger_id=entry.id)
+    }
+    client_chains = {
+        (row.sold_to_client_id, row.bank_id)
+        for row in ShClientLedgerEntry.query.filter_by(source_bank_ledger_id=entry.id)
+    }
     remove_linked_party_entries(entry.id)
-    return _delete_entity(
+    response = _delete_entity(
         entry,
         "ShLedgerEntry",
         f"Deleted SH ledger entry #{entry_id}",
-        url_for("sh_main.payments"),
+        _safe_next(url_for("sh_main.payments")),
     )
+    for supplier_id, bank_id in supplier_chains:
+        recalculate_supplier_ledger_chain(supplier_id, bank_id)
+    for client_id, bank_id in client_chains:
+        recalculate_client_ledger_chain(client_id, bank_id)
+    db.session.commit()
+    return response
 
 
 @stock_deletes_bp.route("/sh/client-ledger/<int:entry_id>", methods=["POST"])
@@ -630,13 +658,21 @@ def delete_sh_payment_receipt(receipt_id):
 @stock_deletes_bp.route("/sh/supplier-ledger/<int:entry_id>", methods=["POST"])
 @login_required
 def delete_sh_supplier_ledger(entry_id):
+    require_edit_access()
     entry = ShSupplierLedgerEntry.query.get_or_404(entry_id)
-    return _delete_entity(
+    from app.services.sh_ledger_sync import recalculate_supplier_ledger_chain
+
+    supplier_id, bank_id = entry.supplier_company_id, entry.bank_id
+    response = _delete_entity(
         entry,
         "ShSupplierLedgerEntry",
-        f"Deleted supplier ledger entry #{entry_id}",
-        url_for("sh_main.supplier_ledger"),
+        f"Deleted supplier ledger entry #{entry_id} ({entry.reference_number or 'no ref'})",
+        _safe_next(url_for("sh_main.supplier_ledger")),
     )
+    # Keep the stored running balances of this supplier's ledger correct.
+    recalculate_supplier_ledger_chain(supplier_id, bank_id)
+    db.session.commit()
+    return response
 
 
 @stock_deletes_bp.route("/sh/payment-screenshot/<int:record_id>", methods=["POST"])

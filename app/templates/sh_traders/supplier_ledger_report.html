@@ -9,6 +9,22 @@
 {%- endmacro %}
 
 {% block content %}
+{% set can_delete = current_user.can_edit() %}
+<style>
+.sh-col-actions { width: 2.6rem; padding-left: 0.35rem !important; padding-right: 0.15rem !important; }
+.sh-col-actions form { margin: 0; }
+.sh-del-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2rem; height: 2rem; border-radius: 999px; cursor: pointer;
+    color: var(--tint-red-text, #9f1d21); background: var(--tint-red, rgba(178, 30, 34, 0.10));
+    border: 1px solid var(--tint-red-border, rgba(178, 30, 34, 0.28));
+    transition: transform 0.12s ease, background 0.12s ease;
+}
+.sh-del-btn:hover { background: rgba(178, 30, 34, 0.18); }
+.sh-del-btn:active { transform: scale(0.94); }
+.sh-del-btn:focus-visible { outline: 2px solid #B21E22; outline-offset: 2px; }
+</style>
+
 {{ sh_page_header('Supplier Ledger Complete', 'Full supplier account — every purchase and every payment with running balance. Print for any date range or the full history.') }}
 {{ sh_bank_selector(banks, current_bank) }}
 
@@ -101,6 +117,7 @@
         <table class="data-table ledger-report-table sh-table">
             <thead>
                 <tr>
+                    {% if can_delete %}<th class="sh-col-actions" aria-label="Delete"></th>{% endif %}
                     <th>Date</th>
                     <th>Type</th>
                     <th>No</th>
@@ -114,6 +131,25 @@
             <tbody>
                 {% for row in preview.rows %}
                 <tr class="{% if row.is_opening %}ledger-opening-row{% elif row.is_payment %}supplier-payment-row{% endif %}">
+                    {% if can_delete %}
+                    <td class="sh-col-actions">
+                        {% if row.entry_id %}
+                        {% set amount_text = 'Rs ' ~ '{:,.2f}'.format(row.debit or row.credit) %}
+                        {% if row.bank_entry_id %}
+                        <form method="POST" action="{{ url_for('stock_deletes.delete_sh_ledger', entry_id=row.bank_entry_id) }}"
+                              onsubmit="return confirm({{ ('Delete bank payment ' ~ (row.number or '') ~ ' (' ~ amount_text ~ ')?\n\nIt comes from the Bank Payments Ledger, so the bank entry is deleted too: it will be removed from the bank ledger and from this supplier ledger.')|tojson|forceescape }});">
+                        {% else %}
+                        <form method="POST" action="{{ url_for('stock_deletes.delete_sh_supplier_ledger', entry_id=row.entry_id) }}"
+                              onsubmit="return confirm({{ ('Delete ' ~ ('payment ' if row.is_payment else 'purchase ') ~ (row.number or '') ~ ' (' ~ amount_text ~ ') from ' ~ preview.supplier.name ~ '\'s ledger?')|tojson|forceescape }});">
+                        {% endif %}
+                            <input type="hidden" name="next" value="{{ request.full_path }}">
+                            <button type="submit" class="sh-del-btn" title="Delete this entry" aria-label="Delete {{ row.type }} {{ row.number }}">
+                                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-3 6h12l-1 12H7L6 9Zm4 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z"/></svg>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                    {% endif %}
                     <td class="nowrap">{{ row.date.strftime('%d-%b-%y') }}</td>
                     <td>{% if row.type %}<span class="chip chip-gray sh-type-pill">{{ row.type }}</span>{% else %}<span class="sh-nil">—</span>{% endif %}</td>
                     <td class="sh-ref">{{ row.number or '—' }}</td>
@@ -129,13 +165,13 @@
                     <td class="num sh-bal">{{ bal(row.balance, row.balance_type) }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="8" class="empty">No ledger entries for this supplier in the selected range</td></tr>
+                <tr><td colspan="{{ 9 if can_delete else 8 }}" class="empty">No ledger entries for this supplier in the selected range</td></tr>
                 {% endfor %}
             </tbody>
             {% if preview.rows %}
             <tfoot>
                 <tr class="ledger-totals-row">
-                    <td colspan="5"><strong>Totals</strong></td>
+                    <td colspan="{{ 6 if can_delete else 5 }}"><strong>Totals</strong></td>
                     <td class="num"><strong>{{ money(preview.total_debit) }}</strong></td>
                     <td class="num"><strong>{{ money(preview.total_credit) }}</strong></td>
                     <td class="num"><strong>{{ bal(preview.closing_balance, preview.closing_type) }}</strong></td>

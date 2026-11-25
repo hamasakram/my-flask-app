@@ -200,6 +200,8 @@ def build_supplier_ledger_timeline(
                     "credit": 0.0,
                     "is_payment": True,
                     "payment": details,
+                    "entry_id": entry.id,
+                    "bank_entry_id": entry.source_bank_ledger_id,
                 }
             )
         else:
@@ -215,6 +217,8 @@ def build_supplier_ledger_timeline(
                     "credit": amount,
                     "is_payment": False,
                     "payment": None,
+                    "entry_id": entry.id,
+                    "bank_entry_id": None,
                 }
             )
     raw_rows.sort(key=lambda row: row["sort_key"])
