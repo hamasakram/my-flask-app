@@ -96,6 +96,7 @@
             {% if current_user.is_authenticated and not current_user.is_dashboard_only() %}
             <li class="nav-section">SH Traders</li>
             <li><a href="{{ url_for('sh_main.banks') }}">Banks</a></li>
+            <li><a href="{{ url_for('sh_main.account_loans') }}">Account Loans</a></li>
             <li><a href="{{ url_for('sh_main.suppliers') }}">Supplier Companies</a></li>
             <li><a href="{{ url_for('sh_main.clients') }}">Client Companies</a></li>
             <li><a href="{{ url_for('sh_main.partners') }}">Partners</a></li>

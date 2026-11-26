@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header, money %}
+{% from "sh_traders/_account_loan_form.html" import account_loan_form %}
+{% block title %}Account Loans - SH Traders{% endblock %}
+
+{% block content %}
+{% set can_edit = current_user.can_edit() %}
+{% set filtered = filters.account or filters.date_from or filters.date_to or filters.type %}
+{% set history_url = url_for('sh_main.account_loans') ~ '#al-history' %}
+
+{{ sh_page_header('Account Loans', 'Money lent and returned between your own accounts — kept as a record only; bank ledgers and balances are not changed. Covers all accounts, not only the selected bank.') }}
+
+<style>
+/* ---------- Account Loans (record only) ---------- */
+.al-jump { margin: -0.35rem 0 1.15rem; gap: 0.45rem; }
+.al-jump .btn { min-height: 2.25rem; }
+.al-jump .al-jump-n {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 1.35rem; height: 1.25rem; padding: 0 0.35rem;
+    border-radius: var(--radius-pill);
+    font-size: 0.7rem; font-weight: 750;
+    background: var(--tint-gray); color: var(--tint-gray-text);
+}
+
+.al-section { margin-bottom: 1.35rem; }
+.al-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.45rem 1rem; margin: 0 0 0.75rem; }
+.al-section-head .section-title { margin: 0; }
+.al-section-head .chip { font-variant-numeric: tabular-nums; }
+.al-section-head .chip strong { margin-left: 0.2rem; }
+.al-section-head .chip .sh-cur { color: inherit; opacity: 0.75; }
+
+/* Who owes whom: one glass card per pair */
+.al-pairs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr)); gap: 0.9rem; }
+a.al-pair {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.05rem 1.15rem 0.95rem 1.3rem;
+    color: var(--text);
+    text-decoration: none;
+    box-shadow: var(--glass-highlight), inset 4px 0 0 var(--orange), var(--glass-shadow);
+    transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) ease;
+    -webkit-tap-highlight-color: transparent;
+}
+a.al-pair:hover { color: var(--text); transform: translateY(-2px); box-shadow: var(--glass-highlight), inset 4px 0 0 var(--orange), var(--glass-shadow-lg); }
+a.al-pair:active { transform: scale(0.99); }
+a.al-pair.is-settled { box-shadow: var(--glass-highlight), inset 4px 0 0 var(--green), var(--glass-shadow); }
+a.al-pair.is-settled:hover { box-shadow: var(--glass-highlight), inset 4px 0 0 var(--green), var(--glass-shadow-lg); }
+.al-pair-who { margin: 0; font-size: 0.98rem; line-height: 1.4; }
+.al-pair-who strong { font-weight: 700; }
+.al-pair-who .al-verb { color: var(--muted); }
+.al-name { display: inline-block; }
+.al-pair-amount {
+    display: block;
+    font-size: 1.75rem;
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    color: var(--tint-amber-text);
+}
+.al-pair-amount .sh-cur { font-size: 0.55em; font-weight: 650; vertical-align: 0.18em; margin-right: 0.18em; color: inherit; opacity: 0.75; }
+.al-settled { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.86rem; color: var(--muted); }
+.al-settled .chip { font-size: 0.92rem; font-weight: 700; padding: 0.3rem 0.85rem; }
+.al-bar { display: block; height: 0.42rem; border-radius: var(--radius-pill); background: rgba(23, 30, 48, 0.08); overflow: hidden; }
+.al-bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #34d399 0%, #059669 100%); }
+.al-bar-label { margin-top: -0.25rem; font-size: 0.76rem; color: var(--muted); }
+.al-flows { display: grid; gap: 0.3rem; margin: 0; padding-top: 0.6rem; border-top: 1px solid var(--line); font-size: 0.84rem; }
+.al-flows > div { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; }
+.al-flows dt { min-width: 0; color: var(--muted); }
+.al-flows dt b { font-weight: 600; color: var(--text); }
+.al-flows dt .al-mini-arrow { color: var(--muted); }
+.al-flows dd { margin: 0; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.al-pair-foot { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; font-size: 0.78rem; color: var(--muted); }
+.al-pair-foot .al-go { font-weight: 650; color: #1d4fc4; white-space: nowrap; }
+
+/* Per-account tiles */
+.al-accounts { margin-bottom: 0; }
+.al-accounts .stat-label { color: var(--text); font-size: 0.86rem; font-weight: 700; }
+.al-pos { align-self: flex-start; margin-bottom: 0.35rem; font-size: 0.74rem; padding: 0.16rem 0.6rem; }
+.al-accounts .stat-value.al-even { color: var(--muted); }
+.al-accounts .sh-kv dt { white-space: nowrap; }
+
+/* Totals matrix */
+.al-matrix-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius-sm); }
+.al-matrix { min-width: 100%; }
+.al-matrix th, .al-matrix td { white-space: nowrap; }
+.al-matrix thead th { text-align: right; }
+.al-matrix thead th.al-corner { text-align: left; }
+.al-matrix tbody th, .al-matrix tfoot th, .al-matrix thead th.al-corner {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: linear-gradient(180deg, #fbf9fb 0%, #f5f2f6 100%);
+    box-shadow: inset -1px 0 0 var(--line-strong);
+}
+.al-matrix thead th.al-corner { z-index: 3; }
+.al-matrix tbody th, .al-matrix tfoot th { text-transform: none; letter-spacing: 0; font-size: 0.87rem; font-weight: 700; color: var(--text); }
+.al-matrix .al-corner small { display: block; font-size: 0.66rem; font-weight: 600; color: var(--muted); }
+.al-matrix td.al-diag {
+    text-align: center;
+    color: #8a93a5;
+    background: repeating-linear-gradient(135deg, rgba(23, 30, 48, 0.045) 0 6px, rgba(23, 30, 48, 0) 6px 12px);
+}
+.al-matrix td.al-zero { color: #8a93a5; }
+.al-matrix .al-tot { font-weight: 750; background: rgba(255, 255, 255, 0.5); }
+.al-matrix tfoot td, .al-matrix tfoot th { white-space: nowrap; }
+.card > p.al-matrix-note { margin: 0.75rem 0 0; }
+.al-swipe { display: none; }
+
+/* Add-entry card */
+.al-add-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.25rem 1rem; margin-bottom: 1rem; }
+.al-add-head h2 { margin: 0 !important; }
+.al-add-head .field-note { margin: 0; }
+
+/* History */
+.al-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.7rem 0.75rem;
+    padding: 0.8rem 0.9rem;
+    margin: 0 0 1rem;
+}
+.al-filters .form-group { gap: 0.3rem; }
+.al-filters label, .al-filters .al-flabel { font-size: 0.76rem; font-weight: 650; color: var(--muted); }
+.al-f-account { flex: 1 1 11rem; max-width: 16rem; }
+.al-f-date { flex: 0 1 9.75rem; }
+.al-f-date input { width: 100%; }
+.al-filters select, .al-filters input[type="date"] { min-height: 2.4rem; padding-top: 0.4rem; padding-bottom: 0.4rem; }
+.al-filters .al-f-type { min-width: 0; }
+.al-filters .period-tabs { margin: 0; }
+.al-filters .period-tab { position: relative; min-height: 1.9rem; padding: 0.3rem 0.95rem; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.al-filters .period-tab input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.al-filters .period-tab:has(input:focus-visible) { outline: 3px solid rgba(59, 130, 246, 0.45); outline-offset: 1px; }
+.al-f-actions { display: flex; gap: 0.45rem; align-items: center; }
+.al-f-actions .btn { min-height: 2.4rem; }
+.al-filter-note { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem 1rem; margin: -0.35rem 0 0.95rem; }
+.al-filter-note strong { color: var(--text); }
+
+.al-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.al-table td { vertical-align: top; }
+.al-table td.al-c-amount { font-size: 0.95rem; }
+.al-table td.al-c-amount strong { font-weight: 750; }
+.al-table tbody tr.al-row-loan td:first-child { box-shadow: inset 3px 0 0 var(--violet); }
+.al-table tbody tr.al-row-return td:first-child { box-shadow: inset 3px 0 0 var(--green); }
+.al-route-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.4rem; font-weight: 650; line-height: 1.35; }
+.al-arrow { width: 1rem; height: 1rem; flex-shrink: 0; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.al-table td.al-c-route { min-width: 13rem; white-space: normal; }
+.al-table td.al-c-details { min-width: 10rem; max-width: 22rem; white-space: normal; line-height: 1.4; }
+.al-ref { display: inline-flex; align-items: baseline; gap: 0.35rem; font-weight: 650; overflow-wrap: anywhere; }
+.al-ref-key { font-size: 0.66rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.al-note { display: block; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
+.al-ref + .al-note { margin-top: 0.15rem; }
+.al-table .al-c-by { display: none; }
+.al-by-sub { display: block; margin-top: 0.15rem; font-size: 0.74rem; color: var(--muted); }
+.al-table td.al-c-actions { white-space: nowrap; text-align: right; }
+.al-table td.al-c-actions form { display: inline; margin: 0; }
+.al-table td.al-c-actions > * + * { margin-left: 0.3rem; }
+.al-type-chip { font-size: 0.72rem; padding: 0.14rem 0.55rem; }
+.al-by-label { display: none; }
+
+.al-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4rem 1rem;
+    margin-top: 0.85rem;
+    padding: 0.7rem 0.95rem;
+    font-size: 0.88rem;
+}
+.al-foot-main { display: flex; align-items: baseline; gap: 0.5rem; }
+.al-foot-main strong { font-size: 1rem; font-weight: 750; font-variant-numeric: tabular-nums; }
+.al-split { display: flex; flex-wrap: wrap; gap: 0.25rem 1.1rem; color: var(--muted); font-size: 0.8rem; }
+.al-split b { font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
+.al-empty { padding: 1.6rem 1rem; text-align: center; color: var(--muted); }
+.al-empty strong { display: block; margin-bottom: 0.25rem; font-size: 1rem; color: var(--text); }
+.al-empty p { margin: 0; }
+.al-empty .btn { margin-top: 0.85rem; }
+
+@media (max-width: 860px) {
+    .al-jump { margin-top: -0.25rem; }
+    .al-jump .btn { flex: 1 1 auto; padding-left: 0.7rem; padding-right: 0.7rem; }
+    .al-pair-amount { font-size: 1.6rem; }
+    .al-accounts { grid-template-columns: minmax(0, 1fr); }
+    .al-accounts .stat-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name pos" "value value" "kv kv"; align-items: center; column-gap: 0.6rem; }
+    .al-accounts .stat-label { grid-area: name; margin: 0; }
+    .al-accounts .al-pos { grid-area: pos; margin: 0; align-self: center; }
+    .al-accounts .stat-value { grid-area: value; margin-top: 0.3rem; font-size: 1.45rem; }
+    .al-accounts .sh-kv { grid-area: kv; }
+
+    .al-filters { padding: 0.75rem; gap: 0.65rem 0.6rem; }
+    .al-f-account { flex: 1 1 100%; max-width: none; }
+    .al-filters .al-f-type { flex: 1 1 100%; }
+    .al-filters .period-tabs { display: flex; width: 100%; }
+    .al-filters .period-tab { flex: 1 1 0; justify-content: center; min-height: 2.35rem; }
+    .al-f-date { flex: 1 1 calc(50% - 0.3rem); min-width: 0; }
+    .al-filters input[type="date"] { padding-left: 0.65rem; padding-right: 0.5rem; }
+    .card > p.al-swipe { display: block; margin: -0.35rem 0 0.6rem; }
+    .al-f-actions { flex: 1 1 100%; }
+    .al-f-actions .btn { flex: 1 1 0; }
+    .al-filter-note .btn { flex: 1 1 100%; }
+
+    /* History rows become cards */
+    .al-table-wrap { overflow: visible; }
+    .al-table, .al-table tbody { display: block; }
+    .al-table thead { display: none; }
+    .al-table tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "type date"
+            "route route"
+            "amount amount"
+            "details details"
+            "by actions";
+        gap: 0.4rem 0;
+        align-items: center;
+        margin-bottom: 0.65rem;
+        padding: 0.85rem 0.9rem 0.8rem 1.05rem;
+        border-radius: var(--radius-md);
+        background: var(--glass-bg-soft) !important;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line);
+    }
+    .al-table tbody tr.al-row-loan { box-shadow: inset 4px 0 0 var(--violet), inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line); }
+    .al-table tbody tr.al-row-return { box-shadow: inset 4px 0 0 var(--green), inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line); }
+    .al-table tbody tr td:first-child { box-shadow: none !important; }
+    .al-table tbody tr:last-child { margin-bottom: 0; }
+    .al-table td, .al-table td.num { display: block; padding: 0; border: 0; white-space: normal; text-align: left; min-width: 0 !important; max-width: none !important; }
+    .al-table td.al-c-date { grid-area: date; text-align: right; font-size: 0.82rem; color: var(--muted); white-space: nowrap; padding-left: 0.75rem; }
+    .al-by-sub { display: none; }
+    .al-table td.al-c-type { grid-area: type; }
+    .al-table td.al-c-route { grid-area: route; font-size: 0.98rem; }
+    .al-table td.al-c-amount { grid-area: amount; font-size: 1.3rem; letter-spacing: -0.02em; }
+    .al-table td.al-c-amount .sh-cur { font-size: 0.6em; vertical-align: 0.15em; }
+    .al-table td.al-c-details { grid-area: details; font-size: 0.86rem; }
+    .al-table td.al-c-details.is-empty { display: none; }
+    .al-table td.al-c-by { grid-area: by; display: flex; align-items: center; align-self: stretch; min-width: 0; padding-top: 0.5rem; padding-right: 0.75rem; border-top: 1px solid var(--line); font-size: 0.78rem; color: var(--muted); }
+    .al-table td.al-c-actions { grid-area: actions; padding-top: 0.5rem; border-top: 1px solid var(--line); text-align: right; }
+    .al-table td.al-c-by:last-child { grid-column: 1 / -1; }
+    .al-table td.al-c-actions .btn { min-height: 2.35rem; padding-left: 0.95rem; padding-right: 0.95rem; }
+    .al-by-label { display: inline; margin-right: 0.25rem; }
+    .al-foot { flex-direction: column; align-items: stretch; gap: 0.35rem; }
+    .al-foot-main { justify-content: space-between; }
+    .al-split { flex-direction: column; gap: 0.2rem; }
+    .al-split > span { display: flex; justify-content: space-between; gap: 1rem; }
+}
+
+@media print {
+    .al-jump, .al-filters { display: none !important; }
+    a.al-pair { box-shadow: none !important; border: 1px solid #bbb; break-inside: avoid; }
+    .al-matrix tbody th, .al-matrix tfoot th, .al-matrix thead th.al-corner { position: static; }
+}
+</style>
+
+<nav class="quick-actions al-jump sh-no-print" aria-label="On this page">
+    {% if can_edit and banks|length >= 2 %}
+    <a href="#al-add" class="btn btn-primary btn-sm">+ New entry</a>
+    {% endif %}
+    <a href="#al-history" class="btn btn-secondary btn-sm">History <span class="al-jump-n">{{ summary.count }}</span></a>
+    {% if summary.count %}
+    <a href="#al-matrix" class="btn btn-secondary btn-sm">Totals table</a>
+    {% endif %}
+</nav>
+
+{# 1. Who owes whom — the heart of the page #}
+<section class="al-section" aria-labelledby="al-owe-title">
+    <div class="al-section-head">
+        <h2 class="section-title" id="al-owe-title">Who owes whom</h2>
+        {% if summary.count %}
+        <span class="chip {{ 'chip-amber' if summary.open_total else 'chip-green' }}">{% if summary.open_total %}Still owed <strong>{{ money(summary.open_total) }}</strong>{% else %}All settled{% endif %}</span>
+        {% endif %}
+    </div>
+    {% if summary.pairs %}
+    <div class="al-pairs">
+        {% for p in summary.pairs %}
+        {% if p.owed %}
+            {% set lent = p.a_to_b if p.creditor == p.a else p.b_to_a %}
+            {% set back = p.b_to_a if p.creditor == p.a else p.a_to_b %}
+            {% set first_from, first_to, second_from, second_to = p.creditor_name, p.debtor_name, p.debtor_name, p.creditor_name %}
+            {% set first_amt, second_amt = lent, back %}
+        {% else %}
+            {% set first_from, first_to, second_from, second_to = p.a_name, p.b_name, p.b_name, p.a_name %}
+            {% set first_amt, second_amt = p.a_to_b, p.b_to_a %}
+        {% endif %}
+        <a class="glass al-pair{% if not p.owed %} is-settled{% endif %}" href="{{ url_for('sh_main.account_loans', account=p.debtor or p.a) }}#al-history">
+            {% if p.owed %}
+            <p class="al-pair-who"><strong class="al-name">{{ p.debtor_name }}</strong> <span class="al-verb">owes</span> <strong class="al-name">{{ p.creditor_name }}</strong></p>
+            <span class="al-pair-amount">{{ money(p.owed) }}</span>
+            {% set pct = ((back / lent * 100) if lent else 0)|round(0, 'floor')|int %}
+            <span class="al-bar" role="img" aria-label="{{ pct }}% returned"><span style="width: {{ pct }}%"></span></span>
+            <span class="al-bar-label">{{ pct }}% returned so far</span>
+            {% else %}
+            <p class="al-pair-who"><strong class="al-name">{{ p.a_name }}</strong> <span class="al-verb">and</span> <strong class="al-name">{{ p.b_name }}</strong></p>
+            <span class="al-settled"><span class="chip chip-green">✓ Settled</span> nothing owed either way</span>
+            {% endif %}
+            <dl class="al-flows">
+                <div><dt><b class="al-name">{{ first_from }}</b> <span class="al-mini-arrow" aria-label="to">→</span> <b class="al-name">{{ first_to }}</b></dt><dd>{{ money(first_amt) }}</dd></div>
+                <div><dt><b class="al-name">{{ second_from }}</b> <span class="al-mini-arrow" aria-label="to">→</span> <b class="al-name">{{ second_to }}</b></dt><dd>{{ money(second_amt) }}</dd></div>
+            </dl>
+            <span class="al-pair-foot"><span>{{ p.count }} {{ 'entry' if p.count == 1 else 'entries' }}</span><span class="al-go">View entries →</span></span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card al-empty">
+        <strong>No loans recorded yet</strong>
+        {% if banks|length < 2 %}
+        <p>You need at least two accounts before you can record a loan between them.</p>
+        {% elif can_edit %}
+        <p>When one account lends to another, add it below — this page will then show who owes whom.</p>
+        <a href="#al-add" class="btn btn-primary btn-sm sh-no-print">+ Add the first entry</a>
+        {% else %}
+        <p>When a loan between accounts is recorded, it will show here.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
+
+{# 2. Per-account tiles #}
+{% if summary.count %}
+<section class="al-section" aria-labelledby="al-acc-title">
+    <div class="al-section-head">
+        <h2 class="section-title" id="al-acc-title">Each account</h2>
+    </div>
+    <div class="stats-grid sh-stats al-accounts">
+        {% for acc in summary.accounts %}
+        <div class="stat-card {{ 'accent-green' if acc.net > 0 else ('accent-orange' if acc.net < 0 else '') }}">
+            <span class="stat-label">{{ acc.name }}</span>
+            {% if acc.net > 0 %}
+            <span class="chip chip-green al-pos">Others owe it</span>
+            {% elif acc.net < 0 %}
+            <span class="chip chip-amber al-pos">It owes others</span>
+            {% else %}
+            <span class="chip chip-gray al-pos">Even</span>
+            {% endif %}
+            <span class="stat-value{% if not acc.net %} al-even{% endif %}">{{ money(acc.net|abs) }}</span>
+            <dl class="sh-kv">
+                <div><dt>Given (sent out)</dt><dd>{{ money(acc.given) }}</dd></div>
+                <div><dt>Taken (received)</dt><dd>{{ money(acc.taken) }}</dd></div>
+            </dl>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{# 3. Totals matrix: rows = From, columns = To #}
+<div class="card" id="al-matrix">
+    <h2>Totals between accounts</h2>
+    <p class="field-note">Each amount is everything that went <strong>from</strong> the account on the left <strong>to</strong> the account at the top — loans and returns together.</p>
+    {% if banks|length > 2 %}<p class="field-note al-swipe" aria-hidden="true">Swipe the table sideways to see every account →</p>{% endif %}
+    <div class="al-matrix-wrap">
+        <table class="data-table sh-table al-matrix">
+            <thead>
+                <tr>
+                    <th class="al-corner" scope="col">From ↓ <small>To →</small></th>
+                    {% for b in banks %}
+                    <th scope="col" class="num">{{ b.name }}</th>
+                    {% endfor %}
+                    <th scope="col" class="num">Total given</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in summary.accounts %}
+                <tr>
+                    <th scope="row">{{ row.name }}</th>
+                    {% for b in banks %}
+                    {% set v = summary.matrix[row.id][b.id] %}
+                    {% if row.id == b.id %}
+                    <td class="al-diag" aria-label="same account">—</td>
+                    {% elif v %}
+                    <td class="num">{{ money(v) }}</td>
+                    {% else %}
+                    <td class="num al-zero">0.00</td>
+                    {% endif %}
+                    {% endfor %}
+                    <td class="num al-tot">{{ money(row.given) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <th scope="row">Total taken</th>
+                    {% for acc in summary.accounts %}
+                    <td class="num">{{ money(acc.taken) }}</td>
+                    {% endfor %}
+                    <td class="num">{{ money(summary.total_moved) }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+    <p class="field-note al-matrix-note">Loans given {{ money(summary.loans_total) }} · Loans returned {{ money(summary.returns_total) }} · {{ summary.count }} {{ 'entry' if summary.count == 1 else 'entries' }}</p>
+</div>
+{% endif %}
+
+{# 4. Add entry (editors only) #}
+{% if can_edit %}
+{% if banks|length >= 2 %}
+<div class="card highlight-card sh-no-print" id="al-add">
+    <div class="al-add-head">
+        <h2>Add entry</h2>
+        <span class="field-note">Record only — nothing is posted to the bank ledgers.</span>
+    </div>
+    {{ account_loan_form(banks, types, url_for('sh_main.account_loans'), today=today, matrix=summary.matrix) }}
+</div>
+{% else %}
+<div class="callout callout-amber sh-note sh-no-print" id="al-add">
+    <div><strong>Add your accounts first.</strong> A loan is always between two of your accounts, so you need at least two banks. <a href="{{ url_for('sh_main.banks') }}">Add them on the Banks&nbsp;page&nbsp;→</a></div>
+</div>
+{% endif %}
+{% endif %}
+
+{# 5. History #}
+<div class="card" id="al-history">
+    <h2>History<span class="sh-count">{{ entries|length }}</span></h2>
+
+    {% if summary.count %}
+    <form method="GET" action="{{ url_for('sh_main.account_loans') }}#al-history" id="al-filter" class="glass-soft al-filters sh-no-print">
+        <div class="form-group al-f-account">
+            <label for="al_f_account">Account</label>
+            <select id="al_f_account" name="account">
+                <option value="">All accounts</option>
+                {% for b in banks %}
+                <option value="{{ b.id }}" {% if filters.account == b.id %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group al-f-type">
+            <span class="al-flabel" id="al_f_type_label">Type</span>
+            <div class="period-tabs" role="radiogroup" aria-labelledby="al_f_type_label">
+                <label class="period-tab{% if not filters.type %} active{% endif %}"><input type="radio" name="type" value="" {% if not filters.type %}checked{% endif %}>All</label>
+                <label class="period-tab{% if filters.type == 'loan' %} active{% endif %}"><input type="radio" name="type" value="loan" {% if filters.type == 'loan' %}checked{% endif %}>Loans</label>
+                <label class="period-tab{% if filters.type == 'return' %} active{% endif %}"><input type="radio" name="type" value="return" {% if filters.type == 'return' %}checked{% endif %}>Returns</label>
+            </div>
+        </div>
+        <div class="form-group al-f-date">
+            <label for="al_f_from">From</label>
+            <input type="date" id="al_f_from" name="from" value="{{ filters.date_from.isoformat() if filters.date_from else '' }}">
+        </div>
+        <div class="form-group al-f-date">
+            <label for="al_f_to">To</label>
+            <input type="date" id="al_f_to" name="to" value="{{ filters.date_to.isoformat() if filters.date_to else '' }}">
+        </div>
+        <div class="al-f-actions">
+            <button type="submit" class="btn btn-secondary">Apply</button>
+        </div>
+    </form>
+    {% endif %}
+    {% if filtered %}
+    <p class="field-note al-filter-note"><span>Showing <strong>{{ entries|length }}</strong> of {{ summary.count }} {{ 'entry' if summary.count == 1 else 'entries' }} — filters change this list only; the totals above always cover every entry.</span> <a href="{{ history_url }}" class="btn btn-sm btn-secondary sh-no-print">Clear filters</a></p>
+    {% endif %}
+
+    {% if entries %}
+    <div class="al-table-wrap">
+        <table class="data-table sh-table al-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>From → To</th>
+                    <th>Type</th>
+                    <th class="num">Amount</th>
+                    <th>Reference · Note</th>
+                    <th class="al-c-by">Added by</th>
+                    {% if can_edit %}<th class="sh-col-actions"><span class="sr-only">Actions</span></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in entries %}
+                {% set is_return = e.entry_type == 'return' %}
+                <tr class="al-row {{ 'al-row-return' if is_return else 'al-row-loan' }}">
+                    <td class="al-c-date nowrap">{{ e.loan_date.strftime('%d-%b-%y') }}{% if e.created_by %}<span class="al-by-sub">by {{ e.created_by.username }}</span>{% endif %}</td>
+                    <td class="al-c-route">
+                        <span class="al-route-line">
+                            <span>{{ e.from_bank.name if e.from_bank else '—' }}</span>
+                            <svg class="al-arrow" viewBox="0 0 24 24" role="img" aria-label="to"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                            <span>{{ e.to_bank.name if e.to_bank else '—' }}</span>
+                        </span>
+                    </td>
+                    <td class="al-c-type"><span class="chip al-type-chip {{ 'chip-green' if is_return else 'chip-violet' }}">{{ e.type_label }}</span></td>
+                    <td class="al-c-amount num"><strong>{{ money(e.amount) }}</strong></td>
+                    <td class="al-c-details{% if not e.reference and not e.note %} is-empty{% endif %}">
+                        {% if e.reference %}<span class="al-ref"><span class="al-ref-key">Ref</span>{{ e.reference }}</span>{% endif %}
+                        {% if e.note %}<span class="al-note">{{ e.note }}</span>{% endif %}
+                        {% if not e.reference and not e.note %}<span class="sh-nil">—</span>{% endif %}
+                    </td>
+                    <td class="al-c-by"><span class="al-by-label">Added by</span>{{ e.created_by.username if e.created_by else '—' }}</td>
+                    {% if can_edit %}
+                    <td class="al-c-actions sh-col-actions">
+                        <a href="{{ url_for('sh_main.edit_account_loan', loan_id=e.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                        <form method="POST" action="{{ url_for('sh_main.delete_account_loan', loan_id=e.id) }}"
+                              onsubmit="return confirm({{ ('Delete this record?\n\n' ~ e.type_label ~ ' Rs ' ~ '{:,.2f}'.format(e.amount) ~ ' from ' ~ (e.from_bank.name if e.from_bank else '?') ~ ' to ' ~ (e.to_bank.name if e.to_bank else '?') ~ ' on ' ~ e.loan_date.strftime('%d-%b-%y'))|tojson|forceescape }});">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% set loan_sum = entries|selectattr('entry_type', 'equalto', 'loan')|sum(attribute='amount') %}
+    {% set return_sum = entries|selectattr('entry_type', 'equalto', 'return')|sum(attribute='amount') %}
+    <div class="glass-soft al-foot">
+        <div class="al-foot-main"><span>{{ entries|length }} {{ 'entry' if entries|length == 1 else 'entries' }}{% if filtered %} shown{% endif %} · total</span><strong>{{ money(filtered_total) }}</strong></div>
+        {% if loan_sum and return_sum %}
+        <div class="al-split"><span>Loans given <b>{{ money(loan_sum) }}</b></span><span>Loans returned <b>{{ money(return_sum) }}</b></span></div>
+        {% endif %}
+    </div>
+    {% elif filtered and summary.count %}
+    <div class="al-empty">
+        <strong>No entries match these filters</strong>
+        <p>Try another account, type or date range.</p>
+        <a href="{{ history_url }}" class="btn btn-secondary btn-sm">Clear filters</a>
+    </div>
+    {% else %}
+    <div class="al-empty">
+        <strong>No entries yet</strong>
+        <p>Every loan and return between your accounts will be listed here, newest first.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* History filter: account and type apply at once; empty fields stay out of the address. UI only. */
+(function () {
+    var form = document.getElementById('al-filter');
+    if (!form) return;
+    function tidy() {
+        Array.prototype.forEach.call(form.querySelectorAll('select[name], input[name]'), function (el) {
+            if (el.type === 'radio' ? (el.checked && !el.value) : !el.value) el.disabled = true;
+        });
+    }
+    function go() {
+        tidy();
+        form.submit();
+    }
+    form.addEventListener('submit', tidy);
+    form.addEventListener('change', function (e) {
+        var t = e.target;
+        if (t.type === 'radio') {
+            Array.prototype.forEach.call(form.querySelectorAll('.period-tab'), function (tab) {
+                tab.classList.toggle('active', !!tab.querySelector('input:checked'));
+            });
+            go();
+        } else if (t.tagName === 'SELECT') {
+            go();
+        }
+    });
+    window.addEventListener('pageshow', function () {
+        Array.prototype.forEach.call(form.querySelectorAll('[disabled]'), function (el) { el.disabled = false; });
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,361 @@
+{# SH Traders — Account Loans: the add / edit form (shared by account_loans.html and
+   edit_account_loan.html). Record only: nothing here touches bank ledgers or balances.
+   Field names are the ones app/services/sh_account_loans.py reads: loan_date, from_bank_id,
+   to_bank_id, amount, entry_type (loan | return), reference, note.
+   `matrix` (optional, add page only) = summary.matrix, used to say who will owe whom after saving. #}
+{% macro account_loan_form(banks, types, action, entry=None, today=None, matrix=None, submit_label='Save record', cancel_url=None) %}
+{% set sel_type = entry.entry_type if entry and entry.entry_type == 'return' else 'loan' %}
+{% set sel_from = entry.from_bank_id if entry else None %}
+{% set sel_to = entry.to_bank_id if entry else None %}
+<style>
+.al-form { display: grid; gap: 1.1rem; }
+.al-form .form-group > label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.4rem; }
+.al-role { font-weight: 500; font-size: 0.78rem; color: var(--muted); }
+
+/* Big "Loan given | Loan returned" toggle */
+.al-type { border: 0; margin: 0; padding: 0; min-width: 0; }
+.al-legend { padding: 0; margin: 0 0 0.45rem; font-size: 0.84rem; font-weight: 600; color: #2a3244; }
+.al-type-opts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; max-width: 44rem; }
+.al-type-opt {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 3.9rem;
+    padding: 0.7rem 0.95rem;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 0 0 1px var(--line-strong);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background var(--t-fast) ease, box-shadow var(--t-fast) ease, transform var(--t-fast) var(--ease);
+}
+.al-type-opt:hover { background: rgba(255, 255, 255, 0.8); }
+.al-type-opt:active { transform: scale(0.985); }
+.al-type-opt input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.al-type-ico {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.3rem; height: 2.3rem;
+    border-radius: 50%;
+    color: var(--muted);
+    background: var(--tint-gray);
+    box-shadow: inset 0 0 0 1px var(--tint-gray-border);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+}
+.al-type-ico svg, .al-preview-ico svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.al-type-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.al-type-txt strong { font-size: 1rem; font-weight: 700; }
+.al-type-txt small { margin-top: 0.15rem; font-size: 0.77rem; color: var(--muted); }
+.al-type-opt-loan.is-on { background: var(--tint-violet); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1.5px rgba(124, 58, 237, 0.55), 0 6px 16px -10px rgba(124, 58, 237, 0.6); }
+.al-type-opt-loan.is-on .al-type-ico { color: #fff; background: var(--violet); box-shadow: none; }
+.al-type-opt-loan.is-on strong { color: var(--tint-violet-text); }
+.al-type-opt-return.is-on { background: var(--tint-green); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1.5px rgba(5, 150, 105, 0.55), 0 6px 16px -10px rgba(5, 150, 105, 0.6); }
+.al-type-opt-return.is-on .al-type-ico { color: #fff; background: var(--green); box-shadow: none; }
+.al-type-opt-return.is-on strong { color: var(--tint-green-text); }
+.al-type-opt:has(input:focus-visible) { outline: 3px solid rgba(59, 130, 246, 0.45); outline-offset: 2px; }
+
+/* From  ⇄  To */
+.al-route { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: end; gap: 0.5rem 0.7rem; }
+.al-route select.al-invalid { border-color: var(--tint-red-border); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14); }
+.al-swap {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.65rem; height: 2.65rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    color: var(--primary);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.62) 100%);
+    box-shadow: inset 0 1px 0 #fff, 0 0 0 1px var(--line-strong), 0 4px 10px -4px rgba(40, 30, 60, 0.28);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) ease;
+}
+.al-swap:hover { box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(178, 30, 34, 0.35), 0 6px 14px -6px rgba(178, 30, 34, 0.35); }
+.al-swap:active { transform: scale(0.94); }
+.al-swap-turn { display: inline-flex; }
+.al-swap svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--t-med) var(--ease); }
+.al-same {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 0.45rem;
+    margin: 0;
+    font-size: 0.84rem; font-weight: 600;
+    color: var(--tint-red-text);
+}
+.al-same[hidden] { display: none; }
+.al-same::before {
+    content: "!";
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.15rem; height: 1.15rem;
+    border-radius: 50%;
+    font: 800 0.72rem/1 var(--font);
+    color: #fff;
+    background: var(--red);
+}
+
+/* Amount · Date · Reference */
+.al-fields { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 1rem 1.1rem; }
+.al-fields .full-width { grid-column: 1 / -1; }
+.al-amount { position: relative; display: block; }
+.al-amount > span {
+    position: absolute; left: 0.9rem; top: 50%; transform: translateY(-50%);
+    font-size: 0.85rem; font-weight: 700; color: var(--muted);
+    pointer-events: none;
+}
+.al-amount input { width: 100%; padding-left: 2.55rem; font-size: 1.08rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Live sentence */
+.al-preview {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--radius-md);
+    background: var(--tint-violet);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1px var(--tint-violet-border);
+    transition: background var(--t-fast) ease, box-shadow var(--t-fast) ease;
+}
+.al-preview-ico {
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2rem; height: 2rem; margin-top: 0.05rem;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--violet);
+}
+.al-preview-ico .al-ico-return { display: none; }
+.al-preview.is-return { background: var(--tint-green); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), inset 0 0 0 1px var(--tint-green-border); }
+.al-preview.is-return .al-preview-ico { background: var(--green); }
+.al-preview.is-return .al-ico-loan { display: none; }
+.al-preview.is-return .al-ico-return { display: inline; }
+.al-preview.is-idle { background: var(--glass-bg-soft); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px var(--line); }
+.al-preview.is-idle .al-preview-ico { color: var(--muted); background: var(--tint-gray); }
+.al-preview-body { min-width: 0; }
+.al-kicker { display: block; margin-bottom: 0.15rem; font-size: 0.68rem; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.al-sentence { margin: 0; font-size: 1rem; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.al-sentence strong { font-weight: 750; }
+.al-preview.is-idle .al-sentence { color: var(--muted); font-size: 0.92rem; }
+.al-impact { margin: 0.35rem 0 0; font-size: 0.84rem; line-height: 1.45; color: var(--muted); }
+.al-impact[hidden] { display: none; }
+.al-impact strong { color: var(--text); font-weight: 700; }
+.al-impact .al-warn { display: block; margin-top: 0.2rem; color: var(--tint-amber-text); font-weight: 650; }
+
+@media (max-width: 860px) {
+    .al-type-opts { gap: 0.5rem; }
+    .al-type-opt { flex-direction: column; align-items: flex-start; gap: 0.45rem; min-height: 0; padding: 0.75rem 0.8rem; }
+    .al-type-ico { width: 2rem; height: 2rem; }
+    .al-route { grid-template-columns: minmax(0, 1fr); gap: 0.35rem; }
+    .al-swap { justify-self: center; width: 2.75rem; height: 2.75rem; margin: 0.15rem 0 -0.1rem; }
+    .al-swap-turn { transform: rotate(90deg); }
+    .al-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.9rem 0.7rem; }
+    .al-fields .al-f-ref { grid-column: 1 / -1; }
+    .al-fields input[type="date"] { width: 100%; }
+    .al-amount input { font-size: 1.1rem; }
+    .al-form .form-actions .btn { flex: 1 1 auto; }
+}
+</style>
+
+<form method="POST" action="{{ action }}" class="al-form" id="al-form">
+    <fieldset class="al-type">
+        <legend class="al-legend">What happened?</legend>
+        <div class="al-type-opts">
+            <label class="al-type-opt al-type-opt-loan{% if sel_type == 'loan' %} is-on{% endif %}">
+                <input type="radio" name="entry_type" value="loan" {% if sel_type == 'loan' %}checked{% endif %}>
+                <span class="al-type-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+                <span class="al-type-txt"><strong>{{ types['loan'] }}</strong><small>One account lends money to another</small></span>
+            </label>
+            <label class="al-type-opt al-type-opt-return{% if sel_type == 'return' %} is-on{% endif %}">
+                <input type="radio" name="entry_type" value="return" {% if sel_type == 'return' %}checked{% endif %}>
+                <span class="al-type-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></span>
+                <span class="al-type-txt"><strong>{{ types['return'] }}</strong><small>Paying back an earlier loan</small></span>
+            </label>
+        </div>
+    </fieldset>
+
+    <div class="al-route">
+        <div class="form-group">
+            <label for="al_from">From account <span class="al-role" data-loan="lends the money" data-return="pays it back">{{ 'pays it back' if sel_type == 'return' else 'lends the money' }}</span></label>
+            <select id="al_from" name="from_bank_id" required>
+                <option value="">Choose account</option>
+                {% for b in banks %}
+                <option value="{{ b.id }}" {% if sel_from == b.id %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="button" class="al-swap" id="al_swap" title="Swap From and To" aria-label="Swap From and To accounts">
+            <span class="al-swap-turn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></svg></span>
+        </button>
+        <div class="form-group">
+            <label for="al_to">To account <span class="al-role" data-loan="takes the loan" data-return="gets it back">{{ 'gets it back' if sel_type == 'return' else 'takes the loan' }}</span></label>
+            <select id="al_to" name="to_bank_id" required>
+                <option value="">Choose account</option>
+                {% for b in banks %}
+                <option value="{{ b.id }}" {% if sel_to == b.id %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <p class="al-same" id="al_same" role="alert" hidden>Choose two different accounts — money can't go from an account to itself.</p>
+    </div>
+
+    <div class="al-fields">
+        <div class="form-group al-f-amount">
+            <label for="al_amount">Amount</label>
+            <span class="al-amount"><span aria-hidden="true">Rs</span><input type="number" id="al_amount" name="amount" step="0.01" min="0.01" inputmode="decimal" required placeholder="0.00" value="{{ '%.2f'|format(entry.amount) if entry else '' }}"></span>
+        </div>
+        <div class="form-group al-f-date">
+            <label for="al_date">Date</label>
+            <input type="date" id="al_date" name="loan_date" required value="{{ entry.loan_date.isoformat() if entry else (today.isoformat() if today else '') }}">
+        </div>
+        <div class="form-group al-f-ref">
+            <label for="al_reference">Reference <span class="al-role">optional</span></label>
+            <input type="text" id="al_reference" name="reference" maxlength="150" autocomplete="off" placeholder="Cheque no. / online transfer ref" value="{{ entry.reference or '' if entry else '' }}">
+        </div>
+        <div class="form-group full-width">
+            <label for="al_note">Note <span class="al-role">optional</span></label>
+            <textarea id="al_note" name="note" rows="2" placeholder="Why, who arranged it, when it should come back…">{{ entry.note or '' if entry else '' }}</textarea>
+        </div>
+    </div>
+
+    <div class="al-preview is-idle" id="al_preview" aria-live="polite">
+        <span class="al-preview-ico" aria-hidden="true">
+            <svg class="al-ico-loan" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></svg>
+            <svg class="al-ico-return" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        </span>
+        <div class="al-preview-body">
+            <span class="al-kicker">In words</span>
+            <p class="al-sentence" id="al_sentence">Choose the two accounts and the amount — this line will say exactly what the entry means.</p>
+            <p class="al-impact" id="al_impact" hidden></p>
+        </div>
+    </div>
+    {% if matrix %}<script type="application/json" id="al_matrix">{{ matrix|tojson }}</script>{% endif %}
+
+    <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{ submit_label }}</button>
+        {% if cancel_url %}<a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>{% endif %}
+    </div>
+</form>
+
+<script>
+/* Account Loans form: type toggle, swap, same-account guard and the live "in words" line. UI only. */
+(function () {
+    var form = document.getElementById('al-form');
+    if (!form) return;
+    var fromSel = document.getElementById('al_from');
+    var toSel = document.getElementById('al_to');
+    var amountIn = document.getElementById('al_amount');
+    var swapBtn = document.getElementById('al_swap');
+    var sameMsg = document.getElementById('al_same');
+    var preview = document.getElementById('al_preview');
+    var sentence = document.getElementById('al_sentence');
+    var impact = document.getElementById('al_impact');
+    var radios = form.querySelectorAll('input[name="entry_type"]');
+    var roles = form.querySelectorAll('.al-role[data-loan]');
+    var matrix = null;
+    var data = document.getElementById('al_matrix');
+    if (data) { try { matrix = JSON.parse(data.textContent); } catch (e) { matrix = null; } }
+
+    function typeNow() {
+        for (var i = 0; i < radios.length; i++) { if (radios[i].checked) return radios[i].value; }
+        return 'loan';
+    }
+    function nameOf(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        return opt && opt.value ? opt.textContent.trim() : '';
+    }
+    function round2(n) { var r = Math.round(n * 100) / 100; return Math.abs(r) < 0.005 ? 0 : r; }
+    function money(n) { return 'Rs\u00a0' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function amountNow() {
+        var v = parseFloat(String(amountIn.value || '').replace(/,/g, ''));
+        return isFinite(v) && v > 0 ? round2(v) : 0;
+    }
+    function moved(a, b) { return matrix && matrix[a] && matrix[a][b] != null ? Number(matrix[a][b]) || 0 : 0; }
+    /* What account x owes account y now: what x received from y minus what x sent to y. */
+    function owes(x, y) { return round2(moved(y, x) - moved(x, y)); }
+
+    /* Fill an element from text pieces; ['strong', text] makes a <strong>. Text only, no HTML. */
+    function put(el, parts) {
+        el.textContent = '';
+        parts.forEach(function (p) {
+            if (typeof p === 'string') { el.appendChild(document.createTextNode(p)); return; }
+            var node = document.createElement(p[0]);
+            node.textContent = p[1];
+            if (p[2]) node.className = p[2];
+            el.appendChild(node);
+        });
+    }
+
+    function update() {
+        var type = typeNow();
+        Array.prototype.forEach.call(radios, function (r) {
+            var label = r.closest('.al-type-opt');
+            if (label) label.classList.toggle('is-on', r.checked);
+        });
+        Array.prototype.forEach.call(roles, function (el) {
+            el.textContent = el.getAttribute(type === 'return' ? 'data-return' : 'data-loan');
+        });
+
+        var f = fromSel.value, t = toSel.value;
+        var fn = nameOf(fromSel), tn = nameOf(toSel), amt = amountNow();
+        var same = !!(f && t && f === t);
+        sameMsg.hidden = !same;
+        toSel.setCustomValidity(same ? 'Choose two different accounts.' : '');
+        fromSel.classList.toggle('al-invalid', same);
+        toSel.classList.toggle('al-invalid', same);
+
+        preview.classList.toggle('is-return', type === 'return');
+        impact.hidden = true;
+        if (!f || !t || same) {
+            preview.classList.add('is-idle');
+            put(sentence, [same
+                ? 'Pick two different accounts to see what this entry means.'
+                : 'Choose the two accounts and the amount — this line will say exactly what the entry means.']);
+            return;
+        }
+        preview.classList.remove('is-idle');
+        var amtText = amt ? money(amt) : 'Rs\u00a0…';
+        if (type === 'return') {
+            put(sentence, [['strong', fn], ' returns ', ['strong', amtText], ' to ', ['strong', tn]]);
+        } else {
+            put(sentence, [['strong', fn], ' gives a loan of ', ['strong', amtText], ' to ', ['strong', tn]]);
+        }
+
+        if (!matrix || !amt) return;
+        var after = round2(owes(t, f) + amt);   /* what To will owe From after saving */
+        var parts = ['After saving: '];
+        if (after > 0) parts.push(['strong', tn], ' will owe ', ['strong', fn], ' ', ['strong', money(after)]);
+        else if (after < 0) parts.push(['strong', fn], ' will owe ', ['strong', tn], ' ', ['strong', money(-after)]);
+        else parts.push(['strong', fn], ' and ', ['strong', tn], ' will be settled');
+        parts.push('.');
+        if (type === 'return') {
+            var due = owes(f, t);
+            if (due <= 0) parts.push(['span', 'Heads-up: ' + fn + ' does not owe ' + tn + ' anything right now — check the direction.', 'al-warn']);
+            else if (amt > due) parts.push(['span', 'Heads-up: this is more than ' + fn + ' owes ' + tn + ' (' + money(due) + ').', 'al-warn']);
+        }
+        put(impact, parts);
+        impact.hidden = false;
+    }
+
+    var turns = 0;
+    swapBtn.addEventListener('click', function () {
+        var a = fromSel.value;
+        fromSel.value = toSel.value;
+        toSel.value = a;
+        turns += 1;
+        var svg = swapBtn.querySelector('svg');
+        if (svg) svg.style.transform = 'rotate(' + (turns * 180) + 'deg)';
+        update();
+    });
+    form.addEventListener('change', update);
+    amountIn.addEventListener('input', update);
+    form.addEventListener('submit', function (e) {
+        if (fromSel.value && fromSel.value === toSel.value) {
+            e.preventDefault();
+            update();
+            toSel.focus();
+        }
+    });
+    window.addEventListener('pageshow', update);
+    update();
+})();
+</script>
+{% endmacro %}

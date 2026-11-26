@@ -659,6 +659,40 @@ class ShBank(db.Model):
     created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
 
 
+class ShAccountLoan(db.Model):
+    """Record-only note of money lent / returned between SH Traders accounts (banks).
+
+    Kept for remembrance: it does NOT post anything to the bank ledgers or change balances.
+    Money moved from_bank -> to_bank; entry_type labels it ("loan" given, or "return" of an
+    earlier loan). What one account owes another = everything it received from that account
+    minus everything it sent back.
+    """
+
+    __tablename__ = "sh_account_loans"
+
+    TYPE_LOAN = "loan"
+    TYPE_RETURN = "return"
+
+    id = db.Column(db.Integer, primary_key=True)
+    loan_date = db.Column(db.Date, nullable=False)
+    from_bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=False)
+    to_bank_id = db.Column(db.Integer, db.ForeignKey("sh_banks.id"), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    entry_type = db.Column(db.String(20), nullable=False, default=TYPE_LOAN)
+    reference = db.Column(db.String(150), default="")
+    note = db.Column(db.Text)
+    created_by_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+
+    from_bank = db.relationship("ShBank", foreign_keys=[from_bank_id])
+    to_bank = db.relationship("ShBank", foreign_keys=[to_bank_id])
+    created_by = db.relationship("User", foreign_keys=[created_by_id])
+
+    @property
+    def type_label(self) -> str:
+        return "Loan returned" if self.entry_type == self.TYPE_RETURN else "Loan given"
+
+
 class ShSupplierCompany(db.Model):
     """Supplier companies SH Traders purchases material from."""
 

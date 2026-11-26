@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "sh_traders/macros.html" import sh_page_header, money %}
+{% from "sh_traders/_account_loan_form.html" import account_loan_form %}
+{% block title %}Edit Account Loan - SH Traders{% endblock %}
+{% block content %}
+<style>
+.al-edit-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.4rem 1rem; margin-bottom: 1.1rem; padding-bottom: 0.85rem; border-bottom: 1px solid var(--line); }
+.al-edit-head h2 { margin: 0 !important; display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+.al-edit-head .chip { font-size: 0.74rem; }
+.al-edit-head .field-note { margin: 0; }
+</style>
+
+{{ sh_page_header('Edit Account Loan', 'Record only — saving changes here does not touch any bank ledger or balance.') }}
+
+<div class="card sh-edit-card">
+    <div class="al-edit-head">
+        <h2>
+            <span class="chip {{ 'chip-green' if entry.entry_type == 'return' else 'chip-violet' }}">{{ entry.type_label }}</span>
+            <span class="num">{{ money(entry.amount) }}</span>
+        </h2>
+        <span class="field-note">
+            {{ entry.from_bank.name if entry.from_bank else '—' }} → {{ entry.to_bank.name if entry.to_bank else '—' }} · {{ entry.loan_date.strftime('%d-%b-%y') }}{% if entry.created_by %} · added by {{ entry.created_by.username }}{% endif %}
+        </span>
+    </div>
+    {{ account_loan_form(banks, types, url_for('sh_main.edit_account_loan', loan_id=entry.id), entry=entry, submit_label='Save changes', cancel_url=url_for('sh_main.account_loans') ~ '#al-history') }}
+</div>
+{% endblock %}

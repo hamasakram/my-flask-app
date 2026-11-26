@@ -6,6 +6,7 @@ from sqlalchemy.orm import lazyload
 
 from app import db
 from app.models import (
+    ShAccountLoan,
     ShBank,
     ShClientCompany,
     ShClientLedgerEntry,
@@ -1504,3 +1505,132 @@ def sale_invoice_pdf(invoice_id):
         download_name=filename,
         mimetype="application/pdf",
     )
+
+
+# ---------------------------------------------------------------------------
+# Account loans: record of money lent / returned between SH accounts (banks).
+# Record only — nothing is posted to the bank ledgers.
+# ---------------------------------------------------------------------------
+
+
+def _sh_today():
+    """Today's date in Pakistan time (the server clock is UTC)."""
+    from datetime import timedelta, timezone
+
+    return datetime.now(timezone(timedelta(hours=5))).date()
+
+
+def _loan_filters(args) -> dict:
+    from app.services.sh_account_loans import TYPES, parse_optional_date
+
+    bank_id = args.get("account", type=int)
+    entry_type = (args.get("type") or "").strip()
+    return {
+        "account": bank_id,
+        "date_from": parse_optional_date(args.get("from")),
+        "date_to": parse_optional_date(args.get("to")),
+        "type": entry_type if entry_type in TYPES else "",
+    }
+
+
+@sh_main_bp.route("/account-loans", methods=["GET", "POST"])
+@login_required
+def account_loans():
+    from app.services.sh_account_loans import (
+        TYPES,
+        create_loan,
+        list_loans,
+        summarize,
+    )
+
+    if request.method == "POST":
+        require_edit_access()
+        try:
+            entry = create_loan(request.form, current_user.id)
+            log_audit(
+                current_user.id,
+                "CREATE",
+                "ShAccountLoan",
+                entry.id,
+                f"{entry.type_label}: {entry.amount:,.2f} from {entry.from_bank.name} to {entry.to_bank.name}",
+            )
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.account_loans"))
+        flash(
+            f"Saved: {entry.type_label.lower()} of Rs {entry.amount:,.2f} from "
+            f"{entry.from_bank.name} to {entry.to_bank.name}.",
+            "success",
+        )
+        return redirect(url_for("sh_main.account_loans"))
+
+    banks = ShBank.query.order_by(ShBank.id).all()
+    all_entries = list_loans()
+    filters = _loan_filters(request.args)
+    filtered = (
+        list_loans(filters["account"], filters["date_from"], filters["date_to"], filters["type"])
+        if any(filters.values())
+        else all_entries
+    )
+    return render_template(
+        "sh_traders/account_loans.html",
+        banks=banks,
+        summary=summarize(all_entries, banks),
+        entries=filtered,
+        filtered_total=round(sum(float(e.amount or 0) for e in filtered), 2),
+        filters=filters,
+        types=TYPES,
+        today=_sh_today(),
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/account-loans/<int:loan_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_account_loan(loan_id):
+    from app.services.sh_account_loans import TYPES, update_loan
+
+    require_edit_access()
+    entry = ShAccountLoan.query.get_or_404(loan_id)
+    if request.method == "POST":
+        try:
+            update_loan(entry, request.form)
+            log_audit(
+                current_user.id,
+                "UPDATE",
+                "ShAccountLoan",
+                entry.id,
+                f"{entry.type_label}: {entry.amount:,.2f} from {entry.from_bank.name} to {entry.to_bank.name}",
+            )
+            db.session.commit()
+        except ValueError as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+            return redirect(url_for("sh_main.edit_account_loan", loan_id=loan_id))
+        flash("Loan record updated.", "success")
+        return redirect(url_for("sh_main.account_loans"))
+    return render_template(
+        "sh_traders/edit_account_loan.html",
+        entry=entry,
+        banks=ShBank.query.order_by(ShBank.id).all(),
+        types=TYPES,
+        current_bank=get_current_sh_bank(),
+    )
+
+
+@sh_main_bp.route("/account-loans/<int:loan_id>/delete", methods=["POST"])
+@login_required
+def delete_account_loan(loan_id):
+    require_edit_access()
+    entry = ShAccountLoan.query.get_or_404(loan_id)
+    label = (
+        f"{entry.type_label}: Rs {entry.amount:,.2f} from {entry.from_bank.name} "
+        f"to {entry.to_bank.name} ({entry.loan_date.strftime('%d-%b-%y')})"
+    )
+    log_audit(current_user.id, "DELETE", "ShAccountLoan", entry.id, label)
+    db.session.delete(entry)
+    db.session.commit()
+    flash(f"Deleted {label}.", "success")
+    return redirect(url_for("sh_main.account_loans"))
